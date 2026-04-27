@@ -1,0 +1,13 @@
+{
+  "name": "@grapestrap/blocks-bootstrap5",
+  "version": "0.0.1",
+  "displayName": "Bootstrap 5 Blocks",
+  "description": "Layout primitives for Bootstrap 5: container, row, column with size traits, and standard form controls.",
+  "author": "GrapeStrap Team",
+  "license": "MIT",
+  "type": "block",
+  "main": "index.js",
+  "grapestrapVersion": "^0.0.1",
+  "permissions": [],
+  "credits": "Adapted from cwalabs/grapesjs-blocks-bootstrap5 (MIT). Will switch to fork @grapestrap/blocks-bootstrap5 once published."
+}

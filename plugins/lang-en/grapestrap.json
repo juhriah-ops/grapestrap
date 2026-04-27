@@ -1,0 +1,12 @@
+{
+  "name": "@grapestrap/lang-en",
+  "version": "0.0.1",
+  "displayName": "English (en)",
+  "description": "Default English message catalog. Always loaded; community translations register additional languages.",
+  "author": "GrapeStrap Team",
+  "license": "MIT",
+  "type": "language",
+  "main": "index.js",
+  "grapestrapVersion": "^0.0.1",
+  "permissions": []
+}

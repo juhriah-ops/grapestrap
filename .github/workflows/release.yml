@@ -1,0 +1,115 @@
+name: Build and Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g., v0.0.1-alpha.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libnotify-dev \
+            libnss3 \
+            libxss1 \
+            libxtst6 \
+            xdg-utils \
+            libasound2-dev \
+            libsecret-1-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build renderer + main
+        run: npm run build
+
+      - name: Package .deb / AppImage / tar.gz
+        run: npx electron-builder --linux deb AppImage tar.gz --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List artifacts
+        run: ls -la release/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            release/*.deb
+            release/*.AppImage
+            release/*.tar.gz
+            release/*.yml
+
+  release:
+    name: Publish to GitHub Releases
+    needs: [build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/linux-artifacts/*.deb
+            artifacts/linux-artifacts/*.AppImage
+            artifacts/linux-artifacts/*.tar.gz
+          draft: true
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
+          generate_release_notes: true
+          body: |
+            ## GrapeStrap ${{ github.ref_name }}
+
+            Linux desktop visual editor for Bootstrap 5. MIT licensed. No telemetry.
+
+            ### Install
+
+            **.deb (Debian/Ubuntu):**
+            ```
+            sudo apt install ./grapestrap_*.deb
+            ```
+
+            **AppImage (universal):**
+            ```
+            chmod +x GrapeStrap-*.AppImage
+            ./GrapeStrap-*.AppImage
+            ```
+
+            **tar.gz:** extract and run `grapestrap` from the extracted folder.
+
+            See [INSTALL.md](https://github.com/grapestrap/grapestrap/blob/main/docs/INSTALL.md) for more.
+
+            rpm builds arrive in v0.0.2. Flatpak (Flathub) v0.0.2. Snap + AUR v0.1.0.

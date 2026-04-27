@@ -1,11 +1,35 @@
 node_modules/
-build/
 dist/
+build/
+release/
+out/
+
+# User project files (never commit)
 *.gstrap
 *.gstrap.recovery
-.env
-*.log
+
+# OS / editor cruft
 .DS_Store
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+
+# Local env / secrets
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Misc
+.cache/
+.npm/
+.eslintcache

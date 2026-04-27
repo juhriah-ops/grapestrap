@@ -1,0 +1,12 @@
+{
+  "name": "@grapestrap/exporter-flat",
+  "version": "0.0.1",
+  "displayName": "Flat HTML Export",
+  "description": "Default exporter — emits flat index.html / about.html / etc. with css/, js/, and assets/ folders.",
+  "author": "GrapeStrap Team",
+  "license": "MIT",
+  "type": "exporter",
+  "main": "index.js",
+  "grapestrapVersion": "^0.0.1",
+  "permissions": []
+}

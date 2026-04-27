@@ -1,0 +1,12 @@
+{
+  "name": "@grapestrap/core-blocks",
+  "version": "0.0.1",
+  "displayName": "Core Blocks",
+  "description": "Text, image, button, link, list, table, divider — the basics every project needs.",
+  "author": "GrapeStrap Team",
+  "license": "MIT",
+  "type": "block",
+  "main": "index.js",
+  "grapestrapVersion": "^0.0.1",
+  "permissions": []
+}

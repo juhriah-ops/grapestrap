@@ -1,0 +1,38 @@
+/* GrapeStrap — Dark theme tokens */
+:root {
+  --bg-1:    #1e1e1e;
+  --bg-2:    #252526;
+  --bg-3:    #2d2d2d;
+  --bg-4:    #333333;
+  --border:  #3e3e42;
+  --text-1:  #cccccc;
+  --text-2:  #858585;
+  --text-3:  #6c6c6c;
+  --accent:  #0078d4;
+  --accent-2:#106ebe;
+  --success: #4ec9b0;
+  --warning: #dcdcaa;
+  --error:   #f48771;
+  --info:    #569cd6;
+
+  --font-ui:   'Inter', system-ui, -apple-system, 'Segoe UI', Cantarell, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+
+  --strip-h:    48px;
+  --tabs-h:     32px;
+  --toolbar-h:  50px;
+  --status-h:   24px;
+  --insert-h:   90px;
+  --linked-h:   24px;
+}
+
+html, body {
+  margin: 0; padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}

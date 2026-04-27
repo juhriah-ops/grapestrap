@@ -1,0 +1,13 @@
+{
+  "name": "@grapestrap/blocks-sections",
+  "version": "0.0.1",
+  "displayName": "Section Blocks",
+  "description": "Pre-built Bootstrap 5 sections — heroes, headers, footers, galleries, testimonials, contact forms, pricing, features, CTAs.",
+  "author": "GrapeStrap Team",
+  "license": "MIT",
+  "type": "section",
+  "main": "index.js",
+  "grapestrapVersion": "^0.0.1",
+  "permissions": [],
+  "credits": "Adapted from ronaldaug/gramateria (MIT). Hardcoded asset URLs replaced with placeholders or local references."
+}

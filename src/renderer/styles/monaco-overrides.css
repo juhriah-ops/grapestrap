@@ -1,0 +1,13 @@
+/* GrapeStrap — Monaco container styling */
+
+.gstrap-monaco-host {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-1);
+}
+
+.gstrap-monaco-host .monaco-editor,
+.gstrap-monaco-host .monaco-editor .margin,
+.gstrap-monaco-host .monaco-editor-background {
+  background: var(--bg-1) !important;
+}

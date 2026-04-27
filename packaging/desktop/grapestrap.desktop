@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=GrapeStrap
+GenericName=Web Editor
+Comment=Visual Bootstrap 5 editor for Linux
+Exec=grapestrap %F
+Icon=grapestrap
+Terminal=false
+Categories=Development;WebDevelopment;
+Keywords=html;css;bootstrap;web;editor;dreamweaver;visual;
+MimeType=application/x-grapestrap;
+StartupNotify=true
+StartupWMClass=GrapeStrap

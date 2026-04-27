@@ -1,0 +1,38 @@
+/* GrapeStrap — Golden Layout dark-theme overrides
+   Loaded after Golden Layout's own CSS to recolor without forking the package.
+   Token values come from theme-dark.css. */
+
+.lm_root, .lm_goldenlayout {
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+}
+
+.lm_header {
+  background: var(--bg-3) !important;
+  border-bottom: 1px solid var(--border) !important;
+  height: 28px !important;
+}
+
+.lm_tab {
+  background: var(--bg-3) !important;
+  color: var(--text-2) !important;
+  border: none !important;
+  border-right: 1px solid var(--border) !important;
+  padding: 4px 14px !important;
+  font-family: var(--font-ui) !important;
+  font-size: 12px !important;
+}
+.lm_tab.lm_active {
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  border-bottom: 2px solid var(--accent) !important;
+}
+
+.lm_splitter {
+  background: var(--border) !important;
+}
+
+.lm_content {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--border) !important;
+}
