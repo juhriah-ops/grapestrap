@@ -6,13 +6,22 @@
  * handles the actual content sync between them per the locked policy.
  */
 
-import { initGrapesJS } from '../../editor/grapesjs-init.js'
+import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml } from '../../editor/grapesjs-init.js'
 import { createMonacoPair, bindMonacoToRegistry } from '../../editor/monaco-init.js'
 import { bindSync, onViewModeChange } from '../../editor/canvas-sync.js'
 import { pageState } from '../../state/page-state.js'
+import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 
 let monacoPair = null
+
+// The canvas tracks which page it's currently displaying so that on tab swap
+// we can capture the outgoing page's html back into projectState before
+// loading the incoming one. `loadingTabName` is set during a programmatic
+// setComponents() call so the resulting component:add storm doesn't get
+// misread as a user edit and dirty-flag the page.
+let currentTabName = null
+let loadingTabName = null
 
 export function renderCanvas(host) {
   host.classList.add('gstrap-canvas-host')
@@ -35,6 +44,51 @@ export function renderCanvas(host) {
   eventBus.on('viewmode:changed', ({ tab, mode }) => {
     applyViewMode(host, mode, tab.viewMode)
   })
+
+  eventBus.on('tab:focused', tab => swapToTab(tab))
+  eventBus.on('tab:closed',  tab => {
+    if (tab?.pageName === currentTabName) {
+      currentTabName = null
+      loadingTabName = 'about:blank'
+      loadHtmlIntoCanvas('')
+      loadingTabName = null
+    }
+  })
+  eventBus.on('project:closed', () => {
+    currentTabName = null
+    loadingTabName = 'about:blank'
+    loadHtmlIntoCanvas('')
+    loadingTabName = null
+  })
+
+  // Real user edits dirty-flag the active page. Programmatic loads don't.
+  eventBus.on('canvas:content-changed', () => {
+    if (loadingTabName) return
+    if (!currentTabName || !projectState.current) return
+    projectState.markPageDirty(currentTabName)
+  })
+}
+
+function swapToTab(tab) {
+  if (!tab || tab.pageName === currentTabName) return
+  if (!projectState.current) return
+
+  // Capture outgoing page back into projectState (preserves unsaved edits
+  // across tab switches; markPageDirty was already called on the edits).
+  if (currentTabName) {
+    const out = projectState.getPage(currentTabName)
+    if (out) out.html = getCanvasHtml()
+  }
+
+  const next = projectState.getPage(tab.pageName)
+  if (!next) return
+
+  loadingTabName = tab.pageName
+  loadHtmlIntoCanvas(next.html ?? '')
+  currentTabName = tab.pageName
+  // setComponents fires synchronously; release the load guard on the next tick
+  // to cover any straggler events fired in microtasks.
+  queueMicrotask(() => { loadingTabName = null })
 }
 
 function applyViewMode(host, next, prev) {

@@ -37,6 +37,7 @@ class PageStateManager {
     this.tabs.push(tab)
     this.activeIndex = this.tabs.length - 1
     eventBus.emit('tab:opened', tab)
+    eventBus.emit('tab:focused', tab)
     return tab
   }
 

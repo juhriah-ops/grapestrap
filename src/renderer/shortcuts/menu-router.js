@@ -14,7 +14,21 @@ import { pluginRegistry } from '../plugin-host/registry.js'
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
 import { resetLayout } from '../layout/golden-layout-config.js'
+import { getCanvasHtml } from '../editor/grapesjs-init.js'
 import { log } from '../log.js'
+
+// Pull the currently-displayed canvas html into the active page in projectState
+// so that whatever's on screen is what gets persisted. Tab swaps already
+// capture-on-switch; this covers the case where the user edits then saves
+// without switching tabs first.
+function flushActiveTabIntoProject() {
+  if (!projectState.current) return
+  const tab = pageState.active()
+  if (!tab) return
+  const page = projectState.getPage(tab.pageName)
+  if (!page) return
+  page.html = getCanvasHtml()
+}
 
 export function wireMenuActions() {
   window.grapestrap.menu.onAction(action => {
@@ -115,6 +129,7 @@ async function cmdNewPage() {
 
 async function cmdSave() {
   if (!projectState.current) return
+  flushActiveTabIntoProject()
   const result = await window.grapestrap.project.save(projectState.current)
   if (result) {
     projectState.dirtyPages.clear()
@@ -128,6 +143,7 @@ async function cmdSave() {
 
 async function cmdSaveAs() {
   if (!projectState.current) return
+  flushActiveTabIntoProject()
   const result = await window.grapestrap.project.saveAs(projectState.current)
   if (result) {
     eventBus.emit('project:saved', result)
@@ -142,6 +158,7 @@ async function cmdCloseTab() {
 
 async function cmdExport() {
   if (!projectState.current) return
+  flushActiveTabIntoProject()
   const result = await window.grapestrap.project.export(projectState.current)
   if (result) {
     eventBus.emit('toast', { type: 'success', message: `Exported ${result.pageCount} page(s) to ${result.outputDir}` })

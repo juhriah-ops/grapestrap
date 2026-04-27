@@ -64,7 +64,8 @@ boot().catch(err => {
   document.body.innerHTML = `<pre style="color:#f48771;padding:24px">BOOT FAILURE\n\n${err.stack || err.message}</pre>`
 })
 
-// Expose for devtools poking; not a public API
-if (!import.meta.env || !import.meta.env.PROD) {
-  window.__gstrap = { eventBus, projectState, pageState, pluginRegistry }
-}
+// Internal handle for devtools and the Playwright smoke test. Not part of
+// the public API surface — plugins access state via `api.*` from buildApi(),
+// not through this. Containment relies on preload-bridge-only IPC + sandbox +
+// contextIsolation, not on hiding this object.
+window.__gstrap = { eventBus, projectState, pageState, pluginRegistry }

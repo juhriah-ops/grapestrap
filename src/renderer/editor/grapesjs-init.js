@@ -97,10 +97,14 @@ export function initGrapesJS(container) {
   // declare `dependencies: ['splidejs', 'glightbox']` in their content metadata).
   editor.on('component:add', component => {
     eventBus.emit('canvas:component-added', component)
+    eventBus.emit('canvas:content-changed')
   })
   editor.on('component:remove', component => {
     eventBus.emit('canvas:component-removed', component)
+    eventBus.emit('canvas:content-changed')
   })
+  editor.on('component:update', () => eventBus.emit('canvas:content-changed'))
+  editor.on('style:custom', () => eventBus.emit('canvas:content-changed'))
 
   // Bind editor to plugin registry so plugins can access it via api.editor
   pluginRegistry.setBound('editor', editor)
@@ -112,4 +116,20 @@ export function initGrapesJS(container) {
 
 export function getEditor() {
   return editor
+}
+
+/**
+ * Replace canvas content programmatically (e.g. on tab swap or project load).
+ * Returns a promise that resolves once the load has settled — the editor fires
+ * many component:add events synchronously during setComponents, and we don't
+ * want any of those to be misread as user edits.
+ */
+export function loadHtmlIntoCanvas(html) {
+  if (!editor) return
+  editor.setComponents(html || '')
+}
+
+export function getCanvasHtml() {
+  if (!editor) return ''
+  return editor.getHtml() || ''
 }

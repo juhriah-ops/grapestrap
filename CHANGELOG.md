@@ -28,6 +28,15 @@ Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full ro
 - `npm install` clean against pinned versions, Electron 31.7.7 downloaded.
 - `npm run build` produces all three Electron targets (renderer, main, preload).
 - Headless Electron launch (Xvfb): preload bridge attaches, plugin discovery finds 5 / 5 bundled plugins, `activated 5 plugin(s)`, GrapesJS and Monaco both initialize without errors.
+- **Playwright smoke test (`tests/e2e/smoke.spec.js`) passes in ~3 s**: create project → open page tab → mutate page html → save → relaunch → reopen → sentinel string survives the round-trip. **M1 gate is green.**
+
+### Added (2026-04-27 — page-tab → canvas plumbing)
+- `pageState.open()` now emits `tab:focused` for newly-created tabs (previously only re-opens). Canvas subscribers fire on first open of a project.
+- Canvas panel listens for `tab:focused` and swaps content via new `loadHtmlIntoCanvas` / `getCanvasHtml` helpers in `grapesjs-init.js`. Outgoing tab's editor html is captured back into projectState before the swap, so unsaved edits survive tab switches.
+- New `canvas:content-changed` event fired on `component:add` / `component:remove` / `component:update` / `style:custom`. Canvas panel uses it to mark the active page dirty on real edits, with a `loadingTabName` guard so the component:add storm during programmatic loads doesn't dirty-flag a page just for being opened.
+- `cmdSave` / `cmdSaveAs` / `cmdExport` flush the active tab's canvas html into projectState before calling the IPC, so on-disk state reflects what's on screen.
+- Playwright config (`playwright.config.js`) and the M1 smoke test (`tests/e2e/smoke.spec.js`) — drives the same IPC the menu router uses, no native dialogs.
+- `__gstrap` window handle exposed unconditionally (was gated on `import.meta.env.PROD`). Containment is the preload-bridge + sandbox + contextIsolation posture, not symbol-hiding.
 
 ### Known v0.0.2 architectural follow-up
 - Replace the Blob-URL plugin loader with a privileged `gstrap-plugin://` protocol scheme so plugin entry modules can resolve relative imports (helpers, JSON catalogs, sub-files). Today every plugin must be a single self-contained ESM file. Track in v0.0.2 milestones.
