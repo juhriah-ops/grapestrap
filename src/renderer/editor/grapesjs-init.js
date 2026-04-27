@@ -19,10 +19,16 @@ import { pluginRegistry } from '../plugin-host/registry.js'
 import { eventBus } from '../state/event-bus.js'
 import { log } from '../log.js'
 
-const BOOTSTRAP_CSS = './assets/bootstrap/css/bootstrap.min.css'
-const BOOTSTRAP_JS  = './assets/bootstrap/js/bootstrap.bundle.min.js'
-const FA_CSS        = './assets/canvas-icons/css/all.min.css'
-const FONT_CSS      = './assets/fonts/inter.css'
+// Canvas iframe asset paths. Resolved relative to the renderer index.html
+// (file:///.../dist/renderer/index.html). Vite's `publicDir: 'assets'` copies
+// the *contents* of <repo>/assets/ to dist/renderer/ (NOT into a /assets/
+// subdir — that prefix is reserved for Vite's own bundled output like monaco
+// workers). So source path `assets/bootstrap/...` is served from
+// `dist/renderer/bootstrap/...`. Inter / JetBrains Mono webfonts deferred to
+// v0.0.2; canvas iframe falls back to system font stack until then.
+const BOOTSTRAP_CSS = './bootstrap/css/bootstrap.min.css'
+const BOOTSTRAP_JS  = './bootstrap/js/bootstrap.bundle.min.js'
+const ICONS_CSS     = './canvas-icons/css/bootstrap-icons.min.css'
 
 let editor = null
 
@@ -48,7 +54,7 @@ export function initGrapesJS(container) {
     },
 
     canvas: {
-      styles:  [BOOTSTRAP_CSS, FA_CSS, FONT_CSS],
+      styles:  [BOOTSTRAP_CSS, ICONS_CSS],
       scripts: [BOOTSTRAP_JS]
     },
 
