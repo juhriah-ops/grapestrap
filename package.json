@@ -33,7 +33,7 @@
     "glightbox": "^3.3.0",
     "golden-layout": "^2.6.0",
     "grapesjs": "^0.21.10",
-    "grapesjs-blocks-bootstrap5": "^1.0.0",
+    "grapesjs-blocks-bootstrap5": "^0.2.31",
     "i18next": "^23.11.5",
     "monaco-editor": "^0.50.0",
     "notyf": "^3.10.0",

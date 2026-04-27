@@ -659,6 +659,7 @@ npm install --save-dev playwright   # E2E test harness
 - Drag-to-resize with class snapping (columns and images first; generic sized divs after)
 
 #### Plugin System
+- **Replace Blob-URL plugin loader with `gstrap-plugin://` privileged protocol scheme** — registered pre-`whenReady` as standard+secure, served from disk via `protocol.handle`. Unblocks multi-file plugins: relative imports (`./helpers.js`, `./messages.json`) resolve correctly because the URL is hierarchical, unlike `blob:`. CSP `script-src` adds the scheme. v0.0.1 lang-en's inlined messages return to `import …json with { type: 'json' }` once this lands. Discovered during v0.0.1 first-launch verification (2026-04-27).
 - User plugin folder loading enabled (`$XDG_CONFIG_HOME/GrapeStrap/plugins/`)
 - Trust prompt on first load of an unrecognized plugin (shows manifest, install or reject)
 - Plugins page in Preferences (list, enable/disable, view manifest, view load logs)

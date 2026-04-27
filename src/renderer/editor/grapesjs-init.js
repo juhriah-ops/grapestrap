@@ -35,6 +35,10 @@ export function initGrapesJS(container) {
 
     storageManager: false,
 
+    // Disable GrapesJS's default Font Awesome CDN load (CSP-blocked anyway).
+    // Our editor chrome uses bootstrap-icons; canvas icons load from bundled assets/canvas-icons/.
+    cssIcons: '',
+
     deviceManager: {
       devices: [
         { name: 'Desktop', width: '' },

@@ -141,7 +141,7 @@ function createMainWindow() {
     title: 'GrapeStrap',
     icon: join(app.getAppPath(), 'assets', 'icons', 'icon.png'),
     webPreferences: {
-      preload: join(__dirname, '..', 'preload', 'preload.js'),
+      preload: join(__dirname, '..', 'preload', 'preload.mjs'),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
