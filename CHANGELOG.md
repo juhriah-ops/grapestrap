@@ -38,8 +38,13 @@ Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full ro
 - Playwright config (`playwright.config.js`) and the M1 smoke test (`tests/e2e/smoke.spec.js`) — drives the same IPC the menu router uses, no native dialogs.
 - `__gstrap` window handle exposed unconditionally (was gated on `import.meta.env.PROD`). Containment is the preload-bridge + sandbox + contextIsolation posture, not symbol-hiding.
 
-### Known v0.0.2 architectural follow-up
-- Replace the Blob-URL plugin loader with a privileged `gstrap-plugin://` protocol scheme so plugin entry modules can resolve relative imports (helpers, JSON catalogs, sub-files). Today every plugin must be a single self-contained ESM file. Track in v0.0.2 milestones.
+### Architecture (2026-04-27 — plugin protocol scheme, originally planned for v0.0.2)
+- Privileged `gstrap-plugin://<uid>/<file>` protocol scheme replaces the Blob-URL plugin loader. Plugins now load as ES modules from a hierarchical URL, so multi-file plugins with relative imports (`./helpers.js`, `./messages.json`, sub-modules) work natively. The previous Blob-URL approach broke any non-trivial plugin layout because blob URLs have no parent directory.
+- Scheme registered pre-`app.whenReady` as `standard + secure + supportFetchAPI + codeCache`. Handler attaches post-discovery; reads files from disk via `net.fetch` against `pathToFileURL(target)`, with a path-traversal guard pinning every read to inside the owning plugin's directory.
+- Each plugin gets a session-scoped numeric `uid` (`p1`, `p2`, …) that the renderer uses as the URL host. The plugin's name (which can include `@scope/name`) is not URL-safe as a hostname, so the uid indirection sidesteps that.
+- CSP `script-src` / `style-src` / `img-src` / `font-src` / `connect-src` now allow `gstrap-plugin:`. `blob:` removed from `script-src` (no longer needed). `worker-src` keeps `blob:` for Monaco workers.
+- `@grapestrap/lang-en` reverted to `import messages from './messages.json' with { type: 'json' }` — the proof that relative JSON imports work end-to-end. The v0.0.1 inlined catalog is gone.
+- Build plan §"Phase 2 → Plugin System" updated: the protocol-scheme rewrite is shipped, not pending.
 
 ### Notes
 - v0.0.1 is a walking skeleton. Many menu items are wired but show "not yet wired" toasts; full handlers land in v0.0.2.

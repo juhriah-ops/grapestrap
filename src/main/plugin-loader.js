@@ -49,11 +49,20 @@ export async function discoverPlugins({ bundledDir, userDir, projectDir, appVers
     else { incompatible.push(p); log.warn(`Plugin ${p.manifest.name} requires grapestrapVersion ${range}, app is ${appVersion} — skipping`) }
   }
 
+  // Assign each compatible plugin a stable URL-safe uid for the
+  // gstrap-plugin:// protocol scheme. The renderer uses these to construct
+  // import URLs; the protocol handler uses them to look up the plugin dir.
+  // Sequential ints are fine — the uid is session-scoped, not persisted.
+  compatible.forEach((p, i) => { p.uid = `p${i + 1}` })
+  const byUid = new Map(compatible.map(p => [p.uid, p]))
+
   return {
     plugins: compatible,
     incompatible,
+    byUid: uid => byUid.get(uid) || null,
     summary() {
       return compatible.map(p => ({
+        uid: p.uid,
         name: p.manifest.name,
         version: p.manifest.version,
         displayName: p.manifest.displayName || p.manifest.name,
@@ -61,7 +70,8 @@ export async function discoverPlugins({ bundledDir, userDir, projectDir, appVers
         type: p.manifest.type,
         source: p.source,
         path: p.dir,
-        entry: p.entryPath
+        entry: p.entryPath,
+        manifest: p.manifest
       }))
     },
     async readEntry(name) {

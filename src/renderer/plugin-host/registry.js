@@ -2,12 +2,12 @@
  * GrapeStrap — Plugin registry (renderer)
  *
  * Holds all currently-registered contributions from active plugins. The host
- * fetches plugin code from the main process (via grapestrap.plugins.readEntry),
- * dynamic-imports it as a Blob URL ES module, and calls its default export.
+ * dynamic-imports each plugin's entry module from a `gstrap-plugin://<uid>/<file>`
+ * URL served by the privileged protocol handler in main.js. Because the URL
+ * is hierarchical, plugins can use relative imports (`./helpers.js`,
+ * `./messages.json`) — they resolve normally against the plugin's directory.
  *
- * Note: Blob URL imports are required because Electron's renderer can't
- * dynamic-import paths outside of its bundle by default. Each plugin gets its
- * own scoped API instance via buildApi().
+ * Each plugin gets its own scoped API instance via buildApi(manifest).
  */
 
 import { buildApi } from './api.js'
@@ -72,24 +72,20 @@ export async function activateAllPlugins() {
 }
 
 async function activatePlugin(summary) {
-  const entry = await window.grapestrap.plugins.readEntry(summary.name)
-  if (!entry) throw new Error('plugin entry not readable')
+  if (!summary.uid) throw new Error(`Plugin ${summary.name} missing uid (main-process registry out of sync)`)
+  if (!summary.manifest?.main) throw new Error(`Plugin ${summary.name} manifest missing 'main'`)
 
-  const blob = new Blob([entry.code], { type: 'text/javascript' })
-  const url = URL.createObjectURL(blob)
-
-  let mod
-  try { mod = await import(/* @vite-ignore */ url) }
-  finally { URL.revokeObjectURL(url) }
+  const url = `gstrap-plugin://${summary.uid}/${encodeURI(summary.manifest.main)}`
+  const mod = await import(/* @vite-ignore */ url)
 
   if (typeof mod.default !== 'function') {
     throw new Error(`Plugin ${summary.name} has no default export function`)
   }
 
-  const api = buildApi(entry.manifest)
+  const api = buildApi(summary.manifest)
   await mod.default(api)
 
-  pluginRegistry.activated.push({ summary, manifest: entry.manifest })
+  pluginRegistry.activated.push({ summary, manifest: summary.manifest })
   log.info(`activated ${summary.name}@${summary.version}`)
-  eventBus.emit('plugin:activated', { name: summary.name, manifest: entry.manifest })
+  eventBus.emit('plugin:activated', { name: summary.name, manifest: summary.manifest })
 }

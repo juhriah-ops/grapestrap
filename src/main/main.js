@@ -24,9 +24,9 @@
  *   - Ctrl+Shift+R is enabled only with --dev flag for development reload
  */
 
-import { app, BrowserWindow, shell, protocol } from 'electron'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { app, BrowserWindow, shell, protocol, net } from 'electron'
+import { join, dirname, resolve as resolvePath } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { ensureXdgDirs, xdg } from './platform/xdg.js'
 import { applyDisplayProtocolFlags } from './platform/wayland.js'
@@ -44,6 +44,22 @@ const isDevReload = process.argv.includes('--dev')
 
 ensureXdgDirs()
 applyDisplayProtocolFlags(app)
+
+// Register the gstrap-plugin:// scheme as privileged BEFORE app.whenReady. This
+// has to happen synchronously at startup; the actual handler attaches after
+// plugin discovery. The scheme exists so plugins can be loaded as ES modules
+// from a hierarchical URL — relative imports (./helpers.js, ./messages.json)
+// resolve correctly, unlike under the previous Blob-URL loader where the base
+// URL had no parent directory. `standard` makes URLs parse cleanly,
+// `secure` lets the renderer treat it as a trustworthy origin (so dynamic
+// import works inside the locked-down renderer), `supportFetchAPI` covers
+// plugins that call fetch() against their own resources.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'gstrap-plugin',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true }
+  }
+])
 
 // Single-instance lock — second invocation focuses the existing window
 const gotLock = app.requestSingleInstanceLock()
@@ -85,6 +101,7 @@ app.whenReady().then(async () => {
   })
   log.info(`Plugin discovery complete — ${pluginRegistry.plugins.length} plugin(s) found`)
 
+  registerPluginProtocolHandler(pluginRegistry)
   registerIpcHandlers({ pluginRegistry })
 
   buildMenu({
@@ -176,6 +193,72 @@ function createMainWindow() {
   }
 
   mainWindow.on('closed', () => { mainWindow = null })
+}
+
+// ─── Plugin protocol handler ──────────────────────────────────────────────────
+//
+// Serves plugin files from disk under gstrap-plugin://<uid>/<file>. Plugins
+// can therefore use relative imports (`./helpers.js`, `./messages.json`),
+// which the renderer's ES module loader resolves against the protocol URL.
+// Path-traversal is blocked: every resolved file path must stay within the
+// owning plugin's directory.
+
+const PLUGIN_MIME = {
+  '.js':   'text/javascript',
+  '.mjs':  'text/javascript',
+  '.json': 'application/json',
+  '.css':  'text/css',
+  '.html': 'text/html',
+  '.svg':  'image/svg+xml',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.woff':  'font/woff',
+  '.woff2': 'font/woff2'
+}
+
+function mimeForPath(p) {
+  const dot = p.lastIndexOf('.')
+  if (dot < 0) return 'application/octet-stream'
+  return PLUGIN_MIME[p.slice(dot).toLowerCase()] || 'application/octet-stream'
+}
+
+function registerPluginProtocolHandler(registry) {
+  protocol.handle('gstrap-plugin', async request => {
+    let url
+    try { url = new URL(request.url) }
+    catch { return new Response('Bad URL', { status: 400 }) }
+
+    const plugin = registry.byUid(url.hostname)
+    if (!plugin) return new Response('Plugin not found', { status: 404 })
+
+    const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '')
+    if (!rel) return new Response('No path', { status: 400 })
+
+    const target = resolvePath(plugin.dir, rel)
+    const root = resolvePath(plugin.dir)
+    if (target !== root && !target.startsWith(root + '/')) {
+      log.warn(`gstrap-plugin: path traversal blocked: ${request.url}`)
+      return new Response('Forbidden', { status: 403 })
+    }
+
+    // net.fetch on a file:// URL is the recommended way to stream a file in a
+    // protocol.handle handler — it returns a proper Response with the right
+    // body type, and we layer the right Content-Type on top.
+    try {
+      const response = await net.fetch(pathToFileURL(target).toString())
+      if (!response.ok) return new Response('Not found', { status: 404 })
+      const buf = await response.arrayBuffer()
+      return new Response(buf, {
+        headers: { 'Content-Type': mimeForPath(target) }
+      })
+    } catch (err) {
+      log.warn(`gstrap-plugin: read failed for ${target}: ${err.message}`)
+      return new Response('Not found', { status: 404 })
+    }
+  })
+  log.info('gstrap-plugin:// protocol handler registered')
 }
 
 export function getMainWindow() {
