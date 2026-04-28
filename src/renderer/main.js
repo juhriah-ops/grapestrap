@@ -12,6 +12,14 @@
  *   7. Show empty-state until a project is opened
  */
 
+// Vendor CSS — bundled by Vite. Without these the editor renders unstyled
+// (Golden Layout panels stack at document-default top-left, GrapesJS chrome
+// has no toolbar styling). Theme overrides live in styles/golden-layout-
+// overrides.css.
+import 'golden-layout/dist/css/goldenlayout-base.css'
+import 'golden-layout/dist/css/themes/goldenlayout-dark-theme.css'
+import 'grapesjs/dist/css/grapes.min.css'
+
 import { eventBus } from './state/event-bus.js'
 import { projectState } from './state/project-state.js'
 import { pageState } from './state/page-state.js'

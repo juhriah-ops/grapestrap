@@ -8,8 +8,8 @@
   --text-1:  #cccccc;
   --text-2:  #858585;
   --text-3:  #6c6c6c;
-  --accent:  #0078d4;
-  --accent-2:#106ebe;
+  --accent:  #3fb950;   /* GrapeStrap green — chosen to match the .org site, a CLI-familiar accent legible on dark UI */
+  --accent-2:#2ea043;
   --success: #4ec9b0;
   --warning: #dcdcaa;
   --error:   #f48771;

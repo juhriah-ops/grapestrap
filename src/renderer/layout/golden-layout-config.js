@@ -73,6 +73,11 @@ export function initGoldenLayout(host) {
 
   layout.loadLayout(DEFAULT_CONFIG)
 
+  // Re-measure after the browser has laid out the CSS grid. Without this,
+  // GoldenLayout reads 0×0 from the host on first paint (chrome regions
+  // haven't sized yet) and panels collapse into the top-left corner.
+  requestAnimationFrame(() => layout?.updateSize())
+
   window.addEventListener('resize', () => {
     if (layout) layout.updateSize()
   })
