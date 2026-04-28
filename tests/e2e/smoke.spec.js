@@ -193,6 +193,39 @@ test('Wrap with Tag: Ctrl+Shift+W wraps the selected element', async () => {
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Property strip heading-level dropdown changes the tag', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-strip-'))
+  const projectPath = join(projectDir, 'strip.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // The strip should have rendered for the h1 selection — find the level select.
+  const select = appWindow.locator('[data-field="heading-level"]')
+  await select.waitFor({ state: 'visible', timeout: 5_000 })
+  await expect(select).toHaveValue('h1')
+
+  await select.selectOption('h3')
+
+  // Dispatch a real change event matches what the keyboard would do; verify
+  // the editor's selected component is now h3.
+  const newTag = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return ed.getSelected?.()?.get?.('tagName')?.toLowerCase?.()
+  })
+  expect(newTag).toBe('h3')
+
+  // The strip itself should have re-rendered for the new selection (h3).
+  await appWindow.waitForFunction(
+    () => document.querySelector('[data-field="heading-level"]')?.value === 'h3',
+    null, { timeout: 5_000 }
+  )
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('DOM tree mirrors canvas + click selects component', async () => {
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-domtree-'))
   const projectPath = join(projectDir, 'tree.gstrap')

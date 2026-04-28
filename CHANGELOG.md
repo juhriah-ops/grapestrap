@@ -38,6 +38,12 @@ Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full ro
 - Playwright config (`playwright.config.js`) and the M1 smoke test (`tests/e2e/smoke.spec.js`) — drives the same IPC the menu router uses, no native dialogs.
 - `__gstrap` window handle exposed unconditionally (was gated on `import.meta.env.PROD`). Containment is the preload-bridge + sandbox + contextIsolation posture, not symbol-hiding.
 
+### Added (2026-04-27 — Property Inspector strip element-aware UI, originally planned for v0.0.2)
+- Property strip is now element-aware. Always shows tag, ID input, classes input. Adds: `href` + `target` for `<a>`; `src` + `alt` for `<img>`; an H1–H6 level dropdown for headings (changes the tag in-place via `replaceWith`, preserving children + attributes).
+- Inputs commit on `change` / blur, not on every keystroke — fewer canvas-state churns and undo entries.
+- New stylesheet `src/renderer/styles/property-strip.css` — monospace inputs, VS-Code-ish colors for the tag pill, focused-accent border.
+- Playwright spec verifies the heading-level dropdown actually swaps the tag (h1 → h3).
+
 ### Added (2026-04-27 — Quick Tag Editor + Wrap with Tag, originally planned for v0.0.2)
 - **Ctrl+T** (Quick Tag Editor): floating input shows the selected element as `<tag attr="…">`. Edit, Enter to apply, Esc / backdrop to cancel. Tag rename + attribute update preserves the element's children. The text-form input matches Dreamweaver's classic UX (faster than a structured form once the muscle memory is there; structured editing already lives in the Properties panel).
 - **Ctrl+Shift+W** (Wrap with Tag): same dialog, wraps the selected element's outer HTML in a new tag.

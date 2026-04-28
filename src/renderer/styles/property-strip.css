@@ -1,0 +1,55 @@
+/* GrapeStrap — Property Inspector strip
+   Inline element-aware controls in the bottom strip. */
+
+.gstrap-strip-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.gstrap-strip-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--bg-1);
+  color: #ce9178;
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+
+.gstrap-strip-sep {
+  color: var(--text-3);
+  user-select: none;
+}
+
+.gstrap-strip-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.gstrap-strip-field > span {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.gstrap-strip-field input[type="text"],
+.gstrap-strip-field select {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  outline: none;
+  min-width: 80px;
+  max-width: 280px;
+}
+.gstrap-strip-field input[type="text"]:focus,
+.gstrap-strip-field select:focus {
+  border-color: var(--accent);
+}
+.gstrap-strip-field select {
+  cursor: pointer;
+}
