@@ -25,6 +25,12 @@ import { renderCustomCss }   from '../panels/custom-css/index.js'
 
 let layout = null
 
+// minWidth/minHeight floors stop GL from collapsing a panel to nothing when
+// the host resizes (e.g. windowed → fullscreen on an ultrawide). Without them
+// GL treats panels as fully fluid and the proportions can flip on resize.
+const PANEL_MIN_W = 180
+const PANEL_MIN_H = 120
+
 const DEFAULT_CONFIG = {
   root: {
     type: 'row',
@@ -33,29 +39,34 @@ const DEFAULT_CONFIG = {
         type: 'column',
         width: 16,
         content: [
-          { type: 'component', componentType: 'file-manager', title: 'Project', isClosable: false }
+          { type: 'component', componentType: 'file-manager', title: 'Project',
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       },
       {
         type: 'column',
         width: 16,
         content: [
-          { type: 'component', componentType: 'dom-tree', title: 'DOM', isClosable: false }
+          { type: 'component', componentType: 'dom-tree', title: 'DOM',
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       },
       {
         type: 'stack',
         width: 46,
         content: [
-          { type: 'component', componentType: 'canvas', title: 'Canvas', isClosable: false }
+          { type: 'component', componentType: 'canvas', title: 'Canvas',
+            isClosable: false, minWidth: 320, minHeight: 240 }
         ]
       },
       {
         type: 'column',
         width: 22,
         content: [
-          { type: 'component', componentType: 'properties',  title: 'Properties', isClosable: false },
-          { type: 'component', componentType: 'custom-css',  title: 'Custom CSS', isClosable: false }
+          { type: 'component', componentType: 'properties',  title: 'Properties',
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H, height: 60 },
+          { type: 'component', componentType: 'custom-css',  title: 'Custom CSS',
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H, height: 40 }
         ]
       }
     ]
@@ -77,6 +88,14 @@ export function initGoldenLayout(host) {
   // GoldenLayout reads 0×0 from the host on first paint (chrome regions
   // haven't sized yet) and panels collapse into the top-left corner.
   requestAnimationFrame(() => layout?.updateSize())
+
+  // GL only listens for window resize. That misses host-driven resizes —
+  // e.g. windowed→fullscreen on ultrawide, where GL's cached proportions get
+  // applied to a much-larger viewport and panels collapse asymmetrically.
+  // ResizeObserver catches every host size change and gets GL to redistribute.
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => layout?.updateSize()).observe(host)
+  }
 
   window.addEventListener('resize', () => {
     if (layout) layout.updateSize()
