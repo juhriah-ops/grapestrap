@@ -93,8 +93,30 @@ export function initGoldenLayout(host) {
   // e.g. windowed→fullscreen on ultrawide, where GL's cached proportions get
   // applied to a much-larger viewport and panels collapse asymmetrically.
   // ResizeObserver catches every host size change and gets GL to redistribute.
+  //
+  // Two guards against feedback loops: coalesce multiple fires per frame via
+  // requestAnimationFrame, and skip updateSize() if the size hasn't actually
+  // changed by ≥ 1 px. Without these the chain "RO fires → updateSize sets
+  // explicit pixel sizes → iframe internal reflow → host bbox shifts by a
+  // sub-pixel → RO fires again" makes the canvas drift downward on every
+  // resize-direction change.
   if (typeof ResizeObserver === 'function') {
-    new ResizeObserver(() => layout?.updateSize()).observe(host)
+    let pending = false
+    let lastW = 0
+    let lastH = 0
+    const ro = new ResizeObserver(() => {
+      if (pending) return
+      pending = true
+      requestAnimationFrame(() => {
+        pending = false
+        const r = host.getBoundingClientRect()
+        if (Math.abs(r.width - lastW) < 1 && Math.abs(r.height - lastH) < 1) return
+        lastW = r.width
+        lastH = r.height
+        layout?.updateSize()
+      })
+    })
+    ro.observe(host)
   }
 
   window.addEventListener('resize', () => {
