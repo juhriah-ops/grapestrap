@@ -96,6 +96,103 @@ test('M1 smoke: open → edit → save → reopen', async () => {
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+async function openSeedProject(appWindow, projectPath) {
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+  await appWindow.evaluate(async path => {
+    const project = await window.grapestrap.project.new({ name: 'tagtest', location: path })
+    const { projectState, pageState } = window.__gstrap
+    projectState.set(project)
+    pageState.open(project.pages[0].name)
+  }, projectPath)
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('[data-cid]').length > 0,
+    null, { timeout: 10_000 }
+  )
+}
+
+async function selectFirstByTag(appWindow, tag) {
+  await appWindow.evaluate(t => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const wrapper = ed.getWrapper()
+    function find(c) {
+      if ((c.get('tagName') || '').toLowerCase() === t) return c
+      for (const k of c.components()) { const r = find(k); if (r) return r }
+      return null
+    }
+    const found = find(wrapper)
+    if (found) ed.select(found)
+  }, tag)
+}
+
+test('Quick Tag Editor: Ctrl+T renames the selected element', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-qt-'))
+  const projectPath = join(projectDir, 'qt.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // Trigger the menu command, then fill and submit the dialog.
+  await appWindow.evaluate(() =>
+    window.__gstrap.eventBus.emit('command', 'edit:quick-tag')
+  )
+  const input = appWindow.locator('.gstrap-quick-tag-input')
+  await input.waitFor({ state: 'visible', timeout: 5_000 })
+  await input.fill('<h2 class="rebranded">')
+  await input.press('Enter')
+
+  // After Enter, dialog should be gone and the selected component should be h2.
+  await appWindow.waitForFunction(() => !document.querySelector('.gstrap-quick-tag-input'))
+  const newTag = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return ed.getSelected?.()?.get?.('tagName')?.toLowerCase?.()
+  })
+  expect(newTag).toBe('h2')
+
+  // Page html should reflect the rename.
+  const htmlAfter = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return ed.getHtml()
+  })
+  expect(htmlAfter).toContain('<h2')
+  expect(htmlAfter).toContain('rebranded')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Wrap with Tag: Ctrl+Shift+W wraps the selected element', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-wrap-'))
+  const projectPath = join(projectDir, 'wrap.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  await appWindow.evaluate(() =>
+    window.__gstrap.eventBus.emit('command', 'edit:wrap-tag')
+  )
+  const input = appWindow.locator('.gstrap-quick-tag-input')
+  await input.waitFor({ state: 'visible', timeout: 5_000 })
+  await input.fill('<header class="page-head">')
+  await input.press('Enter')
+
+  await appWindow.waitForFunction(() => !document.querySelector('.gstrap-quick-tag-input'))
+
+  const html = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return ed.getHtml()
+  })
+  // <header class="page-head"><h1 …>…</h1></header> should now exist.
+  expect(html).toMatch(/<header[^>]*class="page-head"[^>]*>\s*<h1/i)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('DOM tree mirrors canvas + click selects component', async () => {
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-domtree-'))
   const projectPath = join(projectDir, 'tree.gstrap')

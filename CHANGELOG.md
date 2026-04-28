@@ -38,6 +38,13 @@ Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full ro
 - Playwright config (`playwright.config.js`) and the M1 smoke test (`tests/e2e/smoke.spec.js`) — drives the same IPC the menu router uses, no native dialogs.
 - `__gstrap` window handle exposed unconditionally (was gated on `import.meta.env.PROD`). Containment is the preload-bridge + sandbox + contextIsolation posture, not symbol-hiding.
 
+### Added (2026-04-27 — Quick Tag Editor + Wrap with Tag, originally planned for v0.0.2)
+- **Ctrl+T** (Quick Tag Editor): floating input shows the selected element as `<tag attr="…">`. Edit, Enter to apply, Esc / backdrop to cancel. Tag rename + attribute update preserves the element's children. The text-form input matches Dreamweaver's classic UX (faster than a structured form once the muscle memory is there; structured editing already lives in the Properties panel).
+- **Ctrl+Shift+W** (Wrap with Tag): same dialog, wraps the selected element's outer HTML in a new tag.
+- New parser in `src/renderer/dialogs/quick-tag.js` handles `<h2 class="foo bar" id="hi">` style input — quoted ('"' or `'`) or bare values, valueless attrs, optional self-closing `/`. Tag name lowercased; attributes preserved verbatim.
+- New stylesheet `src/renderer/styles/quick-tag.css` — top-centered overlay with a backdrop, monospace input, error flash on parse fail.
+- Two new Playwright specs verify both shortcuts: select h1 → Ctrl+T → fill `<h2 class="rebranded">` → Enter → element renames to h2; select h1 → Ctrl+Shift+W → fill `<header class="page-head">` → wrap. All 4 specs (M1 smoke + DOM tree + Quick Tag + Wrap) pass in ~12 s combined.
+
 ### Added (2026-04-27 — DOM Tree panel, originally planned for v0.0.2)
 - New left-sidebar `DOM` panel mirrors the canvas component tree as an indented list. Click a row to select the component on the canvas; canvas selection highlights the matching tree row. Refresh is coalesced via `queueMicrotask` so a section drop that adds 30 children only repaints once.
 - Golden Layout default config gains a fourth column: FILE MGR | DOM TREE | CANVAS | PROPS+CSS.

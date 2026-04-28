@@ -1,0 +1,56 @@
+/* GrapeStrap — Quick Tag dialog
+   Floating input overlay; centered top, dismisses on Esc / backdrop click. */
+
+.gstrap-quick-tag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10vh;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.gstrap-quick-tag-card {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  padding: 14px 16px;
+  width: min(640px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gstrap-quick-tag-mode {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-2);
+}
+
+.gstrap-quick-tag-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  outline: none;
+  caret-color: var(--accent);
+}
+.gstrap-quick-tag-input:focus {
+  border-color: var(--accent);
+}
+.gstrap-quick-tag-input.is-error {
+  border-color: #d6605c;
+  background: rgba(214, 96, 92, 0.12);
+}
+
+.gstrap-quick-tag-hint {
+  font-size: 11px;
+  color: var(--text-3);
+}

@@ -14,7 +14,8 @@ import { pluginRegistry } from '../plugin-host/registry.js'
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
 import { resetLayout } from '../layout/golden-layout-config.js'
-import { getCanvasHtml } from '../editor/grapesjs-init.js'
+import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
+import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
 import { log } from '../log.js'
 
 // Pull the currently-displayed canvas html into the active page in projectState
@@ -58,6 +59,8 @@ async function handleCommand(action) {
     case 'edit:redo':          return cmdRedo()
     case 'edit:duplicate':     return eventBus.emit('canvas:duplicate-selected')
     case 'edit:delete':        return eventBus.emit('canvas:delete-selected')
+    case 'edit:quick-tag':     return cmdQuickTag()
+    case 'edit:wrap-tag':      return cmdWrapTag()
     case 'edit:preferences':   return eventBus.emit('dialog:preferences')
 
     case 'view:mode-design':   return cmdViewMode('design')
@@ -170,6 +173,63 @@ function cmdUndo() {
 }
 function cmdRedo() {
   pluginRegistry.bound.editor?.UndoManager?.redo()
+}
+
+async function cmdQuickTag() {
+  const editor = getEditor()
+  const sel = editor?.getSelected?.()
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  const initialText = formatComponentAsQuickTag(sel)
+  const parsed = await showQuickTagDialog({ initialText, mode: 'edit' })
+  if (!parsed) return
+  applyTagReplace(editor, sel, parsed)
+}
+
+async function cmdWrapTag() {
+  const editor = getEditor()
+  const sel = editor?.getSelected?.()
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  const parsed = await showQuickTagDialog({ initialText: '<div>', mode: 'wrap' })
+  if (!parsed) return
+  applyTagWrap(editor, sel, parsed)
+}
+
+function applyTagReplace(editor, component, { tag, attrs }) {
+  const innerHTML = component.getInnerHTML?.() || ''
+  const newHtml = `<${tag}${attrsToHtml(attrs)}>${innerHTML}</${tag}>`
+  const replaced = component.replaceWith(newHtml)
+  selectFirst(editor, replaced)
+  eventBus.emit('canvas:content-changed')
+}
+
+function applyTagWrap(editor, component, { tag, attrs }) {
+  // toHTML() gives the full outer markup so we wrap the element and its children.
+  const outerHTML = component.toHTML?.() || ''
+  const newHtml = `<${tag}${attrsToHtml(attrs)}>${outerHTML}</${tag}>`
+  const replaced = component.replaceWith(newHtml)
+  selectFirst(editor, replaced)
+  eventBus.emit('canvas:content-changed')
+}
+
+function attrsToHtml(attrs) {
+  const parts = []
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === '') parts.push(k)
+    else parts.push(`${k}="${escAttr(String(v))}"`)
+  }
+  return parts.length ? ' ' + parts.join(' ') : ''
+}
+
+function escAttr(s) {
+  return String(s).replace(/[&<>"]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+}
+
+// component.replaceWith may return the new component, an array, or undefined
+// depending on the GrapesJS version. Normalize.
+function selectFirst(editor, replaced) {
+  const next = Array.isArray(replaced) ? replaced[0] : replaced
+  if (next && typeof editor.select === 'function') editor.select(next)
 }
 
 function cmdViewMode(mode) {
