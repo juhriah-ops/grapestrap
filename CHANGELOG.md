@@ -38,6 +38,13 @@ Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full ro
 - Playwright config (`playwright.config.js`) and the M1 smoke test (`tests/e2e/smoke.spec.js`) — drives the same IPC the menu router uses, no native dialogs.
 - `__gstrap` window handle exposed unconditionally (was gated on `import.meta.env.PROD`). Containment is the preload-bridge + sandbox + contextIsolation posture, not symbol-hiding.
 
+### Added (2026-04-27 — DOM Tree panel, originally planned for v0.0.2)
+- New left-sidebar `DOM` panel mirrors the canvas component tree as an indented list. Click a row to select the component on the canvas; canvas selection highlights the matching tree row. Refresh is coalesced via `queueMicrotask` so a section drop that adds 30 children only repaints once.
+- Golden Layout default config gains a fourth column: FILE MGR | DOM TREE | CANVAS | PROPS+CSS.
+- New stylesheet `src/renderer/styles/dom-tree.css` — indented monospace rows, hover, selected state, VS-Code-ish color scheme for tags / ids / classes.
+- Second Playwright spec verifies the DOM tree's two-way sync: tree contains main/h1/p rows from the seed index page; clicking the h1 row selects the matching component on the canvas; the selection highlights in the tree.
+- Drag-to-reorder + right-click context menu (wrap, delete, duplicate, edit tag) deferred to a follow-up commit. Read-only is the v1 scope.
+
 ### Architecture (2026-04-27 — plugin protocol scheme, originally planned for v0.0.2)
 - Privileged `gstrap-plugin://<uid>/<file>` protocol scheme replaces the Blob-URL plugin loader. Plugins now load as ES modules from a hierarchical URL, so multi-file plugins with relative imports (`./helpers.js`, `./messages.json`, sub-modules) work natively. The previous Blob-URL approach broke any non-trivial plugin layout because blob URLs have no parent directory.
 - Scheme registered pre-`app.whenReady` as `standard + secure + supportFetchAPI + codeCache`. Handler attaches post-discovery; reads files from disk via `net.fetch` against `pathToFileURL(target)`, with a path-traversal guard pinning every read to inside the owning plugin's directory.

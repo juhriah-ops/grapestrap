@@ -1,0 +1,67 @@
+/* GrapeStrap — DOM tree panel
+   Indented rows, hover + selected state, monospace tags. */
+
+.gstrap-dom-host {
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.gstrap-dom-empty {
+  padding: 16px 12px;
+  color: var(--text-3);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+.gstrap-dom-tree {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.gstrap-dom-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  padding-right: 8px;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.gstrap-dom-row:hover {
+  background: var(--bg-3);
+}
+.gstrap-dom-row.is-selected {
+  background: var(--accent);
+  color: #fff;
+}
+
+.gstrap-dom-twist {
+  width: 12px;
+  display: inline-block;
+  text-align: center;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.gstrap-dom-row.is-selected .gstrap-dom-twist { color: #fff; }
+.gstrap-dom-row.is-leaf .gstrap-dom-twist { color: var(--text-3); }
+
+.gstrap-dom-tag    { color: #ce9178; }
+.gstrap-dom-id     { color: #4ec9b0; }
+.gstrap-dom-class  { color: #9cdcfe; }
+.gstrap-dom-more   { color: var(--text-3); }
+
+.gstrap-dom-row.is-selected .gstrap-dom-tag,
+.gstrap-dom-row.is-selected .gstrap-dom-id,
+.gstrap-dom-row.is-selected .gstrap-dom-class,
+.gstrap-dom-row.is-selected .gstrap-dom-more {
+  color: #fff;
+}

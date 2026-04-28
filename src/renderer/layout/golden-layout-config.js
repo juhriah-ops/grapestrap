@@ -5,7 +5,6 @@
  *
  *   ┌──────────┬───────────┬─────────────────┬───────────┐
  *   │ FILE MGR │ DOM TREE  │ CANVAS / CODE   │ PROPS     │
- *   │          │ (v0.0.2)  │                 │           │
  *   └──────────┴───────────┴─────────────────┴───────────┘
  *
  * Each pane registers with Golden Layout under a unique component name. Plugins
@@ -19,9 +18,10 @@
 import { GoldenLayout } from 'golden-layout'
 
 import { renderFileManager } from '../panels/file-manager/index.js'
-import { renderCanvas } from '../panels/canvas/index.js'
-import { renderProperties } from '../panels/properties-side/index.js'
-import { renderCustomCss } from '../panels/custom-css/index.js'
+import { renderDomTree }     from '../panels/dom-tree/index.js'
+import { renderCanvas }      from '../panels/canvas/index.js'
+import { renderProperties }  from '../panels/properties-side/index.js'
+import { renderCustomCss }   from '../panels/custom-css/index.js'
 
 let layout = null
 
@@ -31,14 +31,21 @@ const DEFAULT_CONFIG = {
     content: [
       {
         type: 'column',
-        width: 18,
+        width: 16,
         content: [
           { type: 'component', componentType: 'file-manager', title: 'Project', isClosable: false }
         ]
       },
       {
+        type: 'column',
+        width: 16,
+        content: [
+          { type: 'component', componentType: 'dom-tree', title: 'DOM', isClosable: false }
+        ]
+      },
+      {
         type: 'stack',
-        width: 60,
+        width: 46,
         content: [
           { type: 'component', componentType: 'canvas', title: 'Canvas', isClosable: false }
         ]
@@ -59,6 +66,7 @@ export function initGoldenLayout(host) {
   layout = new GoldenLayout(host)
 
   layout.registerComponentFactoryFunction('file-manager', container => renderFileManager(container.element))
+  layout.registerComponentFactoryFunction('dom-tree',     container => renderDomTree(container.element))
   layout.registerComponentFactoryFunction('canvas',       container => renderCanvas(container.element))
   layout.registerComponentFactoryFunction('properties',   container => renderProperties(container.element))
   layout.registerComponentFactoryFunction('custom-css',   container => renderCustomCss(container.element))

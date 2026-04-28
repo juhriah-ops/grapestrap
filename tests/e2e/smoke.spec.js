@@ -95,3 +95,55 @@ test('M1 smoke: open → edit → save → reopen', async () => {
 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+test('DOM tree mirrors canvas + click selects component', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-domtree-'))
+  const projectPath = join(projectDir, 'tree.gstrap')
+
+  const { app, appWindow } = await launch()
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+
+  // Create + open a project so the canvas has the seed index page loaded.
+  await appWindow.evaluate(async path => {
+    const project = await window.grapestrap.project.new({ name: 'tree', location: path })
+    const { projectState, pageState } = window.__gstrap
+    projectState.set(project)
+    pageState.open(project.pages[0].name)
+  }, projectPath)
+
+  // Wait until GrapesJS has populated the wrapper with the seed page's
+  // components and the DOM tree has rendered at least one row.
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('[data-cid]').length > 0,
+    null, { timeout: 10_000 }
+  )
+
+  // The seed page contains <main>…<h1>…<p>… — assert the tree shows them.
+  const tags = await appWindow.$$eval(
+    '[data-cid] .gstrap-dom-tag',
+    nodes => nodes.map(n => n.textContent)
+  )
+  expect(tags).toContain('main')
+  expect(tags).toContain('h1')
+  expect(tags).toContain('p')
+
+  // Click the h1 row → editor should select the matching component.
+  const selectedTag = await appWindow.evaluate(() => {
+    const h1Row = [...document.querySelectorAll('[data-cid]')]
+      .find(r => r.querySelector('.gstrap-dom-tag')?.textContent === 'h1')
+    h1Row.click()
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return ed?.getSelected?.()?.get?.('tagName')?.toLowerCase?.()
+  })
+  expect(selectedTag).toBe('h1')
+
+  // Selection should highlight in the tree.
+  const highlighted = await appWindow.locator('[data-cid].is-selected').count()
+  expect(highlighted).toBe(1)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
