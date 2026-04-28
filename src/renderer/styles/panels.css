@@ -1,0 +1,134 @@
+/* GrapeStrap — Panel chrome shared by file-manager, properties, custom-css,
+   insert, and the canvas containers. Element-specific tweaks live in their
+   own stylesheets (dom-tree.css, etc). */
+
+.gstrap-empty {
+  padding: 24px 18px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.gstrap-empty .gstrap-btn {
+  margin-top: 8px;
+  display: inline-block;
+}
+
+/* ── File manager ─────────────────────────────────────────────────────────── */
+.gstrap-fm-host {
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-2);
+  font-size: 13px;
+}
+.gstrap-fm-section {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.gstrap-fm-section:last-child { border-bottom: none; }
+.gstrap-fm-section-title {
+  padding: 6px 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-3);
+}
+.gstrap-fm-list {
+  list-style: none;
+  margin: 0; padding: 0;
+}
+.gstrap-fm-item {
+  padding: 4px 14px;
+  cursor: pointer;
+  color: var(--text-1);
+  user-select: none;
+}
+.gstrap-fm-item:hover {
+  background: var(--bg-3);
+}
+.gstrap-fm-item.is-dirty::after {
+  content: '•';
+  color: var(--accent);
+  margin-left: 4px;
+}
+
+/* ── Properties / Custom CSS containers ───────────────────────────────────── */
+.gstrap-props-host {
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-2);
+  font-size: 12px;
+}
+.gstrap-props-section {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.gstrap-prop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.gstrap-cssp-host {
+  height: 100%;
+  background: var(--bg-1);
+  position: relative;
+}
+
+/* ── Class chips (used in properties side panel) ──────────────────────────── */
+.gstrap-class-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+}
+.gstrap-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--text-1);
+}
+.gstrap-chip-input {
+  flex: 1 1 80px;
+  min-width: 80px;
+  background: transparent;
+  border: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+/* ── Status bar cells ─────────────────────────────────────────────────────── */
+.gstrap-sb-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Canvas hosts (inside Golden Layout center pane) ──────────────────────── */
+.gstrap-canvas-host {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  background: var(--bg-1);
+  overflow: hidden;
+}
+.gstrap-canvas-design,
+.gstrap-canvas-code {
+  position: absolute;
+  inset: 0;
+}
+.gstrap-canvas-design[hidden],
+.gstrap-canvas-code[hidden] {
+  display: none;
+}
+.gstrap-monaco-host {
+  position: absolute;
+  inset: 0;
+}

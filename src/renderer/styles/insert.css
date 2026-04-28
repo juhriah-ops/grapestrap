@@ -1,0 +1,76 @@
+/* GrapeStrap — Insert panel (bottom strip)
+   Tabs at top, content area below with block tiles. */
+
+.gstrap-insert-tabs {
+  display: flex;
+  height: 24px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+}
+.gstrap-insert-tab {
+  font: inherit;
+  font-size: 11px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text-2);
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  position: relative;
+}
+.gstrap-insert-tab:hover {
+  color: var(--text-1);
+}
+.gstrap-insert-tab.is-active {
+  color: var(--accent);
+}
+.gstrap-insert-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 8px; right: 8px; bottom: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.gstrap-insert-content {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.gstrap-block-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  min-width: 70px;
+  height: 48px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: grab;
+  font-size: 10px;
+  color: var(--text-1);
+  user-select: none;
+}
+.gstrap-block-tile:hover {
+  border-color: var(--accent);
+  background: var(--bg-4);
+}
+.gstrap-block-tile-media {
+  font-size: 16px;
+  color: var(--text-2);
+}
+.gstrap-block-tile-label {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 80px;
+}

@@ -1,0 +1,104 @@
+/* GrapeStrap — Modal dialogs
+   Centered card on a dimmed backdrop. Used by the welcome dialog and any
+   other modal-style component that lands inside #gstrap-modals. */
+
+.gstrap-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.gstrap-modal {
+  background: var(--bg-2);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  padding: 24px 28px;
+  width: min(640px, 90vw);
+  max-height: 80vh;
+  overflow: auto;
+  font-family: var(--font-ui);
+}
+
+.gstrap-modal h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.gstrap-modal h3 {
+  margin: 18px 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-2);
+}
+.gstrap-modal p {
+  margin: 0 0 12px 0;
+  color: var(--text-1);
+  line-height: 1.5;
+}
+.gstrap-modal ul {
+  margin: 0 0 12px 0;
+  padding-left: 20px;
+  color: var(--text-1);
+  line-height: 1.5;
+}
+.gstrap-modal li {
+  margin-bottom: 6px;
+}
+.gstrap-modal code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text-1);
+}
+.gstrap-modal strong {
+  color: var(--text-1);
+}
+
+.gstrap-modal-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.gstrap-btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  background: var(--bg-3);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.gstrap-btn:hover {
+  background: var(--bg-4);
+  border-color: var(--text-3);
+}
+.gstrap-btn:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.gstrap-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0e0a;
+  font-weight: 600;
+}
+.gstrap-btn-primary:hover {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+}
