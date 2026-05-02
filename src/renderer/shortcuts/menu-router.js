@@ -16,6 +16,7 @@ import { pageState } from '../state/page-state.js'
 import { resetLayout } from '../layout/golden-layout-config.js'
 import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
+import { duplicateComponent, deleteComponent } from './component-actions.js'
 import { log } from '../log.js'
 
 // Pull the currently-displayed canvas html into the active page in projectState
@@ -57,8 +58,8 @@ async function handleCommand(action) {
 
     case 'edit:undo':          return cmdUndo()
     case 'edit:redo':          return cmdRedo()
-    case 'edit:duplicate':     return eventBus.emit('canvas:duplicate-selected')
-    case 'edit:delete':        return eventBus.emit('canvas:delete-selected')
+    case 'edit:duplicate':     return cmdDuplicate()
+    case 'edit:delete':        return cmdDelete()
     case 'edit:quick-tag':     return cmdQuickTag()
     case 'edit:wrap-tag':      return cmdWrapTag()
     case 'edit:preferences':   return eventBus.emit('dialog:preferences')
@@ -173,6 +174,21 @@ function cmdUndo() {
 }
 function cmdRedo() {
   pluginRegistry.bound.editor?.UndoManager?.redo()
+}
+
+function cmdDuplicate() {
+  const sel = getEditor()?.getSelected?.()
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  if (!duplicateComponent(sel)) {
+    eventBus.emit('toast', { type: 'warning', message: 'Cannot duplicate the page root.' })
+  }
+}
+function cmdDelete() {
+  const sel = getEditor()?.getSelected?.()
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  if (!deleteComponent(sel)) {
+    eventBus.emit('toast', { type: 'warning', message: 'Cannot delete the page root.' })
+  }
 }
 
 async function cmdQuickTag() {

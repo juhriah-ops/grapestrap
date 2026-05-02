@@ -32,6 +32,8 @@ import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
 import { wireMenuActions } from './shortcuts/menu-router.js'
 import { showWelcomeIfFirstRun } from './dialogs/welcome.js'
+import { showContextMenu } from './dialogs/context-menu.js'
+import { buildComponentMenuItems } from './shortcuts/component-actions.js'
 import { log } from './log.js'
 
 async function boot() {
@@ -60,10 +62,24 @@ async function boot() {
   // 4. Wire menu actions
   wireMenuActions()
 
-  // 5. First-run welcome
+  // 5. Single context-menu open path. Both the canvas iframe handler (in
+  //    grapesjs-init.js) and the DOM tree (in panels/dom-tree) emit
+  //    `canvas:context-menu` with viewport coords + component — one listener
+  //    here opens the actual menu so the menu definition lives in exactly
+  //    one place (component-actions.js).
+  //
+  //    Registered BEFORE the welcome dialog: showWelcomeIfFirstRun() awaits
+  //    user dismissal on first run, and we don't want context-menu to be
+  //    silently broken until the welcome is closed.
+  eventBus.on('canvas:context-menu', ({ x, y, component }) => {
+    showContextMenu(x, y, buildComponentMenuItems(component))
+  })
+
+  // 6. First-run welcome (blocks on user dismissal — must be after every
+  //    listener that needs to be live during the welcome screen)
   await showWelcomeIfFirstRun()
 
-  // 6. Empty state until project opens
+  // 7. Empty state until project opens
   eventBus.emit('app:ready', { info })
 }
 

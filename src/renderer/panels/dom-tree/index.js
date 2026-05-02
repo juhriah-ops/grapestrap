@@ -47,6 +47,22 @@ export function renderDomTree(host) {
     const found = findById(editor.getWrapper(), row.dataset.cid)
     if (found) editor.select(found)
   })
+
+  // Right-click → select the row's component then emit the same context-menu
+  // event the canvas iframe handler emits. The renderer-level listener in
+  // main.js opens the menu so canvas + tree share one open path.
+  host.addEventListener('contextmenu', evt => {
+    const row = evt.target.closest('[data-cid]')
+    if (!row) return
+    evt.preventDefault()
+    const editor = getEditor()
+    if (!editor) return
+    const found = findById(editor.getWrapper(), row.dataset.cid)
+    if (found) editor.select(found)
+    eventBus.emit('canvas:context-menu', {
+      x: evt.clientX, y: evt.clientY, component: found
+    })
+  })
 }
 
 // Coalesce bursts of canvas:content-changed (e.g. dropping a section that

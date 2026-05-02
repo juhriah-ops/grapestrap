@@ -278,6 +278,90 @@ test('DOM tree mirrors canvas + click selects component', async () => {
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Right-click on DOM tree row opens context menu; Duplicate adds a sibling; Delete removes', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-ctxmenu-'))
+  const projectPath = join(projectDir, 'cm.gstrap')
+
+  const { app, appWindow } = await launch()
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+
+  await appWindow.evaluate(async path => {
+    const project = await window.grapestrap.project.new({ name: 'cm', location: path })
+    const { projectState, pageState } = window.__gstrap
+    projectState.set(project)
+    pageState.open(project.pages[0].name)
+  }, projectPath)
+
+  await appWindow.waitForFunction(
+    () => [...document.querySelectorAll('[data-cid] .gstrap-dom-tag')]
+      .some(n => n.textContent === 'p'),
+    null, { timeout: 10_000 }
+  )
+
+  const countP = () => appWindow.evaluate(() =>
+    [...document.querySelectorAll('.gstrap-dom-tag')].filter(n => n.textContent === 'p').length
+  )
+
+  expect(await countP()).toBe(1)
+
+  // Right-click on the <p> row.
+  await appWindow.evaluate(() => {
+    const row = [...document.querySelectorAll('[data-cid]')]
+      .find(r => r.querySelector('.gstrap-dom-tag')?.textContent === 'p')
+    const rect = row.getBoundingClientRect()
+    row.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true,
+      clientX: rect.left + 10, clientY: rect.top + 5, button: 2
+    }))
+  })
+
+  // Menu visible.
+  await appWindow.waitForSelector('.gstrap-ctxmenu', { timeout: 2_000 })
+  const itemLabels = await appWindow.$$eval('.gstrap-ctxmenu-item .gstrap-ctxmenu-label', els => els.map(e => e.textContent))
+  expect(itemLabels).toEqual(expect.arrayContaining(['Edit Tag…', 'Wrap with Tag…', 'Duplicate', 'Copy HTML', 'Delete']))
+
+  // Click Duplicate.
+  await appWindow.evaluate(() => {
+    const dup = [...document.querySelectorAll('.gstrap-ctxmenu-item')]
+      .find(li => li.querySelector('.gstrap-ctxmenu-label')?.textContent === 'Duplicate')
+    dup.click()
+  })
+
+  await appWindow.waitForFunction(
+    () => [...document.querySelectorAll('.gstrap-dom-tag')].filter(n => n.textContent === 'p').length === 2,
+    null, { timeout: 3_000 }
+  )
+  expect(await countP()).toBe(2)
+
+  // Right-click the same <p> (now: any of the two) and Delete.
+  await appWindow.evaluate(() => {
+    const row = [...document.querySelectorAll('[data-cid]')]
+      .find(r => r.querySelector('.gstrap-dom-tag')?.textContent === 'p')
+    const rect = row.getBoundingClientRect()
+    row.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true,
+      clientX: rect.left + 10, clientY: rect.top + 5, button: 2
+    }))
+  })
+  await appWindow.waitForSelector('.gstrap-ctxmenu', { timeout: 2_000 })
+  await appWindow.evaluate(() => {
+    const del = [...document.querySelectorAll('.gstrap-ctxmenu-item')]
+      .find(li => li.querySelector('.gstrap-ctxmenu-label')?.textContent === 'Delete')
+    del.click()
+  })
+  await appWindow.waitForFunction(
+    () => [...document.querySelectorAll('.gstrap-dom-tag')].filter(n => n.textContent === 'p').length === 1,
+    null, { timeout: 3_000 }
+  )
+  expect(await countP()).toBe(1)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 /**
  * Regression: canvas pane must not drift downward when the window is resized
  * back-and-forth.

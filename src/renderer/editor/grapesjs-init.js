@@ -99,6 +99,43 @@ export function initGrapesJS(container) {
     eventBus.emit('canvas:deselected')
   })
 
+  // Right-click on the canvas iframe → emit `canvas:context-menu` with the
+  // viewport-relative coords + the component the user clicked. Listening on
+  // the iframe contentDocument (rather than the frame element) is the only
+  // way to catch events inside the canvas — clicks inside an iframe are
+  // scoped to its own document.
+  //
+  // To resolve which component was clicked: dispatch a synthetic mousedown so
+  // GrapesJS's own handlers run their selection logic (which knows GrapesJS-
+  // internal targeting rules better than we do — e.g. clicking a child text
+  // node should select its parent block, not the text). After the synthetic
+  // event runs we read editor.getSelected().
+  editor.on('canvas:frame:load', () => {
+    const frameEl = editor.Canvas.getFrameEl()
+    const doc = frameEl?.contentDocument
+    if (!doc) return
+    doc.addEventListener('contextmenu', evt => {
+      evt.preventDefault()
+      // Synthesise a click on the same target so GrapesJS selects what the
+      // user pointed at. Using mousedown (which is what GrapesJS listens on
+      // for selection) at the same coords + target.
+      const target = evt.target
+      target?.dispatchEvent?.(new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, view: doc.defaultView,
+        clientX: evt.clientX, clientY: evt.clientY, button: 0
+      }))
+      // Wait one tick for GrapesJS to commit the selection, then emit.
+      const rect = frameEl.getBoundingClientRect()
+      const x = evt.clientX + rect.left
+      const y = evt.clientY + rect.top
+      queueMicrotask(() => {
+        eventBus.emit('canvas:context-menu', {
+          x, y, component: editor.getSelected()
+        })
+      })
+    })
+  })
+
   // Watch for component add/remove for lazy-dependency injection (plugin sections
   // declare `dependencies: ['splidejs', 'glightbox']` in their content metadata).
   editor.on('component:add', component => {
