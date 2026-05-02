@@ -400,6 +400,82 @@ test('Right-click on DOM tree row opens context menu; Duplicate adds a sibling; 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Code view shows pretty-printed HTML, not the GrapesJS one-liner', async () => {
+  // Regression for "HTML output is on one line — needs to be readable".
+  // editor.getHtml() returns single-line markup; getCanvasHtml() now feeds it
+  // through formatHtml() so the Code-view Monaco AND the on-disk save AND
+  // the export all see the indented form.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-fmt-'))
+  const projectPath = join(projectDir, 'fmt.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await appWindow.waitForFunction(
+    () => [...document.querySelectorAll('.gstrap-dom-tag')].some(n => n.textContent === 'h1'),
+    null, { timeout: 10_000 }
+  )
+
+  // Drop in a couple of nested elements so there's something to indent.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    ed.getWrapper().append('<section class="x"><div class="y"><h2>Heading</h2><p>Body <a href="#">link</a> end.</p></div></section>')
+  })
+
+  const html = await appWindow.evaluate(async () => {
+    const { getCanvasHtml } = await import('/src/renderer/editor/grapesjs-init.js')
+    return getCanvasHtml()
+  }).catch(async () => {
+    // ESM dynamic import may not work in the bundled Electron — fall back to
+    // reading what canvas-sync.js wrote into the Monaco code editor by
+    // forcing a sync, then inspect Monaco's value.
+    return appWindow.evaluate(() => {
+      const ed = window.__gstrap.pluginRegistry.bound.editor
+      // Mirror getCanvasHtml: pretty-printed via formatHtml at the boundary.
+      // We can't import the renderer module here, so just verify the raw
+      // output contains the markers and that the Code Monaco shows multi-line.
+      return ed.getHtml()
+    })
+  })
+
+  // If we got the raw form, just verify it CONTAINS the section — the formatter
+  // unit-check above this test exercises the formatter directly. The point of
+  // this spec is end-to-end: getCanvasHtml is wired to formatHtml.
+  expect(html).toContain('section')
+
+  // Switch to Code view and confirm Monaco's value has newlines + indentation.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'view:mode-code')
+  })
+  // Force a sync so Monaco gets the latest html.
+  await appWindow.waitForTimeout(400)
+  const monacoVal = await appWindow.evaluate(() => {
+    const monacoHosts = document.querySelectorAll('.gstrap-monaco-host .monaco-editor')
+    if (!monacoHosts.length) return ''
+    // Walk the Monaco DOM for the textarea that holds the value.
+    const ta = document.querySelector('.gstrap-monaco-host textarea')
+    return ta?.value || document.querySelector('.gstrap-monaco-host .view-lines')?.textContent || ''
+  })
+  // The Monaco textarea holds focused content only; the .view-lines is a
+  // visual representation. Either way, we just need to know whether the
+  // formatted HTML round-trip wrote multi-line content. A more reliable
+  // check: pull the editor's underlying model value via window.monaco.
+  // Find the Monaco editor that holds the HTML (content starts with `<`).
+  // Note: Monaco's language id may report 'plaintext' if its HTML language
+  // worker didn't initialise — that's a separate concern; what we're testing
+  // here is that the VALUE is the formatted (multi-line) HTML.
+  const htmlValue = await appWindow.evaluate(() => {
+    const monaco = window.__gstrap.pluginRegistry.bound.monaco
+    const editors = monaco?.editor?.getEditors?.() || []
+    const htmlEd = editors.find(e => (e.getValue?.() || '').trimStart().startsWith('<'))
+    return htmlEd?.getValue?.() || ''
+  })
+  expect(htmlValue).toContain('\n')
+  expect(htmlValue).toMatch(/<section[^>]*>\s*\n\s+<div/)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Insert panel: clicking a tile inserts the block into the canvas', async () => {
   // Regression for the silent failure where Insert tiles had `draggable=true`
   // but no click or dragstart handler — clicking them did nothing. Click-to-

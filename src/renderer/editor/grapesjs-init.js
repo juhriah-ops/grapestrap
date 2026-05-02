@@ -17,6 +17,7 @@
 import grapesjs from 'grapesjs'
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { eventBus } from '../state/event-bus.js'
+import { formatHtml } from './format-html.js'
 import { log } from '../log.js'
 
 // Canvas iframe asset paths. Resolved relative to the renderer index.html
@@ -173,6 +174,17 @@ export function loadHtmlIntoCanvas(html) {
 }
 
 export function getCanvasHtml() {
+  if (!editor) return ''
+  // Pretty-print here so every consumer (project save, tab swap capture,
+  // code-view sync, export) gets the same readable output. GrapesJS's
+  // getHtml() returns a single line; we format once at the boundary.
+  return formatHtml(editor.getHtml() || '')
+}
+
+// getCanvasHtmlRaw — the un-formatted single-line output. Reserved for paths
+// that genuinely need the parser-friendly form (currently none, but kept as
+// an explicit escape hatch).
+export function getCanvasHtmlRaw() {
   if (!editor) return ''
   return editor.getHtml() || ''
 }

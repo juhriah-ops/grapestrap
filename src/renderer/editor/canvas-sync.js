@@ -21,6 +21,7 @@
 
 import { eventBus } from '../state/event-bus.js'
 import { getEditor } from './grapesjs-init.js'
+import { formatHtml } from './format-html.js'
 import { log } from '../log.js'
 
 let codeEditor = null
@@ -67,7 +68,10 @@ function queueCanvasToCode() {
 function syncCanvasToCode() {
   const editor = getEditor()
   if (!editor || !codeEditor) return
-  const html = editor.getHtml()
+  // Pretty-print before pushing to Monaco — readability is the whole point of
+  // the Code view, and HTML round-trips through GrapesJS losslessly when
+  // whitespace-significant tags (handled by formatHtml) are preserved.
+  const html = formatHtml(editor.getHtml())
   const css = editor.getCss()
   suppressCodeToCanvas = true
   if (codeEditor.getValue() !== html) codeEditor.setValue(html)

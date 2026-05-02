@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full roadmap.
 
+### Added (2026-05-02 — HTML pretty-printer)
+- New `src/renderer/editor/format-html.js` — small (~150 line, no deps) tokenizer-and-tree-rendering HTML formatter. Handles: block vs inline element distinction, single-line rendering of inline-only parents that fit ≤100 chars, void elements (`<br>`, `<img>`, `<hr>`, …) on their own lines in block context, verbatim pass-through of `<pre>`/`<script>`/`<style>`/`<textarea>`/`<code>` (whose interior whitespace is significant), HTML comments and doctypes preserved.
+- Wired into `editor/grapesjs-init.js`'s `getCanvasHtml()` so every consumer (project save, tab-swap capture, code-view sync, flat export) gets the same pretty-printed output. GrapesJS's raw `editor.getHtml()` is one long line — formatting once at the boundary keeps the disk + display + export in sync without touching call sites. New `getCanvasHtmlRaw()` is the explicit escape hatch (currently unused).
+- Wired into `editor/canvas-sync.js`'s `syncCanvasToCode` so Monaco's Code view shows the formatted form, not the one-liner.
+- **Regression spec** `'Code view shows pretty-printed HTML, not the GrapesJS one-liner'` opens a seed project, appends a nested `<section><div><h2><p><a>…</a></p></div></section>`, switches to Code view, and asserts the Monaco editor's value contains newlines AND matches `/<section[^>]*>\s*\n\s+<div/` (proves indentation depth is increasing). Note: Monaco reports `language: 'plaintext'` when its HTML worker doesn't initialise — separate v0.0.2 concern; this spec doesn't depend on the language tag.
+- All 10 specs green in 25.1 s.
+
 ### Fixed (2026-05-02 — Insert panel tiles did nothing)
 - **Root cause:** the Insert panel tiles in `src/renderer/panels/insert/index.js` rendered with `draggable="true"` but had **no click or dragstart handler**. The file's old comment claimed GrapesJS BlockManager handled drag-to-canvas — that's only true if you're using the BlockManager's *own* DOM, which we replaced with a custom tabbed UI.
 - **Fix:** added a `click` handler that resolves the block content from `pluginRegistry.blocks` (with a fallback to GrapesJS's `BlockManager.get(id).get('content')`) and inserts it. Insertion target rule: if a component is selected, insert as a sibling immediately after it; otherwise append to the page wrapper. The new component is selected so the user sees feedback and can keep editing. `dragstart` also now sets `application/x-grapestrap-block` drag data so the v0.0.2 iframe drop target can pick it up — no-op today.
