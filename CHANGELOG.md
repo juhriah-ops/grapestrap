@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full roadmap.
 
+### Fixed (2026-05-02 — File→New / File→New Page silently did nothing)
+- **Root cause:** `cmdNewProject` and `cmdNewPage` in `src/renderer/shortcuts/menu-router.js` called `window.prompt()`, which throws in modern Electron (`"prompt() is and will not be supported."`). The throw propagated up into `eventBus.emit('command', …)`'s try/catch, which silently swallows handler exceptions — so clicking File→New / Open in the toolbar produced zero feedback.
+- **Fix:**
+  - New `src/renderer/dialogs/text-prompt.js` — `showTextPrompt({ title, label, initialValue, placeholder, okLabel })` returns `Promise<string | null>`. In-renderer dialog, no Electron blocked APIs. Used by both `cmdNewProject` and `cmdNewPage`. Styling lives in `styles/modals.css`.
+  - `handleCommand` now wraps `dispatchCommand` in its own try/catch — silent failures from any future command handler are caught and surfaced as an error toast (`{ type: 'error', message: '<action>: <message>' }`). The eventBus's wrapper still catches as a backstop, but the new outer layer always logs and toasts.
+  - Native dialogs (`pickNewProjectPath`, `pickOpenProjectPath`, `pickExportDir` in `src/main/ipc-handlers.js`) now pass the focused `BrowserWindow` as parent so they can't render parentless / off-screen on Linux/Wayland compositors.
+- **Regression spec:** `'File menu: cmdNewProject path does not throw on the prompt step'` — emits `file:new-project`, asserts the prompt dialog appears with the right title, clicks Cancel, and asserts no error toast is fired. Also asserts the test waits for `eventBus.listenerCount('command') > 0` first — boot() is async, so the smoke test base `launch()` (which only waits for `window.__gstrap` to be defined) can otherwise emit before listeners subscribe. All 8 specs green in 23.4 s.
+
 ### Added (2026-05-02 — right-click context menu)
 - Generic floating context-menu component in `src/renderer/dialogs/context-menu.js`. `showContextMenu(x, y, items[])` returns a Promise that resolves with the activated action's return value (or undefined on dismiss). Items: `{ label, accelerator?, action, disabled?, danger?, separator? }`. Auto-positions away from viewport edges; ↑↓ Enter Esc keyboard nav; outside-click + window blur dismiss. New `styles/context-menu.css`.
 - Shared per-component action helpers in `src/renderer/shortcuts/component-actions.js`: `duplicateComponent`, `deleteComponent`, `copyComponentHtml`, `editComponentTag`, `wrapComponentInTag`, plus `buildComponentMenuItems(component)` returning the canonical menu definition. Single source of truth — keyboard accelerators in the menu match `menu-router.js` so the right-click and keyboard paths can't drift apart.

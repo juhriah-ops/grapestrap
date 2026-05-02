@@ -146,29 +146,48 @@ export function registerIpcHandlers({ pluginRegistry }) {
 
 // ─── Dialog helpers ──────────────────────────────────────────────────────────
 
+// On Linux/Wayland a parentless dialog can render under the main window or
+// off-screen entirely. Pass the focused BrowserWindow as parent so the dialog
+// is properly modal-attached and always raised on top.
+function parentWindow() {
+  return BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null
+}
+
 async function pickNewProjectPath(suggestedName = 'Untitled') {
-  const result = await dialog.showSaveDialog({
+  const parent = parentWindow()
+  const opts = {
     title: 'New GrapeStrap project',
     defaultPath: `${suggestedName.replace(/\s+/g, '-').toLowerCase()}.gstrap`,
     filters: [{ name: 'GrapeStrap project', extensions: ['gstrap'] }]
-  })
+  }
+  const result = parent
+    ? await dialog.showSaveDialog(parent, opts)
+    : await dialog.showSaveDialog(opts)
   return result.canceled ? null : result.filePath
 }
 
 async function pickOpenProjectPath() {
-  const result = await dialog.showOpenDialog({
+  const parent = parentWindow()
+  const opts = {
     title: 'Open GrapeStrap project',
     properties: ['openFile'],
     filters: [{ name: 'GrapeStrap project', extensions: ['gstrap'] }]
-  })
+  }
+  const result = parent
+    ? await dialog.showOpenDialog(parent, opts)
+    : await dialog.showOpenDialog(opts)
   return (result.canceled || result.filePaths.length === 0) ? null : result.filePaths[0]
 }
 
 async function pickExportDir() {
-  const result = await dialog.showOpenDialog({
+  const parent = parentWindow()
+  const opts = {
     title: 'Export project to folder',
     properties: ['openDirectory', 'createDirectory']
-  })
+  }
+  const result = parent
+    ? await dialog.showOpenDialog(parent, opts)
+    : await dialog.showOpenDialog(opts)
   return (result.canceled || result.filePaths.length === 0) ? null : result.filePaths[0]
 }
 

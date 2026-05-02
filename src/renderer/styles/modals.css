@@ -102,3 +102,55 @@
   background: var(--accent-2);
   border-color: var(--accent-2);
 }
+
+/* ── Text prompt dialog (window.prompt replacement) ────────────────────────── */
+.gstrap-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8500;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+}
+.gstrap-prompt-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  padding: 18px 20px;
+  width: min(440px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gstrap-prompt-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.gstrap-prompt-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.gstrap-prompt-input {
+  font: inherit;
+  font-size: 14px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  outline: none;
+  caret-color: var(--accent);
+}
+.gstrap-prompt-input:focus {
+  border-color: var(--accent);
+}
+.gstrap-prompt-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}

@@ -16,6 +16,7 @@ import { pageState } from '../state/page-state.js'
 import { resetLayout } from '../layout/golden-layout-config.js'
 import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
+import { showTextPrompt } from '../dialogs/text-prompt.js'
 import { duplicateComponent, deleteComponent } from './component-actions.js'
 import { log } from '../log.js'
 
@@ -43,6 +44,18 @@ export function wireMenuActions() {
 }
 
 async function handleCommand(action) {
+  try {
+    return await dispatchCommand(action)
+  } catch (err) {
+    // The eventBus's own try/catch swallows handler exceptions, which is how
+    // the cmdNewProject window.prompt failure went silent. Catch here, log,
+    // toast — never silently eat a command error.
+    log.error(`command "${action}" threw:`, err)
+    eventBus.emit('toast', { type: 'error', message: `${action}: ${err?.message || err}` })
+  }
+}
+
+async function dispatchCommand(action) {
   // Plugin-registered command? prefer that
   const command = pluginRegistry.commands.get(action)
   if (command) return command.handler()
@@ -95,7 +108,17 @@ async function handleCommand(action) {
 // ─── Built-in command handlers ───────────────────────────────────────────────
 
 async function cmdNewProject() {
-  const name = window.prompt('Project name?', 'My Project') || 'Untitled'
+  // window.prompt is blocked in modern Electron ("prompt() is and will not
+  // be supported.") — it throws and the throw was being swallowed by the
+  // eventBus try/catch, which is why New silently did nothing. Use our own
+  // in-renderer prompt dialog instead.
+  const name = await showTextPrompt({
+    title: 'New project',
+    label: 'Project name',
+    initialValue: 'My Project',
+    okLabel: 'Create…'
+  })
+  if (!name) return
   const project = await window.grapestrap.project.new({ name })
   if (project) {
     projectState.set(project)
@@ -115,7 +138,13 @@ async function cmdOpenProject() {
 
 async function cmdNewPage() {
   if (!projectState.current) return eventBus.emit('toast', { type: 'warning', message: 'Open a project first.' })
-  const name = window.prompt('Page name?', 'about')
+  const name = await showTextPrompt({
+    title: 'New page',
+    label: 'Page name (no extension)',
+    initialValue: 'about',
+    placeholder: 'e.g. about',
+    okLabel: 'Create'
+  })
   if (!name) return
   const page = {
     name,

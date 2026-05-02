@@ -127,6 +127,44 @@ async function selectFirstByTag(appWindow, tag) {
   }, tag)
 }
 
+test('File menu: cmdNewProject path does not throw on the prompt step', async () => {
+  // Regression for the silent failure where window.prompt() throws in modern
+  // Electron ("prompt() is and will not be supported.") and the throw was
+  // being swallowed by the eventBus try/catch — File→New / File→New Page
+  // both did nothing visible. The fix replaced window.prompt with our own
+  // text-prompt dialog AND added an outer try/catch in handleCommand that
+  // toasts errors. This spec asserts (a) the prompt dialog actually appears,
+  // and (b) clicking Cancel resolves cleanly without a thrown command error.
+  const { app, appWindow } = await launch()
+  // Wait for boot to subscribe handlers (boot is async; launch() only waits
+  // for window.__gstrap to be defined, which happens synchronously before
+  // boot() starts wiring listeners).
+  await appWindow.waitForFunction(
+    () => window.__gstrap.eventBus.listenerCount('command') > 0,
+    null, { timeout: 10_000 }
+  )
+  // Clear any leftover modal so visibility checks aren't confused.
+  await appWindow.evaluate(() => {
+    document.querySelectorAll('#gstrap-modals > *').forEach(n => n.remove())
+    window.__gstrap.eventBus.emit('command', 'file:new-project')
+  })
+  await appWindow.waitForSelector('.gstrap-prompt-card', { timeout: 3_000 })
+  const title = await appWindow.locator('.gstrap-prompt-title').textContent()
+  expect(title).toBe('New project')
+  // Cancel — should NOT emit an error toast.
+  let toastedError = false
+  await appWindow.exposeFunction('__captureToast', payload => {
+    if (payload?.type === 'error') toastedError = true
+  })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('toast', p => window.__captureToast(p))
+    document.querySelector('[data-action="cancel"]').click()
+  })
+  await appWindow.waitForFunction(() => !document.querySelector('.gstrap-prompt-card'), null, { timeout: 2_000 })
+  expect(toastedError).toBe(false)
+  await app.close()
+})
+
 test('Quick Tag Editor: Ctrl+T renames the selected element', async () => {
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-qt-'))
   const projectPath = join(projectDir, 'qt.gstrap')
