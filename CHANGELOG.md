@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full roadmap.
 
+### Fixed (2026-05-02 — Insert panel tiles did nothing)
+- **Root cause:** the Insert panel tiles in `src/renderer/panels/insert/index.js` rendered with `draggable="true"` but had **no click or dragstart handler**. The file's old comment claimed GrapesJS BlockManager handled drag-to-canvas — that's only true if you're using the BlockManager's *own* DOM, which we replaced with a custom tabbed UI.
+- **Fix:** added a `click` handler that resolves the block content from `pluginRegistry.blocks` (with a fallback to GrapesJS's `BlockManager.get(id).get('content')`) and inserts it. Insertion target rule: if a component is selected, insert as a sibling immediately after it; otherwise append to the page wrapper. The new component is selected so the user sees feedback and can keep editing. `dragstart` also now sets `application/x-grapestrap-block` drag data so the v0.0.2 iframe drop target can pick it up — no-op today.
+- **Regression spec** `'Insert panel: clicking a tile inserts the block into the canvas'`: opens a seed project, clicks the first tile in the active tab, asserts the wrapper's component count grew and a component is selected. All 9 specs green in 23.1 s.
+
 ### Fixed (2026-05-02 — File→New / File→New Page silently did nothing)
 - **Root cause:** `cmdNewProject` and `cmdNewPage` in `src/renderer/shortcuts/menu-router.js` called `window.prompt()`, which throws in modern Electron (`"prompt() is and will not be supported."`). The throw propagated up into `eventBus.emit('command', …)`'s try/catch, which silently swallows handler exceptions — so clicking File→New / Open in the toolbar produced zero feedback.
 - **Fix:**

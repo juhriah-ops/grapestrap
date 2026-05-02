@@ -400,6 +400,51 @@ test('Right-click on DOM tree row opens context menu; Duplicate adds a sibling; 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Insert panel: clicking a tile inserts the block into the canvas', async () => {
+  // Regression for the silent failure where Insert tiles had `draggable=true`
+  // but no click or dragstart handler — clicking them did nothing. Click-to-
+  // insert is the v0.0.1 contract; drag-and-drop on the iframe lands in v0.0.2.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-insert-'))
+  const projectPath = join(projectDir, 'i.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('.gstrap-block-tile').length > 0,
+    null, { timeout: 10_000 }
+  )
+
+  const before = await appWindow.evaluate(() =>
+    window.__gstrap.pluginRegistry.bound.editor.getWrapper().components().length
+  )
+
+  // Click the first tile in whatever the active tab is.
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-block-tile').click()
+  })
+
+  // Wrapper should now have one more direct child, AND a new component should
+  // be selected (the freshly-inserted block).
+  await appWindow.waitForFunction(
+    n => window.__gstrap.pluginRegistry.bound.editor.getWrapper().components().length > n,
+    before, { timeout: 3_000 }
+  )
+
+  const { after, selectedExists } = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return {
+      after: ed.getWrapper().components().length,
+      selectedExists: !!ed.getSelected()
+    }
+  })
+  expect(after).toBeGreaterThan(before)
+  expect(selectedExists).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 /**
  * Regression: canvas pane must not drift downward when the window is resized
  * back-and-forth.
