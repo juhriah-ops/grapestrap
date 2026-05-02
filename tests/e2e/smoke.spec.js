@@ -277,3 +277,62 @@ test('DOM tree mirrors canvas + click selects component', async () => {
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+/**
+ * Regression: canvas pane must not drift downward when the window is resized
+ * back-and-forth.
+ *
+ * History: pre-fix the renderer had three competing layout drivers (host RO,
+ * window 'resize' listener without the 1px gate, Monaco automaticLayout × 3).
+ * Each direction-flip fired updateSize once unguarded which let sub-pixel
+ * walks accumulate, growing the canvas pane downward. After consolidating to
+ * a single integer-gated host RO + per-Monaco container ROs, the canvas pane
+ * height must equal the GL host's clientHeight (within ±1 px for GL's
+ * integer panel rounding) after a sequence of direction-flips.
+ */
+test('canvas pane does not drift on alternating window resize', async () => {
+  const { app, appWindow } = await launch()
+
+  await appWindow.waitForFunction(() => !!document.querySelector('.gstrap-canvas-host'), null, { timeout: 10_000 })
+
+  const measure = () => appWindow.evaluate(() => {
+    const main   = document.getElementById('gstrap-main')
+    const canvas = document.querySelector('.gstrap-canvas-host')
+    return {
+      mainH:   main?.clientHeight   ?? -1,
+      canvasH: canvas?.clientHeight ?? -1
+    }
+  })
+
+  await appWindow.setViewportSize({ width: 1280, height: 800 })
+  await appWindow.waitForTimeout(120)
+  const start = await measure()
+
+  for (const s of [
+    { width: 1400, height: 900 },
+    { width: 1100, height: 700 },
+    { width: 1500, height: 950 },
+    { width: 1000, height: 650 },
+    { width: 1280, height: 800 }
+  ]) {
+    await appWindow.setViewportSize(s)
+    await appWindow.waitForTimeout(80)
+  }
+
+  const end = await measure()
+
+  // GL host must have non-zero height — pre-fix it was 0 because hiding the
+  // linkedfiles row via display:none shifted the gstrap-main element into
+  // the linkedfiles auto-row (which collapses to 0 with no content).
+  expect(start.mainH).toBeGreaterThan(100)
+  expect(end.mainH).toBeGreaterThan(100)
+
+  // Drift assertion: returning to the same viewport size must yield the same
+  // pixel-rounded heights as the baseline. (Canvas pane is in a GL stack so
+  // it's ~28px shorter than the host's clientHeight for the tab header — that
+  // delta is constant, so we don't compare canvas vs host directly.)
+  expect(Math.abs(end.mainH - start.mainH)).toBeLessThanOrEqual(1)
+  expect(Math.abs(end.canvasH - start.canvasH)).toBeLessThanOrEqual(1)
+
+  await app.close()
+})

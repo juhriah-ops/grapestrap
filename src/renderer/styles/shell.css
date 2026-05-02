@@ -1,20 +1,49 @@
 /* GrapeStrap — Top-level shell layout
-   Fixed regions outside Golden Layout. Golden Layout governs only #gstrap-main. */
+   Fixed regions outside Golden Layout. Golden Layout governs only #gstrap-main.
+
+   NOTE on box-sizing: a global `*, *::before, *::after { box-sizing: border-box }`
+   reset broke Golden Layout's internal pixel arithmetic on the user's nola1
+   workstation (panels rendered as a blank GL host with chrome shoved up). GL
+   v2's vendor CSS marks its splitter explicitly content-box but leaves other
+   `.lm_*` items at the page default — flipping the default wholesale changes
+   how GL computes child widths. Only my own `.gstrap-*` chrome elements get
+   border-box now; .lm_* and grapesjs/monaco internals keep the default. */
+.gstrap-toolbar, .gstrap-tabs, .gstrap-linkedfiles, .gstrap-main,
+.gstrap-insert, .gstrap-strip, .gstrap-status,
+.gstrap-shell, .gstrap-toasts, .gstrap-modals { box-sizing: border-box; }
 
 .gstrap-shell {
   display: grid;
+  /* Named template areas — every chrome region pins to a named area below.
+     This is critical: with bare auto-placement, hiding a row via `display:
+     none` (e.g. .gstrap-linkedfiles[hidden]) REMOVES that element from the
+     grid entirely, and every later child shifts UP one row. That bug made
+     #gstrap-main land in the linkedfiles auto-row (height 0, canvas invisible)
+     while #gstrap-insert took the 1fr GL row (huge empty insert background).
+     Named areas pin elements regardless of which siblings are display:none. */
+  grid-template-areas:
+    "toolbar"
+    "tabs"
+    "linked"
+    "main"
+    "insert"
+    "strip"
+    "status";
   grid-template-rows:
-    var(--toolbar-h)
-    var(--tabs-h)
-    auto              /* linked-files (collapses when [hidden]) */
-    1fr               /* golden layout fills remainder */
+    var(--toolbar-h)  /* toolbar */
+    var(--tabs-h)     /* tabs */
+    auto              /* linked-files (collapses to 0 when [hidden] via display:none) */
+    minmax(0, 1fr)    /* GL host */
     auto              /* insert (collapses when [hidden]) */
     auto              /* strip (collapses when [hidden]) */
-    auto;             /* status (collapses when [hidden]) */
+    var(--status-h);  /* status */
+  grid-template-columns: 1fr;
   height: 100vh;
+  overflow: hidden;
 }
 
 .gstrap-toolbar {
+  grid-area: toolbar;
   background: var(--bg-3);
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -24,6 +53,7 @@
 }
 
 .gstrap-tabs {
+  grid-area: tabs;
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -32,6 +62,7 @@
 }
 
 .gstrap-linkedfiles {
+  grid-area: linked;
   height: var(--linked-h);
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
@@ -45,12 +76,17 @@
 .gstrap-linkedfiles[hidden] { display: none; }
 
 .gstrap-main {
+  grid-area: main;
   background: var(--bg-1);
   position: relative;
+  min-width: 0;
   min-height: 0;
+  /* No `overflow: hidden` here — that broke GL on nola1 (panels rendered blank).
+     GL writes its own offsets and child widths, and clipping the host hid them. */
 }
 
 .gstrap-insert {
+  grid-area: insert;
   height: var(--insert-h);
   background: var(--bg-2);
   border-top: 1px solid var(--border);
@@ -60,6 +96,7 @@
 .gstrap-insert[hidden] { display: none; }
 
 .gstrap-strip {
+  grid-area: strip;
   height: var(--strip-h);
   background: var(--bg-3);
   border-top: 1px solid var(--border);
@@ -73,7 +110,7 @@
 .gstrap-strip[hidden] { display: none; }
 
 .gstrap-status {
-  height: var(--status-h);
+  grid-area: status;
   background: var(--bg-3);
   border-top: 1px solid var(--border);
   display: flex;

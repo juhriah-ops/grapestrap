@@ -5,7 +5,7 @@
  * everything else (the project save loop picks up globalCSS).
  */
 
-import { monaco } from '../../editor/monaco-init.js'
+import { monaco, registerForRelayout } from '../../editor/monaco-init.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 
@@ -23,9 +23,11 @@ export function renderCustomCss(host) {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: 13,
     minimap: { enabled: false },
-    automaticLayout: true,
+    // automaticLayout intentionally OFF — see monaco-init.js for the rationale.
+    automaticLayout: false,
     scrollBeyondLastLine: false
   })
+  registerForRelayout(cssEditor)
 
   cssEditor.onDidChangeModelContent(() => {
     if (!projectState.current) return

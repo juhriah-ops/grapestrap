@@ -6,7 +6,7 @@
  * handles the actual content sync between them per the locked policy.
  */
 
-import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml } from '../../editor/grapesjs-init.js'
+import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml, getEditor } from '../../editor/grapesjs-init.js'
 import { createMonacoPair, bindMonacoToRegistry } from '../../editor/monaco-init.js'
 import { bindSync, onViewModeChange } from '../../editor/canvas-sync.js'
 import { pageState } from '../../state/page-state.js'
@@ -40,6 +40,13 @@ export function renderCanvas(host) {
   monacoPair = createMonacoPair(htmlSlot, cssSlot)
   bindMonacoToRegistry()
   bindSync({ htmlMonaco: monacoPair.htmlEditor, cssMonaco: monacoPair.cssEditor })
+
+  // GL splitter drags don't change the gstrap-main host, so the GL host RO
+  // doesn't fire — but the canvas container DOES resize. Watch it directly
+  // and refresh GrapesJS so its iframe offsets stay consistent. Same rAF +
+  // integer-dim gate as the GL host RO; the two ROs observe disjoint elements
+  // and don't race.
+  installCanvasResizeWatcher(host)
 
   eventBus.on('viewmode:changed', ({ tab, mode }) => {
     applyViewMode(host, mode, tab.viewMode)
@@ -89,6 +96,27 @@ function swapToTab(tab) {
   // setComponents fires synchronously; release the load guard on the next tick
   // to cover any straggler events fired in microtasks.
   queueMicrotask(() => { loadingTabName = null })
+}
+
+function installCanvasResizeWatcher(host) {
+  if (typeof ResizeObserver !== 'function') return
+  let pending = false
+  let lastW = 0
+  let lastH = 0
+  const ro = new ResizeObserver(() => {
+    if (pending) return
+    pending = true
+    requestAnimationFrame(() => {
+      pending = false
+      const w = host.clientWidth | 0
+      const h = host.clientHeight | 0
+      if (w === lastW && h === lastH) return
+      lastW = w
+      lastH = h
+      try { getEditor()?.refresh?.() } catch (_) { /* GrapesJS not ready */ }
+    })
+  })
+  ro.observe(host)
 }
 
 function applyViewMode(host, next, prev) {

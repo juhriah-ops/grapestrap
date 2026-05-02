@@ -51,9 +51,62 @@ const COMMON_OPTIONS = {
   renderLineHighlight: 'line',
   scrollBeyondLastLine: false,
   smoothScrolling: true,
-  automaticLayout: true,
+  // automaticLayout intentionally OFF. Each automaticLayout: true editor
+  // installs its own internal ResizeObserver, and with three Monaco instances
+  // (HTML, CSS, custom-CSS) plus the GL host RO they raced and contributed to
+  // the canvas-drift-on-resize bug. Single source of truth: the GL host RO
+  // calls relayoutAllMonaco() (see registerForRelayout / golden-layout-config).
+  automaticLayout: false,
   bracketPairColorization: { enabled: true },
   guides: { bracketPairs: true, indentation: true }
+}
+
+// Set of live Monaco editors. Anything created via createMonacoPair or
+// registerForRelayout is laid out by relayoutAllMonaco() (called from the
+// GL host RO) AND by a per-container RO so GL-internal splitter drags get
+// covered too (those don't change the host, so the GL host RO doesn't fire).
+//
+// The per-container RO is roughly what Monaco's `automaticLayout: true` does
+// internally — but explicit, debounced via rAF, and with the editor reference
+// in a single registry instead of N hidden ROs we don't control.
+const liveEditors = new Set()
+
+export function registerForRelayout(editor) {
+  if (!editor) return
+  liveEditors.add(editor)
+
+  const node = typeof editor.getDomNode === 'function' ? editor.getDomNode() : null
+  let ro = null
+  if (node && typeof ResizeObserver === 'function') {
+    let pending = false
+    let lastW = 0
+    let lastH = 0
+    ro = new ResizeObserver(() => {
+      if (pending) return
+      pending = true
+      requestAnimationFrame(() => {
+        pending = false
+        const w = node.clientWidth | 0
+        const h = node.clientHeight | 0
+        if (w === lastW && h === lastH) return
+        lastW = w
+        lastH = h
+        try { editor.layout?.() } catch (_) { /* transitioning */ }
+      })
+    })
+    ro.observe(node)
+  }
+
+  editor.onDidDispose?.(() => {
+    liveEditors.delete(editor)
+    ro?.disconnect()
+  })
+}
+
+export function relayoutAllMonaco() {
+  for (const ed of liveEditors) {
+    try { ed.layout?.() } catch (_) { /* editor may be transitioning */ }
+  }
 }
 
 export function createMonacoPair(htmlContainer, cssContainer, { html = '', css = '' } = {}) {
@@ -62,6 +115,9 @@ export function createMonacoPair(htmlContainer, cssContainer, { html = '', css =
 
   const htmlEditor = monaco.editor.create(htmlContainer, { ...COMMON_OPTIONS, model: htmlModel })
   const cssEditor  = monaco.editor.create(cssContainer,  { ...COMMON_OPTIONS, model: cssModel })
+
+  registerForRelayout(htmlEditor)
+  registerForRelayout(cssEditor)
 
   return { htmlEditor, cssEditor, htmlModel, cssModel }
 }
