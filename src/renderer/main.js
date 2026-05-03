@@ -20,6 +20,17 @@ import 'golden-layout/dist/css/goldenlayout-base.css'
 import 'golden-layout/dist/css/themes/goldenlayout-dark-theme.css'
 import 'grapesjs/dist/css/grapes.min.css'
 
+// Font Awesome 6 Free — GrapesJS's default panel button icons are FA v4
+// class names ("fa fa-arrow-up", "fa fa-eye", etc.). Without these
+// stylesheets the buttons render as invisible-but-clickable rectangles
+// (reported on nola1 2026-05-03: "things arent visible on the canvas
+// theres buttons i didnt know were there"). The v4-shims map FA v4
+// names to FA v6's solid set.
+import '@fortawesome/fontawesome-free/css/fontawesome.min.css'
+import '@fortawesome/fontawesome-free/css/solid.min.css'
+import '@fortawesome/fontawesome-free/css/regular.min.css'
+import '@fortawesome/fontawesome-free/css/v4-shims.min.css'
+
 import { eventBus } from './state/event-bus.js'
 import { projectState } from './state/project-state.js'
 import { pageState } from './state/page-state.js'
