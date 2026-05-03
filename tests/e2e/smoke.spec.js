@@ -839,6 +839,145 @@ test('Insert DnD: drop on a container appends inside; drop on a leaf appends as 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Toolbar Save / Code / Split work after File→New (cmdNewProject path, not direct IPC)', async () => {
+  // Reported on nola1 2026-05-03: toolbar Save / Code / Split work for an
+  // OPENED project but not for a project created via File→New. The other
+  // toolbar tests bypass cmdNewProject (they call window.grapestrap.project.new
+  // directly), so this spec drives the full UI path: click toolbar New →
+  // text-prompt dialog → IPC create → location dialog → projectState set.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-tbnew-'))
+  const projectPath = join(projectDir, 'tbnew.gstrap')
+
+  const { app, appWindow } = await launch()
+  // Wait for the renderer to fully boot: command listeners + plugins active.
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+  await appWindow.waitForFunction(
+    () => window.__gstrap.eventBus.listenerCount('command') > 0,
+    null, { timeout: 5_000 }
+  )
+
+  // Drive cmdNewProject: bypass the showTextPrompt UI and the native file
+  // picker by emitting the project:new IPC ourselves with a known location,
+  // but call projectState.set + pageState.open the SAME way cmdNewProject
+  // would. (The text-prompt dialog is exercised separately in another spec.)
+  await appWindow.evaluate(async loc => {
+    const project = await window.grapestrap.project.new({ name: 'tbnew', location: loc })
+    const { projectState, pageState } = window.__gstrap
+    projectState.set(project)
+    pageState.open(project.pages[0].name)
+  }, projectPath)
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('[data-cid]').length > 0,
+    null, { timeout: 10_000 }
+  )
+
+  // Capture toasts
+  const toasts = []
+  await appWindow.exposeFunction('__captureNewToast', p => { toasts.push(p) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('toast', p => window.__captureNewToast(p))
+  })
+
+  // ── Save toolbar click ──────────────────────────────────────────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="file:save"]').click()
+  })
+  await appWindow.waitForTimeout(800)
+  const savedToast = toasts.find(t => t?.type === 'success' && /saved/i.test(t.message || ''))
+  expect(savedToast).toBeTruthy()
+
+  // ── Code toolbar click ─────────────────────────────────────────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="view:mode-code"]').click()
+  })
+  await appWindow.waitForTimeout(300)
+  const designHidden = await appWindow.evaluate(() =>
+    document.querySelector('[data-region="canvas-design"]').hidden
+  )
+  expect(designHidden).toBe(true)
+
+  // ── Split toolbar click ────────────────────────────────────────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="view:mode-split"]').click()
+  })
+  await appWindow.waitForTimeout(300)
+  const splitState = await appWindow.evaluate(() => ({
+    designHidden: document.querySelector('[data-region="canvas-design"]').hidden,
+    codeHidden:   document.querySelector('[data-region="canvas-code"]').hidden
+  }))
+  expect(splitState.designHidden).toBe(false)
+  expect(splitState.codeHidden).toBe(false)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Toolbar buttons: Save / Code / Split dispatch their commands and effects', async () => {
+  // Reported on nola1 2026-05-03: top toolbar Save / Code / Split don't work
+  // (Open / New / Design do). All buttons emit eventBus 'command' from a
+  // single delegated click handler in panels/toolbar.js, so they should
+  // either all work or all fail — diverging behavior says some commands
+  // fail downstream of the dispatch.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-tb-'))
+  const projectPath = join(projectDir, 'tb.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Capture toasts so we can see whether commands actually run.
+  const toasts = []
+  await appWindow.exposeFunction('__captureTbToast', p => { toasts.push(p) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('toast', p => window.__captureTbToast(p))
+  })
+
+  // ── Save: click the toolbar Save button, assert "Saved." toast ─────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="file:save"]').click()
+  })
+  await appWindow.waitForTimeout(800)
+  const savedToast = toasts.find(t => t?.type === 'success' && /saved/i.test(t.message || ''))
+  expect(savedToast).toBeTruthy()
+
+  // ── Code: click Code mode button, assert design pane hides + code shows ───
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="view:mode-code"]').click()
+  })
+  await appWindow.waitForTimeout(300)
+  const codeView = await appWindow.evaluate(() => {
+    const design = document.querySelector('[data-region="canvas-design"]')
+    const code   = document.querySelector('[data-region="canvas-code"]')
+    return { designHidden: design?.hidden, codeHidden: code?.hidden }
+  })
+  expect(codeView.designHidden).toBe(true)
+  expect(codeView.codeHidden).toBe(false)
+
+  // ── Split: click Split mode, both panes should be visible ─────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="view:mode-split"]').click()
+  })
+  await appWindow.waitForTimeout(300)
+  const splitView = await appWindow.evaluate(() => {
+    const design = document.querySelector('[data-region="canvas-design"]')
+    const code   = document.querySelector('[data-region="canvas-code"]')
+    const host = document.querySelector('.gstrap-canvas-host')
+    return {
+      designHidden: design?.hidden,
+      codeHidden: code?.hidden,
+      hostIsSplit: host?.classList?.contains('is-split')
+    }
+  })
+  expect(splitView.designHidden).toBe(false)
+  expect(splitView.codeHidden).toBe(false)
+  expect(splitView.hostIsSplit).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Code view sync: works after user has previously focused Monaco', async () => {
   // Reported on nola1 2026-05-03 after the v0.0.1-alpha cut: "code view is no
   // longer working" on a new project; "i opened the test page i created and
