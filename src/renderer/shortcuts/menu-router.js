@@ -160,8 +160,17 @@ async function cmdNewPage() {
   eventBus.emit('project:dirty-changed')
 }
 
+// User reported on nola1 2026-05-03 that toolbar Save / Code / Split
+// silently did nothing on a fresh-launched editor with no project open.
+// The early-return guards were correct (you can't save or switch view mode
+// without a project) but the silent-no-op UX read as broken buttons. Every
+// project-required command now toasts a warning explaining what to do.
+const NO_PROJECT_MSG = 'Open or create a project first.'
+
 async function cmdSave() {
-  if (!projectState.current) return
+  if (!projectState.current) {
+    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  }
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.save(projectState.current)
   if (result) {
@@ -175,7 +184,9 @@ async function cmdSave() {
 }
 
 async function cmdSaveAs() {
-  if (!projectState.current) return
+  if (!projectState.current) {
+    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  }
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.saveAs(projectState.current)
   if (result) {
@@ -190,7 +201,9 @@ async function cmdCloseTab() {
 }
 
 async function cmdExport() {
-  if (!projectState.current) return
+  if (!projectState.current) {
+    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  }
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.export(projectState.current)
   if (result) {
@@ -199,10 +212,14 @@ async function cmdExport() {
 }
 
 function cmdUndo() {
-  pluginRegistry.bound.editor?.UndoManager?.undo()
+  const um = pluginRegistry.bound.editor?.UndoManager
+  if (!um) return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  um.undo()
 }
 function cmdRedo() {
-  pluginRegistry.bound.editor?.UndoManager?.redo()
+  const um = pluginRegistry.bound.editor?.UndoManager
+  if (!um) return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  um.redo()
 }
 
 function cmdDuplicate() {
@@ -279,10 +296,16 @@ function selectFirst(editor, replaced) {
 
 function cmdViewMode(mode) {
   const tab = pageState.active()
-  if (tab) pageState.setViewMode(tab.pageName, mode)
+  if (!tab) {
+    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  }
+  pageState.setViewMode(tab.pageName, mode)
 }
 function cmdDevice(device) {
   const tab = pageState.active()
-  if (tab) pageState.setDevice(tab.pageName, device)
+  if (!tab) {
+    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  }
+  pageState.setDevice(tab.pageName, device)
   pluginRegistry.bound.editor?.setDevice(device)
 }

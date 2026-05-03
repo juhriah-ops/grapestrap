@@ -839,6 +839,39 @@ test('Insert DnD: drop on a container appends inside; drop on a leaf appends as 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Toolbar with no project: Save / Code / Split show "Open project first" toast (no silent no-op)', async () => {
+  // Reported on nola1 2026-05-03: "you cant see code unless you create new
+  // project. even if you build and try save as which doesnt work either
+  // unless youve created a project already." The early-return guards in
+  // cmdSave / cmdViewMode were correct but silent — buttons looked broken
+  // until the user happened to create a project. Every project-required
+  // command now toasts a warning so the UX is loud.
+  const { app, appWindow } = await launch()
+  // No project — wait only for command listeners, not project state.
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.eventBus?.listenerCount('command') > 0,
+    null, { timeout: 10_000 }
+  )
+  const toasts = []
+  await appWindow.exposeFunction('__captureNopToast', p => { toasts.push(p) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('toast', p => window.__captureNopToast(p))
+  })
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="file:save"]').click()
+    document.querySelector('[data-cmd="view:mode-code"]').click()
+    document.querySelector('[data-cmd="view:mode-split"]').click()
+  })
+  await appWindow.waitForTimeout(400)
+
+  const warnings = toasts.filter(t => t?.type === 'warning' && /open.*project/i.test(t.message || ''))
+  // Three project-required clicks → at least three warning toasts (one per click).
+  expect(warnings.length).toBeGreaterThanOrEqual(3)
+
+  await app.close()
+})
+
 test('Toolbar Save / Code / Split work after File→New (cmdNewProject path, not direct IPC)', async () => {
   // Reported on nola1 2026-05-03: toolbar Save / Code / Split work for an
   // OPENED project but not for a project created via File→New. The other
