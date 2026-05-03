@@ -124,19 +124,29 @@ function applyViewMode(host, next, prev) {
   const code   = host.querySelector('[data-region="canvas-code"]')
   if (!design || !code) return
 
-  if (next === 'design') {
-    design.hidden = false
-    code.hidden = true
-  } else if (next === 'code') {
-    design.hidden = true
-    code.hidden = false
-  } else if (next === 'split') {
-    design.hidden = false
-    code.hidden = false
-    // CSS .is-split flag could split the layout 50/50 — v0.0.2 polish
-    host.classList.add('is-split')
-  } else {
-    host.classList.remove('is-split')
+  // Always reset the split flag first — the previous version added .is-split
+  // when switching INTO split mode but never removed it on the way out, so a
+  // user who'd ever hit split mode permanently kept the class. With
+  // is-split as a future CSS hook (v0.0.2 50/50 layout), the orphan would
+  // have shipped a layout bug the moment that CSS landed.
+  host.classList.toggle('is-split', next === 'split')
+
+  // Set both hidden flags every transition so we don't depend on the
+  // previous state. If user reports "code view stuck behind canvas," that
+  // would be design.hidden never getting cleared — defensive .hidden=true
+  // here keeps the active pane the only one in flow.
+  design.hidden = (next === 'code')
+  code.hidden   = (next === 'design')
+
+  // Force a Monaco layout() once the show/hide transition is paint-stable
+  // so an editor that was hidden when first created (size 0) lays out
+  // correctly the first time it becomes visible.
+  if (next === 'code' || next === 'split') {
+    requestAnimationFrame(() => {
+      const monaco = window.__gstrap?.pluginRegistry?.bound?.monaco
+      monaco?.editor?.getEditors?.().forEach(e => { try { e.layout?.() } catch (_) {} })
+    })
   }
+
   onViewModeChange(prev, next)
 }

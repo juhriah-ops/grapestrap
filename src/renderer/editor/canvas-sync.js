@@ -59,8 +59,22 @@ export function bindSync({ htmlMonaco, cssMonaco }) {
 }
 
 function queueCanvasToCode() {
+  // Only suppress when we're explicitly in the middle of a code-to-canvas
+  // rebuild — otherwise, every canvas change should propagate to Monaco
+  // per the locked sync policy ("Design → Code: live-debounced. Continuous
+  // flow."). Earlier versions also gated on activeSide === 'code' but that
+  // was wrong: activeSide latches to 'code' the moment Monaco gains focus
+  // and only resets when the canvas iframe contentWindow regains focus,
+  // which doesn't happen on view-mode toggle. The result was that any
+  // user who ever clicked into the Code view permanently broke
+  // canvas-to-code sync until they restarted — reproduced 2026-05-03 by
+  // user on nola1 ("code view is no longer working" on a new project).
+  // Nothing actually depends on activeSide blocking sync: typing in
+  // Monaco doesn't fire GrapesJS component events, so the gate never
+  // saved a real edit; rebuildCanvasFromCode's own suppressCanvasToCode
+  // already covers the only way Code-side typing could appear in canvas
+  // events.
   if (suppressCanvasToCode) return
-  if (activeSide === 'code') return  // user editing code; don't stomp it
   clearTimeout(canvasUpdateTimer)
   canvasUpdateTimer = setTimeout(syncCanvasToCode, DEBOUNCE_MS)
 }

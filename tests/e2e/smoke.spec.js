@@ -839,6 +839,63 @@ test('Insert DnD: drop on a container appends inside; drop on a leaf appends as 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Code view sync: works after user has previously focused Monaco', async () => {
+  // Reported on nola1 2026-05-03 after the v0.0.1-alpha cut: "code view is no
+  // longer working" on a new project; "i opened the test page i created and
+  // there was code view." The activeSide flag in canvas-sync.js was set to
+  // 'code' the moment Monaco gained focus, and never reset until the canvas
+  // iframe regained focus — but switching view modes / opening different
+  // projects doesn't re-focus the iframe contentWindow on its own. So
+  // queueCanvasToCode would early-return forever once the user had clicked
+  // into Code view even once. This spec drives that exact sequence.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-codesync-'))
+  const projectPath = join(projectDir, 's.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('.gstrap-block-tile').length > 0,
+    null, { timeout: 10_000 }
+  )
+
+  // Step 1: switch to Code view AND focus Monaco — same as a real user
+  // peeking at the markup.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'view:mode-code')
+  })
+  await appWindow.waitForTimeout(200)
+  await appWindow.evaluate(() => {
+    const monaco = window.__gstrap.pluginRegistry.bound.monaco
+    const editors = monaco?.editor?.getEditors?.() || []
+    const htmlEd = editors[0]
+    htmlEd?.focus?.()
+  })
+  await appWindow.waitForTimeout(100)
+
+  // Step 2: switch back to Design and add an element via the canvas.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'view:mode-design')
+  })
+  await appWindow.waitForTimeout(200)
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    ed.getWrapper().append('<p data-testid="codesync-marker">codesync-marker-text</p>')
+  })
+
+  // Step 3: wait past the 300ms debounce, then check Monaco picked up the edit.
+  await appWindow.waitForTimeout(700)
+  const monacoVal = await appWindow.evaluate(() => {
+    const monaco = window.__gstrap.pluginRegistry.bound.monaco
+    const editors = monaco?.editor?.getEditors?.() || []
+    const htmlEd = editors.find(e => (e.getValue?.() || '').trimStart().startsWith('<'))
+    return htmlEd?.getValue?.() || ''
+  })
+  expect(monacoVal).toContain('codesync-marker-text')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Insert flash: destination container gets a brief outline highlight', async () => {
   // Verifies the visual feedback piece of the smarter placement rule. After
   // an insert into a container, that container's DOM element should briefly
