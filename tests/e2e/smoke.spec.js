@@ -209,6 +209,31 @@ test('Save: Ctrl+S keystroke writes the canvas to disk', async () => {
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Toasts: save success renders a visible "Saved." toast card', async () => {
+  // Reported on nola1 2026-05-03: "no indication of save but its saving."
+  // Save's eventBus.emit('toast', { type: 'success', message: 'Saved.' })
+  // had no subscriber since v0.0.1 walking-skeleton landed — toasts were
+  // emitted into the void. wireToasts() in main.js boot now renders them
+  // into #gstrap-toasts. This spec proves the user-visible surface.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-toast-'))
+  const projectPath = join(projectDir, 't.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'file:save')
+  })
+
+  const toast = appWindow.locator('.gstrap-toast.gstrap-toast-success')
+  await toast.waitFor({ state: 'visible', timeout: 3_000 })
+  const text = await toast.locator('.gstrap-toast-msg').textContent()
+  expect(text?.trim()).toBe('Saved.')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Save (file:save command): edits in canvas land on disk; no error toast', async () => {
   // Regression for the EOD 2026-05-02 bug: user reported Ctrl+S "doesn't work."
   // The M1 smoke test mutates page.html directly and bypasses both

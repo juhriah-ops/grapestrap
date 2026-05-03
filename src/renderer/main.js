@@ -32,6 +32,7 @@ import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
 import { wireMenuActions } from './shortcuts/menu-router.js'
 import { wireKeybindings } from './shortcuts/keybindings.js'
+import { wireToasts } from './dialogs/toasts.js'
 import { showWelcomeIfFirstRun } from './dialogs/welcome.js'
 import { showContextMenu } from './dialogs/context-menu.js'
 import { buildComponentMenuItems } from './shortcuts/component-actions.js'
@@ -60,12 +61,15 @@ async function boot() {
   // 3. Initialize Golden Layout in main region
   initGoldenLayout(document.getElementById('gstrap-main'))
 
-  // 4. Wire menu actions + renderer-side keybindings.
+  // 4. Wire menu actions + renderer-side keybindings + toast renderer.
   //    Native menu accelerators don't fire reliably on Linux (auto-hide menu
   //    bar) or when an iframe / Monaco has focus, so wireKeybindings() is the
   //    actually-works path for Ctrl+S and friends. See keybindings.js.
+  //    Toasts have been emitted across the codebase since v0.0.1 but had no
+  //    listener — wireToasts() finally renders them in #gstrap-toasts.
   wireMenuActions()
   wireKeybindings()
+  wireToasts()
 
   // 5. Single context-menu open path. Both the canvas iframe handler (in
   //    grapesjs-init.js) and the DOM tree (in panels/dom-tree) emit
