@@ -12,12 +12,24 @@
  * it gets new users productive without needing them to coordinate a drop
  * onto the iframe (which is fragile across compositors).
  *
- * Click insertion target rule:
- *   - If a component is selected:    insert AFTER it inside its parent
- *     (so clicking Hero with Section selected puts Hero next to Section).
- *   - Otherwise:                     append to the wrapper (page root).
- *   - The new component is selected so the user sees feedback + can keep
- *     editing.
+ * Click insertion target rule (refined 2026-05-03 from user feedback "not
+ * consistent on what it attaches to"):
+ *   - No selection (or wrapper selected): append to the page root.
+ *   - Selection is a known container (div / section / main / article /
+ *     aside / header / footer / nav / form / ul / ol): append INSIDE the
+ *     container as its last child. Lets the user click a Card and then
+ *     click Button to put a button INSIDE the card.
+ *   - Selection is a known leaf (p / h1-h6 / span / img / a / button /
+ *     input / label): insert as a sibling AFTER the leaf, inside its
+ *     parent. Lets the user click a heading and then click Paragraph to
+ *     get a paragraph next to the heading.
+ *   - Selection is anything else: fall back to sibling-after — the
+ *     historical behavior, predictable for unknown elements.
+ *
+ * The destination container gets a brief outline flash so the user sees
+ * where the new block landed. The new component is also selected so its
+ * normal GrapesJS handles appear and editing can continue without an
+ * extra click.
  */
 
 import { pluginRegistry } from '../../plugin-host/registry.js'
@@ -94,14 +106,32 @@ function refreshContent(host) {
   `).join('')
 }
 
+// Tag classification for the placement rule. Lowercase. `td/th/li` are NOT
+// in the container set on purpose — they're typed by their parent and we
+// don't want a paragraph to land inside a <li> from a Layout tab click;
+// users who want that can drill in by clicking the <li> first, at which
+// point the "else" branch puts it as a sibling-after, which is what they
+// almost certainly want.
+const CONTAINER_TAGS = new Set([
+  'div', 'section', 'main', 'article', 'aside',
+  'header', 'footer', 'nav', 'form',
+  'ul', 'ol'
+])
+const LEAF_TAGS = new Set([
+  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'span', 'img', 'a', 'button', 'input', 'label'
+])
+
+function tagOf(component) {
+  return (component?.get?.('tagName') || '').toLowerCase()
+}
+
 function insertBlockById(blockId) {
   const editor = getEditor()
   if (!editor) {
     eventBus.emit('toast', { type: 'warning', message: 'Canvas not ready.' })
     return
   }
-  // Look up the block in the registry (where plugins put them) — fall back to
-  // GrapesJS BlockManager in case a plugin registered directly via that path.
   const fromRegistry = pluginRegistry.blocks.find(b => b.id === blockId)
   const content = fromRegistry?.content
                   ?? editor.BlockManager?.get?.(blockId)?.get?.('content')
@@ -110,19 +140,78 @@ function insertBlockById(blockId) {
     return
   }
 
+  const wrapper = editor.getWrapper()
   const sel = editor.getSelected?.()
-  const parent = sel?.parent?.()
+  let target = wrapper
   let added
-  if (sel && parent) {
-    const idx = parent.components().indexOf(sel)
-    added = parent.append(content, { at: idx + 1 })
+
+  if (!sel || sel === wrapper) {
+    added = wrapper.append(content)
   } else {
-    added = editor.getWrapper().append(content)
+    const tag = tagOf(sel)
+    if (CONTAINER_TAGS.has(tag)) {
+      target = sel
+      added = sel.append(content)
+    } else {
+      // Leaf or unknown — insert as a sibling after the selection.
+      const parent = sel.parent?.() || wrapper
+      const idx = parent.components().indexOf(sel)
+      target = parent
+      added = parent.append(content, { at: idx + 1 })
+    }
   }
+
   // .append returns an array of newly-created components. Select the first.
   const first = Array.isArray(added) ? added[0] : added
   if (first) editor.select(first)
+  flashDestination(editor, target)
   eventBus.emit('canvas:content-changed')
+}
+
+// ─── Destination flash ───────────────────────────────────────────────────────
+//
+// Brief outline animation on the container that received the insert so the
+// user can see where the block landed. Skipped when the destination is the
+// wrapper — the wrapper IS the page body, animating its whole outline is
+// noisy and unhelpful. The new component is already selected, which gives
+// it GrapesJS's standard selection outline; the flash is for the parent.
+
+const FLASH_CLASS = 'gstrap-insert-flash'
+const FLASH_STYLE_ATTR = 'data-gstrap-insert-flash'
+
+function flashDestination(editor, container) {
+  if (!container || container === editor.getWrapper()) return
+  ensureCanvasFlashStyles(editor)
+  const el = container.getEl?.()
+  if (!el) return
+  el.classList.remove(FLASH_CLASS) // restart the animation if a previous one is mid-flight
+  // Force reflow so re-adding the class restarts the keyframes cleanly.
+  void el.offsetWidth
+  el.classList.add(FLASH_CLASS)
+  setTimeout(() => el.classList.remove(FLASH_CLASS), 700)
+}
+
+// Idempotent — checks the iframe's own document each call, which keeps us
+// correct across canvas iframe reloads (project switch / page reload).
+function ensureCanvasFlashStyles(editor) {
+  const doc = editor.Canvas?.getDocument?.()
+  if (!doc || doc.querySelector(`style[${FLASH_STYLE_ATTR}]`)) return
+  const style = doc.createElement('style')
+  style.setAttribute(FLASH_STYLE_ATTR, '')
+  // Color hardcoded — the iframe is a separate document and doesn't see the
+  // shell's --accent custom property. Matches the editor accent (#3fb950).
+  style.textContent = `
+    @keyframes gstrap-insert-flash-anim {
+      0%   { outline-color: #3fb950; }
+      100% { outline-color: transparent; }
+    }
+    .${FLASH_CLASS} {
+      outline: 2px solid #3fb950;
+      outline-offset: 2px;
+      animation: gstrap-insert-flash-anim 700ms ease-out forwards;
+    }
+  `
+  doc.head.appendChild(style)
 }
 
 function matchesCategory(block, tab) {

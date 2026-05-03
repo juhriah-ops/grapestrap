@@ -619,6 +619,126 @@ test('Insert panel: clicking a tile inserts the block into the canvas', async ()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Insert placement: container selection appends INSIDE; leaf selection inserts AFTER', async () => {
+  // Regression for "not consistent on what it attaches to". Verifies the
+  // 2026-05-03 placement rule:
+  //   - select <main> (container)  → next insert appends INSIDE main
+  //   - select <h1>   (leaf)       → next insert lands as a sibling AFTER
+  //                                  the h1, inside its parent.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-place-'))
+  const projectPath = join(projectDir, 'p.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('.gstrap-block-tile').length > 0,
+    null, { timeout: 10_000 }
+  )
+
+  // ── Pass 1: container case — selecting <main> should append INSIDE ──────────
+  await selectFirstByTag(appWindow, 'main')
+  const beforeContainer = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const main = ed.getSelected()
+    return { tag: main?.get('tagName'), childCount: main?.components()?.length || 0 }
+  })
+  expect(beforeContainer.tag).toBe('main')
+
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-block-tile').click()
+  })
+
+  const afterContainer = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const wrapper = ed.getWrapper()
+    const main = wrapper.components().find(c => (c.get('tagName') || '').toLowerCase() === 'main')
+    const newSel = ed.getSelected()
+    return {
+      mainChildCount: main?.components()?.length || 0,
+      // Newly-selected component's parent should be <main>, not the wrapper.
+      newSelParentTag: (newSel?.parent?.()?.get?.('tagName') || '').toLowerCase()
+    }
+  })
+  expect(afterContainer.mainChildCount).toBe(beforeContainer.childCount + 1)
+  expect(afterContainer.newSelParentTag).toBe('main')
+
+  // ── Pass 2: leaf case — selecting <h1> should append as a sibling AFTER ────
+  await selectFirstByTag(appWindow, 'h1')
+  const beforeLeaf = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const h1 = ed.getSelected()
+    const parent = h1.parent()
+    return {
+      h1Idx: parent.components().indexOf(h1),
+      parentChildCount: parent.components().length,
+      parentTag: (parent.get('tagName') || '').toLowerCase()
+    }
+  })
+
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-block-tile').click()
+  })
+
+  const afterLeaf = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    const parent = sel.parent()
+    return {
+      newSelIdx: parent.components().indexOf(sel),
+      parentChildCount: parent.components().length,
+      parentTag: (parent.get('tagName') || '').toLowerCase()
+    }
+  })
+  // The new component must be in the SAME parent as the h1 (not nested inside)
+  // and immediately AFTER the h1's old position.
+  expect(afterLeaf.parentTag).toBe(beforeLeaf.parentTag)
+  expect(afterLeaf.parentChildCount).toBe(beforeLeaf.parentChildCount + 1)
+  expect(afterLeaf.newSelIdx).toBe(beforeLeaf.h1Idx + 1)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Insert flash: destination container gets a brief outline highlight', async () => {
+  // Verifies the visual feedback piece of the smarter placement rule. After
+  // an insert into a container, that container's DOM element should briefly
+  // carry the .gstrap-insert-flash class (animation removes it ~700ms later).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-flash-'))
+  const projectPath = join(projectDir, 'f.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('.gstrap-block-tile').length > 0,
+    null, { timeout: 10_000 }
+  )
+  await selectFirstByTag(appWindow, 'main')
+
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-block-tile').click()
+  })
+
+  const flashed = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const wrapper = ed.getWrapper()
+    const main = wrapper.components().find(c => (c.get('tagName') || '').toLowerCase() === 'main')
+    return main?.getEl?.()?.classList?.contains('gstrap-insert-flash') || false
+  })
+  expect(flashed).toBe(true)
+
+  // ~700ms later the class should have come off.
+  await appWindow.waitForTimeout(900)
+  const cleared = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const main = ed.getWrapper().components().find(c => (c.get('tagName') || '').toLowerCase() === 'main')
+    return !main?.getEl?.()?.classList?.contains('gstrap-insert-flash')
+  })
+  expect(cleared).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 /**
  * Regression: canvas pane must not drift downward when the window is resized
  * back-and-forth.
