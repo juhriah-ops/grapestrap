@@ -737,6 +737,108 @@ test('Insert placement: container selection appends INSIDE; leaf selection inser
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Insert DnD: drop on a container appends inside; drop on a leaf appends as sibling', async () => {
+  // Drag-and-drop from the Insert panel to the canvas iframe. Real OS drag
+  // events from Playwright across a cross-origin-ish iframe are flaky
+  // (build plan v4 §"What's deliberately NOT in v0.0.1" calls this out
+  // explicitly); we test the handler chain instead by synthesizing
+  // drag/drop events with a real DataTransfer in the iframe document.
+  // The placement logic + drop preview class wiring still get exercised
+  // end-to-end inside the renderer process.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-dnd-'))
+  const projectPath = join(projectDir, 'd.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('.gstrap-block-tile').length > 0,
+    null, { timeout: 10_000 }
+  )
+
+  // Resolve a known block id from the registry for the synthetic dataTransfer.
+  const blockId = await appWindow.evaluate(() => {
+    return window.__gstrap.pluginRegistry.blocks[0]?.id || ''
+  })
+  expect(blockId).toBeTruthy()
+
+  // Wait for the canvas iframe drop listener to be wired (attach is async
+  // because the iframe's contentDocument isn't populated synchronously).
+  await appWindow.waitForFunction(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const d = ed?.Canvas?.getFrameEl?.()?.contentDocument
+    return !!(d && d.__gstrapDropWired)
+  }, null, { timeout: 6_000 })
+
+  // ── Drop on <main> (container): should append INSIDE ──────────────────────
+  const dropOnContainer = await appWindow.evaluate(({ blockId }) => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const mainEl = doc.querySelector('main')
+    if (!mainEl) return { error: 'main element not found' }
+    const childCountBefore = mainEl.children.length
+    const dt = new DataTransfer()
+    dt.setData('application/x-grapestrap-block', blockId)
+    mainEl.dispatchEvent(new DragEvent('dragover', {
+      bubbles: true, cancelable: true, dataTransfer: dt
+    }))
+    const previewSet = mainEl.classList.contains('gstrap-drop-target')
+    mainEl.dispatchEvent(new DragEvent('drop', {
+      bubbles: true, cancelable: true, dataTransfer: dt
+    }))
+    return {
+      previewSet,
+      previewClearedAfterDrop: !mainEl.classList.contains('gstrap-drop-target'),
+      childCountDelta: mainEl.children.length - childCountBefore,
+      newSelParentTag: (ed.getSelected()?.parent?.()?.get?.('tagName') || '').toLowerCase()
+    }
+  }, { blockId })
+  expect(dropOnContainer.previewSet).toBe(true)
+  expect(dropOnContainer.previewClearedAfterDrop).toBe(true)
+  expect(dropOnContainer.childCountDelta).toBe(1)
+  expect(dropOnContainer.newSelParentTag).toBe('main')
+
+  // ── Drop on <h1> (leaf): should land as a sibling, in the same parent ─────
+  const dropOnLeaf = await appWindow.evaluate(({ blockId }) => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const h1 = doc.querySelector('h1')
+    if (!h1) return { error: 'h1 not found' }
+    const parentEl = h1.parentElement
+    const childCountBefore = parentEl.children.length
+    const h1IndexBefore = [...parentEl.children].indexOf(h1)
+    const dt = new DataTransfer()
+    dt.setData('application/x-grapestrap-block', blockId)
+    h1.dispatchEvent(new DragEvent('dragover', {
+      bubbles: true, cancelable: true, dataTransfer: dt
+    }))
+    // For a leaf anchor the preview should be on the PARENT (which is what
+    // would actually receive the new sibling), not on the leaf itself.
+    const parentPreview = parentEl.classList.contains('gstrap-drop-target')
+    const leafPreview   = h1.classList.contains('gstrap-drop-target')
+    h1.dispatchEvent(new DragEvent('drop', {
+      bubbles: true, cancelable: true, dataTransfer: dt
+    }))
+    const sel = ed.getSelected()
+    const selParent = sel.parent()
+    return {
+      parentPreview,
+      leafPreview,
+      childCountDelta: parentEl.children.length - childCountBefore,
+      newSelIdx: selParent.components().indexOf(sel),
+      h1IndexBefore,
+      sameParent: selParent.getEl() === parentEl
+    }
+  }, { blockId })
+  expect(dropOnLeaf.parentPreview).toBe(true)
+  expect(dropOnLeaf.leafPreview).toBe(false)
+  expect(dropOnLeaf.childCountDelta).toBe(1)
+  expect(dropOnLeaf.sameParent).toBe(true)
+  expect(dropOnLeaf.newSelIdx).toBe(dropOnLeaf.h1IndexBefore + 1)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Insert flash: destination container gets a brief outline highlight', async () => {
   // Verifies the visual feedback piece of the smarter placement rule. After
   // an insert into a container, that container's DOM element should briefly
