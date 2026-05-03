@@ -165,6 +165,104 @@ test('File menu: cmdNewProject path does not throw on the prompt step', async ()
   await app.close()
 })
 
+test('Save: Ctrl+S keystroke writes the canvas to disk', async () => {
+  // Regression for the user's "Ctrl+S doesn't work" report (2026-05-02 EOD).
+  // Root cause: native menu accelerators (CmdOrCtrl+S in src/main/menus.js)
+  // never fire on Linux when an iframe / Monaco has focus or the menu bar is
+  // auto-hidden — the diagnostic showed the keystroke reached the document
+  // but no menu:action IPC ever followed. Fix: renderer-side keybindings
+  // layer (src/renderer/shortcuts/keybindings.js) catches the keydown in
+  // capture phase and dispatches via the same eventBus 'command' channel
+  // the menu-router already handles. This spec exercises the real keystroke,
+  // not just the eventBus path the next spec covers.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-save-key-'))
+  const projectPath = join(projectDir, 'savekey.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    ed.setComponents('<p data-testid="key-sentinel">ctrl-s-sentinel</p>')
+  })
+
+  const toasts = []
+  await appWindow.exposeFunction('__captureKeyToast', p => { toasts.push(p) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('toast', p => window.__captureKeyToast(p))
+  })
+
+  // Press Ctrl+S. The renderer-side keybindings layer (wireKeybindings) catches
+  // this in document keydown capture and dispatches 'file:save' on the event
+  // bus — same path the menu router listens on. Native menu accelerators are
+  // unreliable on Linux + iframe-focused contexts so we don't depend on them.
+  await appWindow.bringToFront().catch(() => {})
+  await appWindow.keyboard.press('Control+s')
+  await appWindow.waitForTimeout(1500)
+
+  const onDisk = await fsp.readFile(join(projectDir, 'pages', 'index.html'), 'utf8').catch(() => '')
+  const errors = toasts.filter(t => t?.type === 'error')
+  expect(errors).toEqual([])
+  expect(onDisk).toContain('ctrl-s-sentinel')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Save (file:save command): edits in canvas land on disk; no error toast', async () => {
+  // Regression for the EOD 2026-05-02 bug: user reported Ctrl+S "doesn't work."
+  // The M1 smoke test mutates page.html directly and bypasses both
+  // flushActiveTabIntoProject and the menu-router cmdSave path. This spec
+  // exercises the full real-user flow:
+  //   - create project (the cmdSave flow used by File→Save / Ctrl+S)
+  //   - edit the canvas via the GrapesJS editor (NOT direct page.html)
+  //   - dispatch the same `file:save` command the menu/keyboard sends
+  //   - verify (a) no error toast, (b) "Saved." success toast, (c) disk updated
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-save-'))
+  const projectPath = join(projectDir, 'save.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Mutate via the GrapesJS editor so flushActiveTabIntoProject's
+  // getCanvasHtml() path is what carries the change to disk.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    ed.setComponents('<p data-testid="save-sentinel">save-flow-sentinel</p>')
+  })
+
+  // Capture toasts so we see error vs success and any silent failures.
+  const toasts = []
+  await appWindow.exposeFunction('__captureSaveToast', p => { toasts.push(p) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('toast', p => window.__captureSaveToast(p))
+  })
+
+  // Dispatch the same command the menu accelerator (CmdOrCtrl+S) sends.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'file:save')
+  })
+
+  // Wait for the save round-trip to finish (success or error toast).
+  await appWindow.waitForFunction(
+    () => window.__gstrap_save_done === true,
+    null, { timeout: 5_000 }
+  ).catch(() => {})
+  // Fallback: small wait for toast IPC to flush.
+  await appWindow.waitForTimeout(500)
+
+  const errors = toasts.filter(t => t?.type === 'error')
+  expect(errors).toEqual([])
+  const successes = toasts.filter(t => t?.type === 'success' && /saved/i.test(t.message || ''))
+  expect(successes.length).toBeGreaterThan(0)
+
+  const onDisk = await fsp.readFile(join(projectDir, 'pages', 'index.html'), 'utf8')
+  expect(onDisk).toContain('save-flow-sentinel')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Quick Tag Editor: Ctrl+T renames the selected element', async () => {
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-qt-'))
   const projectPath = join(projectDir, 'qt.gstrap')
