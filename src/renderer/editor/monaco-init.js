@@ -18,6 +18,18 @@ import editorWorkerUrl from 'monaco-editor/esm/vs/editor/editor.worker.js?worker
 import htmlWorkerUrl   from 'monaco-editor/esm/vs/language/html/html.worker.js?worker&url'
 import cssWorkerUrl    from 'monaco-editor/esm/vs/language/css/css.worker.js?worker&url'
 
+// Importing editor.api.js alone does NOT register language contributions —
+// without these, createModel(html, 'html') silently falls back to the
+// 'plaintext' language (verified via getModel().getLanguageId() === 'plaintext'
+// in the v0.0.1 walking skeleton). The Monarch tokenizers come from the
+// basic-languages contributions; the language services (autocomplete,
+// validation, formatting) come from the language/* contributions which also
+// hand off to the html/css worker scripts imported above.
+import 'monaco-editor/esm/vs/basic-languages/html/html.contribution.js'
+import 'monaco-editor/esm/vs/basic-languages/css/css.contribution.js'
+import 'monaco-editor/esm/vs/language/html/monaco.contribution.js'
+import 'monaco-editor/esm/vs/language/css/monaco.contribution.js'
+
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { log } from '../log.js'
 

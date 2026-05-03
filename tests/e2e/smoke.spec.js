@@ -554,13 +554,8 @@ test('Code view shows pretty-printed HTML, not the GrapesJS one-liner', async ()
     return ta?.value || document.querySelector('.gstrap-monaco-host .view-lines')?.textContent || ''
   })
   // The Monaco textarea holds focused content only; the .view-lines is a
-  // visual representation. Either way, we just need to know whether the
-  // formatted HTML round-trip wrote multi-line content. A more reliable
-  // check: pull the editor's underlying model value via window.monaco.
-  // Find the Monaco editor that holds the HTML (content starts with `<`).
-  // Note: Monaco's language id may report 'plaintext' if its HTML language
-  // worker didn't initialise — that's a separate concern; what we're testing
-  // here is that the VALUE is the formatted (multi-line) HTML.
+  // visual representation. Pull the editor's underlying model value via
+  // window.monaco — the editor whose value starts with `<` is the HTML one.
   const htmlValue = await appWindow.evaluate(() => {
     const monaco = window.__gstrap.pluginRegistry.bound.monaco
     const editors = monaco?.editor?.getEditors?.() || []
@@ -569,6 +564,24 @@ test('Code view shows pretty-printed HTML, not the GrapesJS one-liner', async ()
   })
   expect(htmlValue).toContain('\n')
   expect(htmlValue).toMatch(/<section[^>]*>\s*\n\s+<div/)
+
+  // Monaco's HTML/CSS language contributions must be registered, otherwise
+  // createModel(html, 'html') silently downgrades to 'plaintext' and the
+  // Code view shows an unhighlighted blob. Diagnostic landed in the v0.0.1
+  // memory; fix is the four contribution imports in monaco-init.js.
+  const monacoLangs = await appWindow.evaluate(() => {
+    const monaco = window.__gstrap.pluginRegistry.bound.monaco
+    const editors = monaco?.editor?.getEditors?.() || []
+    const htmlEd = editors.find(e => (e.getValue?.() || '').trimStart().startsWith('<'))
+    const registered = (monaco?.languages?.getLanguages?.() || []).map(l => l.id)
+    return {
+      htmlModelLang: htmlEd?.getModel?.()?.getLanguageId?.() || null,
+      registered
+    }
+  })
+  expect(monacoLangs.htmlModelLang).toBe('html')
+  expect(monacoLangs.registered).toContain('html')
+  expect(monacoLangs.registered).toContain('css')
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
