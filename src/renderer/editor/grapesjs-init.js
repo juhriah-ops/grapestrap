@@ -150,6 +150,15 @@ export function initGrapesJS(container) {
   editor.on('component:update', () => eventBus.emit('canvas:content-changed'))
   editor.on('style:custom', () => eventBus.emit('canvas:content-changed'))
 
+  // Class additions/removals fire `component:update:classes`. We re-broadcast
+  // as a dedicated event so the Style Manager can refresh its "Active" state
+  // when classes change from somewhere other than the panel itself
+  // (chip-list edits, plugin commands, undo/redo).
+  editor.on('component:update:classes', component => {
+    eventBus.emit('canvas:component-class-changed', component)
+    eventBus.emit('canvas:content-changed')
+  })
+
   // Bind editor to plugin registry so plugins can access it via api.editor
   pluginRegistry.setBound('editor', editor)
   eventBus.emit('canvas:ready', editor)

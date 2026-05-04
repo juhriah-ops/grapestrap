@@ -1,12 +1,23 @@
 /**
  * GrapeStrap — Properties side panel (right)
  *
- * v0.0.1: minimal — element type, ID, classes (chip list with remove buttons).
- * v0.0.2: full Style Manager replacement (7 sub-panels), Cascade view,
- * pseudo-class state bar.
+ * Three sections, top-to-bottom:
+ *   - Element : tag (read-only) + ID input
+ *   - Classes : chip list with remove + add-class input
+ *   - Style   : delegates to the Style Manager (panels/style-manager/), which
+ *               renders an accordion of class-first sub-panels (Spacing,
+ *               Display, Text in chunk A; Flex/Background/Border/Sizing in
+ *               chunk B; pseudo-class state bar + Cascade view in chunk C).
+ *
+ * Class chip mutations here also fire `canvas:component-class-changed` via the
+ * grapesjs-init bridge — which means picking a class from the chip input
+ * re-renders the Style Manager's "Active" state in the same paint, and vice
+ * versa. The two surfaces stay in sync without either knowing about the
+ * other.
  */
 
 import { eventBus } from '../../state/event-bus.js'
+import { renderStyleManager } from '../style-manager/index.js'
 
 let host = null
 let currentComponent = null
@@ -17,11 +28,26 @@ export function renderProperties(target) {
   setEmpty()
   eventBus.on('canvas:selected',   c => { currentComponent = c; renderForElement() })
   eventBus.on('canvas:deselected', () => { currentComponent = null; setEmpty() })
+  // Keep chip list in sync if classes are mutated by the Style Manager or
+  // any other source (Quick Tag, plugin commands, undo).
+  eventBus.on('canvas:component-class-changed', c => {
+    if (c === currentComponent) renderForElement()
+  })
 }
 
 function setEmpty() {
   if (!host) return
-  host.innerHTML = `<div class="gstrap-empty">Select an element on the canvas.</div>`
+  host.innerHTML = `
+    <section class="gstrap-props-section gstrap-empty">
+      Select an element on the canvas.
+    </section>
+    <section class="gstrap-props-section" data-region="style-manager"></section>
+  `
+  // Render the Style Manager into its empty-state too (it renders its own
+  // empty hint when no component is selected, so the user always sees the
+  // panel is *there*).
+  const smHost = host.querySelector('[data-region="style-manager"]')
+  if (smHost) renderStyleManager(smHost, () => currentComponent)
 }
 
 function renderForElement() {
@@ -45,7 +71,7 @@ function renderForElement() {
     </section>
     <section class="gstrap-props-section">
       <h4>Style</h4>
-      <div class="gstrap-empty">Class-first Style Manager arrives in v0.0.2.</div>
+      <div data-region="style-manager"></div>
     </section>
   `
 
@@ -68,6 +94,9 @@ function renderForElement() {
       renderForElement()
     })
   })
+
+  const smHost = host.querySelector('[data-region="style-manager"]')
+  if (smHost) renderStyleManager(smHost, () => currentComponent)
 }
 
 function escHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }

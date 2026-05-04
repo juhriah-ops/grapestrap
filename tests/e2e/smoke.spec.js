@@ -1166,3 +1166,138 @@ test('canvas pane does not drift on alternating window resize', async () => {
 
   await app.close()
 })
+
+test('Style Manager: Spacing/Display/Text panels write BS classes and round-trip', async () => {
+  // v0.0.2 chunk A — class-first Style Manager replaces the v0.0.1 placeholder
+  // in the right Properties panel. Three sub-panels ship in this chunk:
+  // Spacing (mt-3 etc.), Display (d-flex / d-md-block), Text (text-center,
+  // fw-bold, fs-2, text-primary). Verifies:
+  //   1. The Spacing accordion is open by default; clicking a margin scale
+  //      writes the matching `m-N` class to the selected component.
+  //   2. Display panel: selecting `flex` writes `d-flex`; switching to `md`
+  //      breakpoint and selecting `block` writes `d-md-block` and KEEPS the
+  //      base `d-flex` (responsive variants stack).
+  //   3. Text panel: align center, weight bold, size 2, color primary all
+  //      land as the right BS classes.
+  //   4. Toggling: clicking the active scale a second time clears it.
+  //   5. The chip list in the Classes section reflects every change without
+  //      needing a manual re-select.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-sm-'))
+  const projectPath = join(projectDir, 'sm.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // Style Manager renders for the selected h1. Spacing accordion is the
+  // default-open section.
+  await appWindow.waitForSelector('.gstrap-sm-section[data-sp="spacing"] .gstrap-sm-body:not([hidden])', { timeout: 5_000 })
+
+  const readClasses = () => appWindow.evaluate(() =>
+    window.__gstrap.pluginRegistry.bound.editor.getSelected().getClasses()
+  )
+
+  // ── 1. Spacing: click margin scale "3" with side=All ──────────────────────
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="spacing"] .gstrap-sm-body')
+    body.querySelector('[data-scales-for="m"] [data-scale="3"]').click()
+  })
+  let cls = await readClasses()
+  expect(cls).toContain('m-3')
+
+  // Toggle: click the same button again → m-3 cleared.
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="spacing"] .gstrap-sm-body')
+    body.querySelector('[data-scales-for="m"] [data-scale="3"]').click()
+  })
+  cls = await readClasses()
+  expect(cls).not.toContain('m-3')
+
+  // Re-apply, then switch side to "Top" and apply scale 5 — final state is
+  // m-3 (all sides, set first) PLUS mt-5 (top, narrower side overrides via
+  // BS cascade). The pattern is per-side, so the two coexist.
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="spacing"] .gstrap-sm-body')
+    body.querySelector('[data-scales-for="m"] [data-scale="3"]').click()
+    body.querySelector('[data-prop="m"] [data-side="t"]').click()
+  })
+  // After side switch the panel re-renders; re-query and click scale 5.
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="spacing"] .gstrap-sm-body')
+    body.querySelector('[data-scales-for="m"] [data-scale="5"]').click()
+  })
+  cls = await readClasses()
+  expect(cls).toContain('m-3')
+  expect(cls).toContain('mt-5')
+
+  // ── 2. Display panel: open it, write d-flex, then md / d-md-block ─────────
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-sm-section[data-sp="display"] [data-toggle="display"]').click()
+  })
+  await appWindow.waitForSelector('.gstrap-sm-section[data-sp="display"] .gstrap-sm-body:not([hidden])', { timeout: 3_000 })
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="display"] .gstrap-sm-body')
+    body.querySelector('[data-display="flex"]').click()
+  })
+  cls = await readClasses()
+  expect(cls).toContain('d-flex')
+
+  // Switch breakpoint to md and click "block".
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="display"] .gstrap-sm-body')
+    body.querySelector('[data-bp="md"]').click()
+  })
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="display"] .gstrap-sm-body')
+    body.querySelector('[data-display="block"]').click()
+  })
+  cls = await readClasses()
+  expect(cls).toContain('d-flex')      // base preserved
+  expect(cls).toContain('d-md-block')  // md variant added
+
+  // ── 3. Text panel ──────────────────────────────────────────────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-sm-section[data-sp="text"] [data-toggle="text"]').click()
+  })
+  await appWindow.waitForSelector('.gstrap-sm-section[data-sp="text"] .gstrap-sm-body:not([hidden])', { timeout: 3_000 })
+  // Each class change re-renders the Properties host (and thus the Text body)
+  // via the canvas:component-class-changed listener — the previous body element
+  // becomes detached. Re-query `body` between clicks so we hit live handlers.
+  const clickInTextBody = sel => appWindow.evaluate(s => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="text"] .gstrap-sm-body')
+    body.querySelector(s).click()
+  }, sel)
+  await clickInTextBody('[data-align="center"]')
+  // Note: the seed h1 ships with `fw-bold`, so click a different weight to
+  // verify "write a fresh class" rather than toggling off the existing one.
+  await clickInTextBody('[data-weight="semibold"]')
+  await clickInTextBody('[data-size="2"]')
+  await clickInTextBody('[data-color="primary"]')
+  cls = await readClasses()
+  expect(cls).toEqual(expect.arrayContaining(['text-center', 'fw-semibold', 'fs-2', 'text-primary']))
+  // The mutually-exclusive group rule: writing fw-semibold should have evicted
+  // the seed's fw-bold (one weight class at a time).
+  expect(cls).not.toContain('fw-bold')
+
+  // ── 4. Chip list mirrors the Style Manager state ──────────────────────────
+  const chipTexts = await appWindow.$$eval(
+    '.gstrap-class-chips .gstrap-chip',
+    nodes => nodes.map(n => n.textContent.replace(/×$/, '').trim())
+  )
+  expect(chipTexts).toEqual(expect.arrayContaining([
+    'm-3', 'mt-5', 'd-flex', 'd-md-block',
+    'text-center', 'fw-semibold', 'fs-2', 'text-primary'
+  ]))
+
+  // ── 5. Removing a class from the chip list refreshes Style Manager ────────
+  await appWindow.evaluate(() => {
+    const chip = [...document.querySelectorAll('.gstrap-class-chips [data-remove]')]
+      .find(b => b.dataset.remove === 'fw-semibold')
+    chip?.click()
+  })
+  cls = await readClasses()
+  expect(cls).not.toContain('fw-semibold')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})

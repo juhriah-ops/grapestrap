@@ -8,6 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full roadmap.
 
+### Added (2026-05-03 — v0.0.2 Style Manager, chunk A)
+- New `src/renderer/panels/style-manager/` module replaces the v0.0.1 placeholder Properties→Style section. Class-first BS5 utility picker — every selection writes a real `class="…"`; nothing goes through inline `style`.
+- `bs-classes.js` is the single source of truth for the BS5 utility enumerations + match patterns (so the chip list, autocomplete, and Cascade view in chunks B/C all read the same lists).
+- `class-utils.js` provides `applyGroup` / `readGroup` / `toggleClass` — every sub-panel routes through these so "select one of N from this group" deterministically strips prior selections via the group's regex before adding the new one.
+- Three sub-panels in chunk A:
+  - **Spacing** — margin / padding, per-side (`All / Top / End / Bottom / Start / X / Y`), scale `0..5 + auto + n1..n5` (margin-only). Click an active scale a second time to clear it.
+  - **Display** — display value (`none / inline / block / flex / grid / table` + variants) + visibility, with the per-breakpoint `xs sm md lg xl xxl` strip at the top. Per-breakpoint variants stack: `d-flex` + `d-md-block` coexist on the same component.
+  - **Text** — alignment, weight, style/decoration/transform, size (`fs-1..6`), color (BS5 theme tokens with swatches).
+- Accordion shell (`index.js`) renders one section per sub-panel; default-open set is `['spacing']`. Open/closed state is per-app-session, not persisted yet.
+- New stylesheet `src/renderer/styles/style-manager.css` introduces the shared primitives (`gstrap-sm-section / -toggle / -body / -segs / -seg / -scales / -scale / -grid / -pill / -swatch / -clear`) so chunks B/C compose without inventing new classes.
+- `editor.on('component:update:classes')` in `grapesjs-init.js` now re-broadcasts as `canvas:component-class-changed` on the eventBus so the Properties chip list and the Style Manager stay in lockstep when classes change from any source (Style Manager, chip-list edit, Quick Tag, plugin command, undo).
+- New Playwright spec `'Style Manager: Spacing/Display/Text panels write BS classes and round-trip'`: drives the right panel through Spacing → Display (with breakpoint switch) → Text and asserts both the component's class set AND the Properties chip list reflect every change. Also covers click-toggles-off, mutually-exclusive group eviction (writing `fw-semibold` evicts the seed h1's `fw-bold`), and chip-removal refreshing the Style Manager's "Active" highlights.
+- All 21 specs green in ~60 s.
+
 ### Added (2026-05-02 — HTML pretty-printer)
 - New `src/renderer/editor/format-html.js` — small (~150 line, no deps) tokenizer-and-tree-rendering HTML formatter. Handles: block vs inline element distinction, single-line rendering of inline-only parents that fit ≤100 chars, void elements (`<br>`, `<img>`, `<hr>`, …) on their own lines in block context, verbatim pass-through of `<pre>`/`<script>`/`<style>`/`<textarea>`/`<code>` (whose interior whitespace is significant), HTML comments and doctypes preserved.
 - Wired into `editor/grapesjs-init.js`'s `getCanvasHtml()` so every consumer (project save, tab-swap capture, code-view sync, flat export) gets the same pretty-printed output. GrapesJS's raw `editor.getHtml()` is one long line — formatting once at the boundary keeps the disk + display + export in sync without touching call sites. New `getCanvasHtmlRaw()` is the explicit escape hatch (currently unused).

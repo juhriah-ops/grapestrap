@@ -1,0 +1,173 @@
+/* GrapeStrap — Style Manager (right Properties panel, "Style" accordion).
+
+   Class-first BS5 utility picker. Sub-panels live in
+   src/renderer/panels/style-manager/{spacing,display,text,...}.js and share
+   this stylesheet. The DOM is intentionally flat — sections, segs, scales,
+   pills, swatches — so chunk B / C sub-panels can compose the same
+   primitives without inventing new classes. */
+
+.gstrap-sm-host {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.gstrap-sm-section {
+  border-top: 1px solid var(--border);
+}
+.gstrap-sm-section:first-child { border-top: none; }
+
+.gstrap-sm-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-3);
+  border: none;
+  color: var(--text-1);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.gstrap-sm-toggle:hover { background: var(--bg-4); }
+.gstrap-sm-caret {
+  width: 10px;
+  color: var(--text-2);
+  font-size: 10px;
+}
+.gstrap-sm-title { flex: 1; }
+
+.gstrap-sm-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gstrap-sm-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gstrap-sm-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+}
+
+/* Segmented row — used for side pickers, breakpoint pickers, alignments. */
+.gstrap-sm-segs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  width: fit-content;
+  max-width: 100%;
+}
+.gstrap-sm-seg {
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: none;
+  border-right: 1px solid var(--border);
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-width: 28px;
+}
+.gstrap-sm-seg:last-child { border-right: none; }
+.gstrap-sm-seg:hover { background: var(--bg-3); color: var(--text-1); }
+.gstrap-sm-seg.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Scale row — wider than segs, scrolls horizontally if needed. */
+.gstrap-sm-scales {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.gstrap-sm-scale {
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 3px 7px;
+  min-width: 28px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.gstrap-sm-scale:hover { background: var(--bg-3); color: var(--text-1); }
+.gstrap-sm-scale.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Grid of pills — used for display values, weight, decoration, transform. */
+.gstrap-sm-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.gstrap-sm-pill {
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 11px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+.gstrap-sm-pill:hover { background: var(--bg-3); color: var(--text-1); }
+.gstrap-sm-pill.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Clear button = secondary visual weight. */
+.gstrap-sm-clear {
+  color: var(--text-3) !important;
+  background: transparent !important;
+  border-color: var(--border) !important;
+}
+.gstrap-sm-clear:hover {
+  color: var(--text-1) !important;
+  background: var(--bg-3) !important;
+}
+
+/* Color swatches. */
+.gstrap-sm-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gstrap-sm-swatch {
+  width: 22px; height: 22px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--swatch, transparent);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+}
+.gstrap-sm-swatch:hover { transform: scale(1.08); }
+.gstrap-sm-swatch.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.gstrap-sm-swatch.gstrap-sm-clear {
+  background: var(--bg-1) !important;
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 18px;
+}
