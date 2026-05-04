@@ -74,3 +74,38 @@
   overflow: hidden;
   max-width: 80px;
 }
+
+/* Snippets tab: capture-from-selection tile + per-tile delete affordance. */
+.gstrap-snippet-capture {
+  border-style: dashed;
+  color: var(--accent);
+}
+.gstrap-snippet-capture .gstrap-block-tile-media {
+  color: var(--accent);
+  font-size: 18px;
+}
+.gstrap-snippet-tile {
+  position: relative;
+}
+.gstrap-snippet-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-1);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 14px;
+  cursor: pointer;
+  padding: 0;
+  display: none;
+}
+.gstrap-snippet-tile:hover .gstrap-snippet-x { display: block; }
+.gstrap-snippet-x:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+  border-color: var(--accent);
+}

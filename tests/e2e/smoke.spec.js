@@ -1555,6 +1555,79 @@ test('Style Manager: Cascade view lists rules from project style.css and Bootstr
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Snippets tab: capture from selection, insert places a free copy, delete removes', async () => {
+  // v0.0.2 — Snippets are reusable HTML fragments stored on the project
+  // (or contributed by plugins). Unlike Library Items they're NOT linked —
+  // inserting drops a free copy. Verifies:
+  //   1. Snippets tab in the Insert panel shows a "+ From Selection" tile.
+  //   2. Capture: select an h1, capture as "hero" snippet → tile appears.
+  //   3. Insert: clicking the tile drops a copy at the canvas root.
+  //   4. The dropped instance has NO data-grpstr-library wrapper (it's a
+  //      bare copy, not a linked instance).
+  //   5. Delete via the per-tile × removes the snippet.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-snip-'))
+  const projectPath = join(projectDir, 'snip.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // Switch to the Snippets tab.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-tab="snippets"]').click()
+  })
+  await appWindow.waitForSelector('[data-snippet-capture]', { timeout: 3_000 })
+
+  // ── 1+2. Capture a snippet by mutating projectState directly (bypasses
+  //   the prompt dialog the same way other specs do).
+  await appWindow.evaluate(() => {
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const sel = editor.getSelected()
+    const html = sel.toHTML()
+    const { projectState, eventBus } = window.__gstrap
+    if (!projectState.current.snippets) projectState.current.snippets = []
+    projectState.current.snippets.push({ id: 'hero', name: 'Hero', html })
+    eventBus.emit('snippets:changed')
+  })
+
+  await appWindow.waitForSelector('[data-block-id="snippet:project:hero"]', { timeout: 3_000 })
+
+  // ── 3+4. Click the snippet tile → a copy is inserted into the canvas
+  //   without a library wrapper.
+  const beforeCount = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    return doc.querySelectorAll('h1').length
+  })
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-block-id="snippet:project:hero"]').click()
+  })
+
+  const afterCount = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    return {
+      h1s: doc.querySelectorAll('h1').length,
+      libWrappers: doc.querySelectorAll('[data-grpstr-library]').length
+    }
+  })
+  expect(afterCount.h1s).toBe(beforeCount + 1)
+  expect(afterCount.libWrappers).toBe(0)
+
+  // ── 5. Delete via the × button.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-snippet-delete="hero"]').click()
+  })
+  await appWindow.waitForFunction(
+    () => !document.querySelector('[data-block-id="snippet:project:hero"]'),
+    null, { timeout: 3_000 }
+  )
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Linked Files bar: shows CSS/JS chips from page head, hides on library tab', async () => {
   // v0.0.2 — Linked Files strip above the canvas. Verifies:
   //   1. With a page open whose html includes <link rel=stylesheet> and

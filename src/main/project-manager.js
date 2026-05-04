@@ -56,6 +56,7 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
     ],
     templates: [],
     libraryItems: [],
+    snippets: [],
     globalCSS: 'style.css',
     palette: [],
     assets: [],
@@ -115,6 +116,7 @@ export async function loadProject(manifestPath) {
     pages,
     templates,
     libraryItems,
+    snippets: manifest.snippets || [],
     globalCSS
   }
 }
@@ -124,7 +126,7 @@ export async function loadProject(manifestPath) {
  * but with possibly-modified pages / templates / libraryItems / globalCSS / manifest.
  */
 export async function saveProject(project) {
-  const { manifestPath, projectDir, manifest, pages, templates = [], libraryItems = [], globalCSS } = project
+  const { manifestPath, projectDir, manifest, pages, templates = [], libraryItems = [], snippets = [], globalCSS } = project
   const now = new Date().toISOString()
 
   // Write each page's html to its sibling file
@@ -144,13 +146,16 @@ export async function saveProject(project) {
     await writeAtomic(join(projectDir, manifest.globalCSS), globalCSS)
   }
 
-  // Strip per-page html from manifest before writing
+  // Strip per-page html from manifest before writing. Snippets are inline in
+  // the manifest (no per-snippet file) — they're typically tiny and the
+  // file-per-item dance isn't worth the disk noise for v0.0.2.
   const cleanManifest = {
     ...manifest,
     metadata: { ...manifest.metadata, modified: now, lastSavedAt: now },
     pages:        pages.map(({ html, ...p }) => ({ ...p, file: p.file || `pages/${p.name}.html` })),
     templates:    templates.map(({ html, ...t }) => ({ ...t, file: t.file || `templates/${t.name}.html` })),
-    libraryItems: libraryItems.map(({ html, ...l }) => ({ ...l, file: l.file || `library/${l.id}.html` }))
+    libraryItems: libraryItems.map(({ html, ...l }) => ({ ...l, file: l.file || `library/${l.id}.html` })),
+    snippets:     snippets
   }
 
   await writeAtomic(manifestPath, JSON.stringify(cleanManifest, null, 2))

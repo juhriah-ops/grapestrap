@@ -40,6 +40,10 @@
 import { pluginRegistry } from '../../plugin-host/registry.js'
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
+import {
+  getSnippetTiles, getSnippetContent,
+  addProjectSnippetFromSelection, deleteProjectSnippet
+} from '../snippets/index.js'
 
 const TABS = [
   { id: 'common',   label: 'Common'   },
@@ -47,8 +51,9 @@ const TABS = [
   { id: 'forms',    label: 'Forms'    },
   { id: 'text',     label: 'Text'     },
   { id: 'media',    label: 'Media'    },
-  { id: 'sections', label: 'Sections' }
-  // Library + Snippets in v0.0.2
+  { id: 'sections', label: 'Sections' },
+  { id: 'snippets', label: 'Snippets' }
+  // Library still pending — opens via the dedicated panel for v0.0.2
 ]
 
 let activeTab = 'common'
@@ -70,6 +75,18 @@ export function renderInsertPanel(host) {
       eventBus.emit('insert:tab-changed', activeTab)
       return
     }
+    const captureBtn = evt.target.closest('[data-snippet-capture]')
+    if (captureBtn) {
+      addProjectSnippetFromSelection()
+      return
+    }
+    const deleteBtn = evt.target.closest('[data-snippet-delete]')
+    if (deleteBtn) {
+      // Stop the click from also firing the surrounding tile's insert handler.
+      evt.stopPropagation()
+      deleteProjectSnippet(deleteBtn.dataset.snippetDelete)
+      return
+    }
     const tile = evt.target.closest('[data-block-id]')
     if (tile) {
       insertBlockById(tile.dataset.blockId)
@@ -87,7 +104,11 @@ export function renderInsertPanel(host) {
   })
 
   refreshContent(host)
-  eventBus.on('plugin:block-registered', () => refreshContent(host))
+  eventBus.on('plugin:block-registered',   () => refreshContent(host))
+  eventBus.on('plugin:snippet-registered', () => { if (activeTab === 'snippets') refreshContent(host) })
+  eventBus.on('snippets:changed',          () => { if (activeTab === 'snippets') refreshContent(host) })
+  eventBus.on('project:opened',            () => { if (activeTab === 'snippets') refreshContent(host) })
+  eventBus.on('project:closed',            () => { if (activeTab === 'snippets') refreshContent(host) })
 
   // Bind the canvas iframe drop target. The iframe contentDocument isn't
   // reliably populated by the time canvas:ready or canvas:frame:load fire
@@ -122,6 +143,11 @@ function refreshContent(host) {
   const content = host.querySelector('[data-region="insert-content"]')
   if (!content) return
 
+  if (activeTab === 'snippets') {
+    renderSnippetsTab(content)
+    return
+  }
+
   const blocks = pluginRegistry.blocks.filter(b => matchesCategory(b, activeTab))
   if (blocks.length === 0) {
     content.innerHTML = `<div class="gstrap-empty">No blocks in this category yet.</div>`
@@ -134,6 +160,33 @@ function refreshContent(host) {
     </div>
   `).join('')
 }
+
+function renderSnippetsTab(content) {
+  const tiles = getSnippetTiles()
+  const captureTile = `
+    <div class="gstrap-block-tile gstrap-snippet-capture" data-snippet-capture
+         title="Capture the current selection as a project snippet">
+      <div class="gstrap-block-tile-media">＋</div>
+      <div class="gstrap-block-tile-label">From Selection</div>
+    </div>
+  `
+  if (tiles.length === 0) {
+    content.innerHTML = captureTile +
+      `<div class="gstrap-empty">No snippets yet. Select something on the canvas, then click "From Selection."</div>`
+    return
+  }
+  content.innerHTML = captureTile + tiles.map(t => `
+    <div class="gstrap-block-tile gstrap-snippet-tile" data-block-id="${escAttr(t.id)}"
+         data-snippet-source="${t.source}" draggable="true" title="${escAttr(t.label)}">
+      <div class="gstrap-block-tile-media">${t.media}</div>
+      <div class="gstrap-block-tile-label">${escHtml(t.label)}</div>
+      ${t.deletable ? `<button class="gstrap-snippet-x" data-snippet-delete="${escAttr(t.rawId)}" title="Delete">×</button>` : ''}
+    </div>
+  `).join('')
+}
+
+function escAttr(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;') }
+function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]) }
 
 // Tag classification for the placement rule. Lowercase. `td/th/li` are NOT
 // in the container set on purpose — they're typed by their parent and we
@@ -156,6 +209,11 @@ function tagOf(component) {
 }
 
 function blockContent(editor, blockId) {
+  // Snippet tiles use a 'snippet:source:rawId' id scheme so they don't
+  // collide with plugin block ids. Resolve through the snippets module.
+  if (typeof blockId === 'string' && blockId.startsWith('snippet:')) {
+    return getSnippetContent(blockId)
+  }
   const fromRegistry = pluginRegistry.blocks.find(b => b.id === blockId)
   return fromRegistry?.content
          ?? editor.BlockManager?.get?.(blockId)?.get?.('content')
