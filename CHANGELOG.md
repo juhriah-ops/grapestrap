@@ -6,7 +6,72 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full roadmap.
+Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
+
+## [v0.0.2-alpha] — 2026-05-04
+
+Phase 2 of the v4 build plan: Multi-Page editing primitives + Dreamweaver-parity tools + Style Manager polish. Closes the v0.0.1 walking-skeleton gaps and lights up every Phase 2 must-ship feature.
+
+### Added (2026-05-04 — v0.0.2 keyboard rebinding UI)
+- Preferences dialog with a **Shortcuts** tab. Lists every default binding (action label + current combo + Edit / Reset). Click Edit on a row → row enters capture state ("Press a combo… (Esc cancels)") → next non-modifier keydown becomes the new binding.
+- New `src/renderer/shortcuts/default-bindings.js` — single source of truth for the default map. `resolveBindings(overrides)` overlays `prefs.shortcuts`: `{ key, ctrl, shift, alt }` replaces the default; `null` disables it; missing keeps it.
+- `keybindings.js` reads `prefs.shortcuts` at boot and listens for `shortcuts:user-changed` so dialog edits take effect without a restart.
+- Conflict detection: if the new combo matches another command's binding, the row tints red and shows the colliding command id inline. Non-blocking by design — the user resolves it.
+- Per-row Reset clears that command's override; "Reset all" wipes the whole prefs.shortcuts subtree.
+- General / Editor / Plugins tabs are scaffolded stubs that point users at `$XDG_CONFIG_HOME/GrapeStrap/preferences.json` for v0.0.2; full UIs land in v0.0.3.
+- New Playwright spec drives the full rebind round-trip: open Preferences, edit Save, capture Ctrl+Shift+P, verify the combo updates AND `prefs.shortcuts['file:save']` persists AND pressing the new combo fires `file:save` on the event bus, then Reset reverts.
+
+### Added (2026-05-04 — v0.0.2 Snippets tab)
+- New Snippets tab in the Insert panel. Snippets are reusable HTML fragments that drop a **free copy** on insert (compare to Library Items, which drop a linked instance — see below).
+- Two sources combined in the tab: project snippets (`projectState.current.snippets[]`, persisted inline in the project manifest) + plugin snippets (`pluginRegistry.snippets[]`, registered via the existing `api.registerSnippet({ id, label, content })` plugin hook — already in the API surface but had no UI consumer until now).
+- "+ From Selection" tile captures the currently-selected component as a project snippet (prompts for a name).
+- Project snippets get a per-tile × delete button on hover. Plugin snippets are read-only.
+- Snippet tiles use `snippet:source:rawId` ids to avoid colliding with plugin block ids; `blockContent()` in the Insert panel resolves through the snippets module for that prefix. Click-to-insert + drag-and-drop + anchor-aware placement + flash all share the existing path.
+- Project manager (main): manifests now carry `snippets: []` inline (no per-snippet file on disk for v0.0.2 — they're typically tiny).
+- New spec covers capture from selection → tile appears → click inserts a free copy without library-wrapper → delete via ×.
+
+### Added (2026-05-04 — v0.0.2 Linked Files bar)
+- Strip above the canvas (below page tabs) listing CSS/JS the active page's `<head>` references — `<link rel=stylesheet>` and `<script src>` as chips with a kind badge (CSS blue, JS amber).
+- Click semantics: href matching the project's globalCSS file emits `linked-files:open-globalcss` so the Custom CSS panel can focus itself, plus an info toast. Any other href toasts "External resource: <href>" — for v0.0.2 we don't open arbitrary asset paths in tabs.
+- Visibility: hidden when no project / no active tab; hidden when the active tab is a library item (libraries are bare fragments without head links); toggleable via `view:toggle-linked-files` event.
+- The `shell.css` strip CSS already had grid area + dimensions in place from v0.0.1 (it was a hidden slot); this release adds the renderer that emits chips into it. Parsing is DOMParser-based and runs on `canvas:content-changed` (rAF-coalesced) plus tab focus events.
+- Spec covers chip render with both kinds, project-css click emits open-globalcss event, library tab hides bar, toggle hides on demand.
+
+### Added (2026-05-04 — v0.0.2 Library Items)
+- Dreamweaver-style **linked snippets**. A library item is a named HTML fragment stored on the project; page instances of the item are wrapped:
+  ```html
+  <div data-grpstr-library="<id>" data-grpstr-library-name="<name>">…</div>
+  ```
+  Editing the item propagates the new inner HTML into every wrapper across every page. One edit, every instance updates.
+- New Library panel in a Golden Layout stack tab next to "Project" in the left column. Lists items, "+ New" creates an empty item and opens it in a tab, "+ From Selection" wraps the canvas selection into a new item (and replaces the original with a wrapped instance). Per-row mini-buttons handle Insert / Edit / Rename / Delete.
+- `pageState.tabs` gain a `kind: 'page' | 'library'` field plus a display label. The canvas panel branches on kind to load page html vs library item html. The save flush in `menu-router` does the same, so Ctrl+S on a library tab writes back to the item.
+- **Tab swap-out IS the propagation moment**: when the user leaves a library tab, `propagateLibraryItem` walks every page in `projectState`, parses the html, replaces the inner of all `[data-grpstr-library="<id>"]` wrappers, and marks each touched page dirty. Save on a library tab does the same flush + propagate in one step. DOMParser-based, not regex — survives attribute-order quirks.
+- **Lock**: descendants of any wrapper component get `selectable / editable / removable / draggable / copyable / hoverable = false` via `component:add` and on `canvas:frame:load`. The wrapper itself stays selectable so a future Detach UI can lift contents out.
+- Tab strip shows a small "lib" accent badge on library tabs.
+- Delete-with-instances guard: deleting an item that's still instanced on a page toasts a warning instead of orphan-emptying every wrapper. User has to clean instances first.
+- Spec covers create-from-selection, insert, lock check, edit-in-tab + propagation across both instances on the page.
+
+### Added (2026-05-04 — v0.0.2 Color picker w/ EyeDropper)
+- Singleton popover anchored to a trigger button. Replaces the bare `<input type="color">` in the pseudo-class state editor. Surface:
+  - BS5 theme palette (primary/secondary/success/danger/warning/info/light/dark + body/black/white/transparent), one row of swatches.
+  - Recent colors (last 12, in-memory; cleared on `project:closed`).
+  - hex / rgb() / `var(--bs-…)` text input — Enter commits, live-updates the preview swatch as you type.
+  - Native **EyeDropper** button (Chromium 95+, present in Electron) — samples a pixel from anywhere on the desktop and commits as hex.
+  - Clear button — passes empty string up.
+- Click outside, Esc, or picking a swatch dismisses. Anchor positioning flips above the trigger when the viewport doesn't fit below.
+- Pseudo-class editor color rows use the picker; `EyeDropper` presence is feature-detected — picker hides the button on platforms without it.
+
+### Added (2026-05-04 — v0.0.2 Style Manager chunk C: pseudo-class state bar + Cascade view)
+- **Pseudo-class state bar** at top of Style Manager: `[ Normal ] [ :hover ] [ :focus ] [ :active ] [ :disabled ]`. Selecting a non-Normal state scopes a CSS rule into the project's `style.css` for the active state. Selector resolution: first non-Bootstrap class on the component, then id. Element with no usable selector toasts a warning and stays in Normal.
+- New **Pseudo-class Styles** sub-panel — property editor for the active state with bg/text/border color, opacity, transform, box-shadow, cursor, text-decoration. Clear button removes the rule.
+- New **Cascade** sub-panel — walks `iframe.contentDocument.styleSheets`, lists matching rules grouped by origin (inline / project / Bootstrap), with strikethrough on overridden properties. Tier ordering inline > project > bootstrap; "winning" rule per property = last write within highest tier (no real specificity computation — that's a v0.0.3 enhancement).
+- New `css-rule-utils.js` — selector picker (first non-BS class, then id) + read/write/remove rule helpers using per-rule regex (no AST, byte-stable for unrelated rules in `style.css`).
+- `grapesjs-init.js` mirrors `projectState.current.globalCSS` into a `<style data-grapestrap-globalcss>` tag inside the canvas iframe so live preview reflects pseudo rules and Cascade can read them. Mirror updated via `eventBus.on('project:css-changed')`.
+
+### Fixed (2026-05-04 — split-view pane overlap, reported on nola1)
+- In Split mode, the canvas iframe was painted on top of the Monaco code pane (line numbers visible behind the canvas) because both `.gstrap-canvas-design` and `.gstrap-canvas-code` are `position: absolute; inset: 0;` — correct for single-pane modes where one is hidden, but stacked in Split where both render in flow.
+- The `.is-split` CSS hook was already toggled by `applyViewMode` but never had matching CSS — flagged in a prior in-code comment and never landed. Fix flips the host into a flex row when `.is-split` is set, switches the two child panes to `position: relative` + `flex: 1 1 50%`, and adds a 1px `border-left` separator on the code pane.
+- GrapesJS canvas refresh is now also called on every viewmode transition (was code/split only) — the iframe rulers and selection overlays were drawing at the old width when the design pane shrank to 50% on the way into split mode and grew back on the way out, because the host stayed the same size and `installCanvasResizeWatcher` only fires on host changes.
 
 ### Added (2026-05-03 — v0.0.2 Style Manager, chunk A)
 - New `src/renderer/panels/style-manager/` module replaces the v0.0.1 placeholder Properties→Style section. Class-first BS5 utility picker — every selection writes a real `class="…"`; nothing goes through inline `style`.
