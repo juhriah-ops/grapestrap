@@ -196,12 +196,13 @@ function syncGlobalCssIntoCanvas(docArg) {
   tag.textContent = projectState.current?.globalCSS || ''
 }
 
-// Inject (or update) a `<base href="file://<projectDir>/">` so relative asset
-// paths in the canvas html (e.g. `assets/images/foo.png` written by the
-// Asset Manager or imported pages) resolve to disk for live preview without
-// rewriting srcs. The base only lives inside the canvas iframe — saved html
-// comes from editor.getHtml() which is body-only, so no `<base>` ever lands
-// on disk. Tag is identified by `data-grapestrap-base`.
+// Inject (or update) a `<base href="file://<projectDir>/site/">` so relative
+// asset paths in the canvas html (e.g. `assets/images/foo.png` written by
+// the Asset Manager or imported pages) resolve to the project's deployable
+// `site/` directory for live preview, without the renderer rewriting srcs.
+// The base only lives inside the canvas iframe — saved html comes from
+// editor.getHtml() which is body-only, so no `<base>` ever lands on disk.
+// Tag is identified by `data-grapestrap-base`.
 function syncBaseHrefIntoCanvas(docArg) {
   const doc = docArg || editor?.Canvas?.getFrameEl()?.contentDocument
   if (!doc) return
@@ -220,8 +221,9 @@ function syncBaseHrefIntoCanvas(docArg) {
     doc.head.insertBefore(tag, doc.head.firstChild)
   }
   // Trailing slash matters — without it, relative paths resolve as if from
-  // the parent directory of projectDir.
-  tag.setAttribute('href', `file://${projectDir.replace(/\/?$/, '/')}`)
+  // the parent directory of site/.
+  const siteDir = projectDir.replace(/\/?$/, '/') + 'site/'
+  tag.setAttribute('href', `file://${siteDir}`)
 }
 
 export function getEditor() {

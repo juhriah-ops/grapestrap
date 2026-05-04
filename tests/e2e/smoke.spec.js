@@ -73,7 +73,7 @@ test('M1 smoke: open → edit → save → reopen', async () => {
   }
 
   // Sanity: the page html landed on disk.
-  const onDisk = await fsp.readFile(join(projectDir, 'pages', 'index.html'), 'utf8')
+  const onDisk = await fsp.readFile(join(projectDir, 'site', 'pages', 'index.html'), 'utf8')
   expect(onDisk).toContain('smoke-test-sentinel')
 
   // ── Pass 2: relaunch, open the saved project, confirm content survived ──────
@@ -200,7 +200,7 @@ test('Save: Ctrl+S keystroke writes the canvas to disk', async () => {
   await appWindow.keyboard.press('Control+s')
   await appWindow.waitForTimeout(1500)
 
-  const onDisk = await fsp.readFile(join(projectDir, 'pages', 'index.html'), 'utf8').catch(() => '')
+  const onDisk = await fsp.readFile(join(projectDir, 'site', 'pages', 'index.html'), 'utf8').catch(() => '')
   const errors = toasts.filter(t => t?.type === 'error')
   expect(errors).toEqual([])
   expect(onDisk).toContain('ctrl-s-sentinel')
@@ -281,7 +281,7 @@ test('Save (file:save command): edits in canvas land on disk; no error toast', a
   const successes = toasts.filter(t => t?.type === 'success' && /saved/i.test(t.message || ''))
   expect(successes.length).toBeGreaterThan(0)
 
-  const onDisk = await fsp.readFile(join(projectDir, 'pages', 'index.html'), 'utf8')
+  const onDisk = await fsp.readFile(join(projectDir, 'site', 'pages', 'index.html'), 'utf8')
   expect(onDisk).toContain('save-flow-sentinel')
 
   await app.close()
@@ -2032,6 +2032,68 @@ test('Color picker: opens from pseudo-state trigger, picks a swatch, writes back
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Project layout: .gstrap at root + site/ subdir for deployable web content', async () => {
+  // v0.0.2-alpha.2 — projects keep deployable web content under
+  // <projectDir>/site/ so the project folder is self-contained and the
+  // site/ tree can be rsynced as-is. Verifies:
+  //   1. createProject puts pages, assets, style.css under site/.
+  //   2. The .gstrap manifest sits at <projectDir>/<name>.gstrap (NOT inside site/).
+  //   3. Old-layout projects (pages/ as sibling of manifest) are rejected with
+  //      a path-of-action error message.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-layout-'))
+  const projectPath = join(projectDir, 'layout.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  const siteExists      = await fsp.access(join(projectDir, 'site')).then(() => true, () => false)
+  const indexInSite     = await fsp.access(join(projectDir, 'site', 'pages', 'index.html')).then(() => true, () => false)
+  const stylecssInSite  = await fsp.access(join(projectDir, 'site', 'style.css')).then(() => true, () => false)
+  const assetsImagesDir = await fsp.access(join(projectDir, 'site', 'assets', 'images')).then(() => true, () => false)
+  const manifestAtRoot  = await fsp.access(projectPath).then(() => true, () => false)
+  const oldPagesAtRoot  = await fsp.access(join(projectDir, 'pages')).then(() => true, () => false)
+
+  expect(siteExists).toBe(true)
+  expect(indexInSite).toBe(true)
+  expect(stylecssInSite).toBe(true)
+  expect(assetsImagesDir).toBe(true)
+  expect(manifestAtRoot).toBe(true)
+  expect(oldPagesAtRoot).toBe(false)
+
+  await app.close()
+
+  // Synthesize a v0.0.1-style project to confirm the old-layout guard fires.
+  const oldDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-old-'))
+  await fsp.mkdir(join(oldDir, 'pages'), { recursive: true })
+  await fsp.writeFile(join(oldDir, 'pages', 'index.html'), '<main></main>', 'utf8')
+  const oldManifestPath = join(oldDir, 'old.gstrap')
+  await fsp.writeFile(oldManifestPath, JSON.stringify({
+    version: '1.0',
+    format: 'grapestrap-project',
+    metadata: { name: 'old', created: '', modified: '', lastSavedAt: '', appVersion: '' },
+    pages: [{ name: 'index', file: 'pages/index.html' }],
+    templates: [], libraryItems: [], snippets: [],
+    globalCSS: 'style.css', palette: [], assets: [], vendorDeps: [], plugins: [],
+    preferences: {}
+  }), 'utf8')
+
+  const { app: app2, appWindow: w2 } = await launch()
+  await w2.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+  const errorMsg = await w2.evaluate(async (path) => {
+    try { await window.grapestrap.project.open(path); return null }
+    catch (err) { return String(err?.message || err) }
+  }, oldManifestPath)
+  expect(errorMsg).toBeTruthy()
+  expect(errorMsg).toMatch(/Old project layout/i)
+
+  await app2.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+  await fsp.rm(oldDir,     { recursive: true, force: true })
+})
+
 test('Asset Manager: lists project assets, click-inserts an image into the canvas', async () => {
   // v0.0.2 patch — Asset Manager panel + base href preview. Verifies:
   //   1. The Assets tab renders with three sections (Images / Fonts / Videos)
@@ -2049,7 +2111,7 @@ test('Asset Manager: lists project assets, click-inserts an image into the canva
 
   // Drop a tiny image into the project's assets/images/ on disk so
   // file:list-assets surfaces it.
-  const imgPath = join(projectDir, 'assets', 'images', 'pixel.png')
+  const imgPath = join(projectDir, 'site', 'assets', 'images', 'pixel.png')
   // 1×1 transparent PNG — minimum viable for the renderer to lazy-load.
   const png1x1 = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
@@ -2157,7 +2219,7 @@ test('Import folder: scans HTML + assets and opens as a project', async () => {
   expect(aboutPage.html).toContain('class="about"')
 
   // ── 3. Asset survived.
-  const assetExists = await fsp.access(join(targetDir, 'assets', 'images', 'foo.png'))
+  const assetExists = await fsp.access(join(targetDir, 'site', 'assets', 'images', 'foo.png'))
     .then(() => true, () => false)
   expect(assetExists).toBe(true)
 

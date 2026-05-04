@@ -8,6 +8,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.2] — 2026-05-04 (patch — breaking layout change)
+
+### Changed (BREAKING)
+- **Project disk layout reshaped** so each project is one self-contained folder. Old:
+  ```
+  /somewhere/<name>.gstrap   (manifest, side-by-side with content)
+  /somewhere/pages/...
+  /somewhere/assets/...
+  /somewhere/style.css
+  ```
+  New:
+  ```
+  /somewhere/<name>/<name>.gstrap   (manifest at root of the project folder)
+  /somewhere/<name>/site/           (deployable web content — rsync this)
+    ├─ pages/<name>.html
+    ├─ assets/{images,fonts,videos}/
+    ├─ library/<id>.html
+    ├─ templates/<name>.html
+    └─ style.css
+  ```
+  Manifest *paths* are unchanged — they still read like `pages/index.html`, relative-to-`site/`. Only the disk layout shifted.
+- **New Project / Import Folder dialogs now ask for a *parent* folder**, not a save-as path. We create `<parent>/<slug>/<slug>.gstrap` + `<parent>/<slug>/site/` inside. Refuses if `<slug>/` already exists and isn't empty.
+- **Save-As** also picks a parent folder; the saved-into folder gets named after the project's slug.
+- **Old-layout projects (v0.0.1 / v0.0.2-alpha.0 / .alpha.1) refuse to load** with a clear error message: "Old project layout detected (pages/ at project root). As of v0.0.2-alpha.2 web content lives in <project>/site/. Recreate the project or move pages/ + assets/ + style.css into a site/ subdirectory." No silent ENOENTs mid-readFile. Migration helper deferred — projects from this hour should be recreated.
+- Asset Manager `<base href>` now points at `<projectDir>/site/`. File-listing IPC reads from `site/assets/<kind>/`. Asset import targets `site/assets/<kind>/`.
+- Export still flat-copies HTML/CSS/JS to the chosen output dir, but sources `assets/` from `site/assets/` rather than `<projectDir>/assets/`.
+
+### Added
+- New regression spec `'Project layout: .gstrap at root + site/ subdir for deployable web content'` exercises both the new layout AND the old-layout rejection guard. 33 → 34 specs green.
+
+### Why
+User feedback on nola1: "what if when we create a project we create a directory that we drop our files in?" Cleaner mental model — one project equals one folder, the `site/` tree IS the deployable static site (no extra build step), nothing collides if you put two projects under the same parent. Worth a breaking change while no real production projects exist yet.
+
 ## [v0.0.2-alpha.1] — 2026-05-04 (patch)
 
 ### Added

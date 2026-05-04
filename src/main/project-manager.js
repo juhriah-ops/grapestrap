@@ -22,6 +22,23 @@ import { app } from 'electron'
 const MANIFEST_VERSION = '1.0'
 const FORMAT_TAG = 'grapestrap-project'
 
+// Project layout:
+//   <projectDir>/<name>.gstrap     ← manifest, sits at the root of the project folder
+//   <projectDir>/site/             ← deployable web content
+//     ├─ pages/<name>.html
+//     ├─ assets/{images,fonts,videos}/
+//     ├─ library/<id>.html
+//     ├─ templates/<name>.html
+//     └─ style.css
+//
+// Manifest paths (page.file, libraryItem.file, manifest.globalCSS) are
+// stored relative-to-`site/`. We resolve them through siteDir() so the
+// disk layout can change without touching every manifest in the wild.
+const SITE_SUBDIR = 'site'
+function siteDir(projectDir) {
+  return join(projectDir, SITE_SUBDIR)
+}
+
 /**
  * Import an existing static-site directory as a new GrapeStrap project.
  *
@@ -49,11 +66,12 @@ const FORMAT_TAG = 'grapestrap-project'
  */
 export async function importDirectory({ sourceDir, targetPath, name }) {
   const projectDir = dirname(targetPath)
-  await fsp.mkdir(projectDir, { recursive: true })
-  await fsp.mkdir(join(projectDir, 'pages'), { recursive: true })
-  await fsp.mkdir(join(projectDir, 'assets', 'images'), { recursive: true })
-  await fsp.mkdir(join(projectDir, 'assets', 'fonts'),  { recursive: true })
-  await fsp.mkdir(join(projectDir, 'assets', 'videos'), { recursive: true })
+  const site = siteDir(projectDir)
+  await fsp.mkdir(site, { recursive: true })
+  await fsp.mkdir(join(site, 'pages'), { recursive: true })
+  await fsp.mkdir(join(site, 'assets', 'images'), { recursive: true })
+  await fsp.mkdir(join(site, 'assets', 'fonts'),  { recursive: true })
+  await fsp.mkdir(join(site, 'assets', 'videos'), { recursive: true })
 
   const pages = []
   let globalCSSContent = ''
@@ -95,7 +113,7 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
         const raw = await fsp.readFile(srcEntry, 'utf8')
         const { body, title, description } = extractBody(raw)
         const targetFile = `pages/${unique}.html`
-        await fsp.writeFile(join(projectDir, targetFile), body, 'utf8')
+        await fsp.writeFile(join(site, targetFile), body, 'utf8')
         pages.push({
           name: unique,
           file: targetFile,
@@ -112,27 +130,28 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
         continue
       }
 
-      // assets/* tree → preserve structure.
+      // assets/* tree → preserve structure (under <projectDir>/site/assets/).
       if (srcRel.startsWith('assets/') || srcRel === 'assets') {
-        const dst = join(projectDir, entryRel)
+        const dst = join(site, entryRel)
         await fsp.mkdir(dirname(dst), { recursive: true })
         await fsp.copyFile(srcEntry, dst)
         continue
       }
 
-      // Top-level loose images / fonts / videos → assets/<kind>/<name> so
+      // Top-level loose images / fonts / videos → site/assets/<kind>/<name> so
       // the Asset Manager surfaces them automatically.
       const kind = guessAssetKind(ext)
       if (kind) {
-        const dst = join(projectDir, 'assets', kind, entry.name)
+        const dst = join(site, 'assets', kind, entry.name)
         await fsp.copyFile(srcEntry, dst)
         continue
       }
 
-      // Anything else at top level (txt, json, etc.) — copy as-is so user's
-      // existing .htaccess / favicon.ico / robots.txt survive.
+      // Anything else at top level (txt, json, etc.) — copy into site/ so
+      // the user's existing .htaccess / favicon.ico / robots.txt survive
+      // and ship with the deployable web content.
       if (!srcRel) {
-        await fsp.copyFile(srcEntry, join(projectDir, entry.name))
+        await fsp.copyFile(srcEntry, join(site, entry.name))
       }
     }
   }
@@ -141,7 +160,7 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
   if (pages.length === 0) {
     // Empty project gets a blank index so the canvas isn't a void.
     const idx = renderBlankIndex(name)
-    await fsp.writeFile(join(projectDir, 'pages', 'index.html'), idx, 'utf8')
+    await fsp.writeFile(join(site, 'pages', 'index.html'), idx, 'utf8')
     pages.push({
       name: 'index', file: 'pages/index.html', templateName: null, regions: {},
       head: { title: name, description: '', customMeta: [], customLinks: [], customScripts: [] }
@@ -149,7 +168,7 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
   }
 
   if (!globalCSSContent) globalCSSContent = '/* Project-global custom CSS */\n'
-  await fsp.writeFile(join(projectDir, 'style.css'), globalCSSContent, 'utf8')
+  await fsp.writeFile(join(site, 'style.css'), globalCSSContent, 'utf8')
 
   const now = new Date().toISOString()
   const manifest = {
@@ -206,15 +225,16 @@ function guessAssetKind(ext) {
 
 export async function createProject({ targetPath, name, templateId = 'blank' }) {
   const projectDir = dirname(targetPath)
+  const site = siteDir(projectDir)
   await fsp.mkdir(projectDir, { recursive: true })
-  await fsp.mkdir(join(projectDir, 'pages'), { recursive: true })
-  await fsp.mkdir(join(projectDir, 'assets', 'images'), { recursive: true })
-  await fsp.mkdir(join(projectDir, 'assets', 'fonts'), { recursive: true })
-  await fsp.mkdir(join(projectDir, 'assets', 'videos'), { recursive: true })
+  await fsp.mkdir(join(site, 'pages'), { recursive: true })
+  await fsp.mkdir(join(site, 'assets', 'images'), { recursive: true })
+  await fsp.mkdir(join(site, 'assets', 'fonts'), { recursive: true })
+  await fsp.mkdir(join(site, 'assets', 'videos'), { recursive: true })
 
   const indexHtml = renderBlankIndex(name)
-  await fsp.writeFile(join(projectDir, 'pages', 'index.html'), indexHtml, 'utf8')
-  await fsp.writeFile(join(projectDir, 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
+  await fsp.writeFile(join(site, 'pages', 'index.html'), indexHtml, 'utf8')
+  await fsp.writeFile(join(site, 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
 
   const now = new Date().toISOString()
   const manifest = {
@@ -267,27 +287,50 @@ export async function loadProject(manifestPath) {
   }
 
   const projectDir = dirname(manifestPath)
+  const site = siteDir(projectDir)
+
+  // Old-layout detection: if there's no site/ subdir but there IS a sibling
+  // pages/ next to the manifest, this is a pre-v0.0.2-alpha.2 project.
+  // Refuse cleanly with a path the user can act on instead of failing
+  // mid-readFile with a confusing ENOENT.
+  try { await fsp.access(site) }
+  catch {
+    try {
+      await fsp.access(join(projectDir, 'pages'))
+      throw new Error(
+        `Old project layout detected (pages/ at project root). ` +
+        `As of v0.0.2-alpha.2 web content lives in <project>/site/. ` +
+        `Recreate the project or move pages/ + assets/ + style.css into a site/ subdirectory.`
+      )
+    } catch (probe) {
+      if (/Old project layout/.test(probe.message)) throw probe
+      // Neither site/ nor pages/ — likely a fresh manifest pointing at
+      // missing files. Let the per-page readFile below produce its own
+      // ENOENT.
+    }
+  }
+
   const pages = await Promise.all(
     manifest.pages.map(async page => {
-      const html = await fsp.readFile(join(projectDir, page.file), 'utf8')
+      const html = await fsp.readFile(join(site, page.file), 'utf8')
       return { ...page, html }
     })
   )
   const templates = await Promise.all(
     (manifest.templates || []).map(async tpl => {
-      const html = await fsp.readFile(join(projectDir, tpl.file), 'utf8')
+      const html = await fsp.readFile(join(site, tpl.file), 'utf8')
       return { ...tpl, html }
     })
   )
   const libraryItems = await Promise.all(
     (manifest.libraryItems || []).map(async item => {
-      const html = await fsp.readFile(join(projectDir, item.file), 'utf8')
+      const html = await fsp.readFile(join(site, item.file), 'utf8')
       return { ...item, html }
     })
   )
   let globalCSS = ''
   if (manifest.globalCSS) {
-    try { globalCSS = await fsp.readFile(join(projectDir, manifest.globalCSS), 'utf8') }
+    try { globalCSS = await fsp.readFile(join(site, manifest.globalCSS), 'utf8') }
     catch { /* missing style.css is OK */ }
   }
 
@@ -309,23 +352,25 @@ export async function loadProject(manifestPath) {
  */
 export async function saveProject(project) {
   const { manifestPath, projectDir, manifest, pages, templates = [], libraryItems = [], snippets = [], globalCSS } = project
+  const site = siteDir(projectDir)
   const now = new Date().toISOString()
 
-  // Write each page's html to its sibling file
+  // Write each page's html to its file inside site/. Manifest paths stay
+  // relative-to-site; the site/ prefix is a property of the disk layout.
   for (const page of pages) {
     const file = page.file || `pages/${page.name}.html`
-    await writeAtomic(join(projectDir, file), page.html ?? '')
+    await writeAtomic(join(site, file), page.html ?? '')
   }
   for (const tpl of templates) {
     const file = tpl.file || `templates/${tpl.name}.html`
-    await writeAtomic(join(projectDir, file), tpl.html ?? '')
+    await writeAtomic(join(site, file), tpl.html ?? '')
   }
   for (const item of libraryItems) {
     const file = item.file || `library/${item.id}.html`
-    await writeAtomic(join(projectDir, file), item.html ?? '')
+    await writeAtomic(join(site, file), item.html ?? '')
   }
   if (manifest.globalCSS && globalCSS !== undefined) {
-    await writeAtomic(join(projectDir, manifest.globalCSS), globalCSS)
+    await writeAtomic(join(site, manifest.globalCSS), globalCSS)
   }
 
   // Strip per-page html from manifest before writing. Snippets are inline in
@@ -396,9 +441,9 @@ export async function exportProject(project, outputDir) {
     await fsp.writeFile(join(outputDir, 'css', 'style.css'), project.globalCSS, 'utf8')
   }
 
-  // Copy project assets folder
+  // Copy project assets folder (sourced from site/assets/)
   try {
-    await fsp.cp(join(project.projectDir, 'assets'), join(outputDir, 'assets'), { recursive: true })
+    await fsp.cp(join(siteDir(project.projectDir), 'assets'), join(outputDir, 'assets'), { recursive: true })
   } catch {}
 
   // Render each page (v0.0.1: pages standalone; v0.0.2+ resolves templates/library)

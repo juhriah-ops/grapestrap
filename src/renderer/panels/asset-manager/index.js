@@ -56,10 +56,10 @@ export function renderAssetManager(target) {
   eventBus.on('assets:changed',  () => refreshList())
 
   // The chokidar-backed file watcher in main re-broadcasts add/delete events
-  // for everything in the project. Filter to assets/* and trigger a reload
-  // on those.
-  window.grapestrap?.watcher?.onAdded?.(p => { if (p.startsWith('assets/')) refreshList() })
-  window.grapestrap?.watcher?.onDeleted?.(p => { if (p.startsWith('assets/')) refreshList() })
+  // for everything in the project. Filter to site/assets/* and trigger a
+  // reload on those (the watcher reports paths relative to projectDir).
+  window.grapestrap?.watcher?.onAdded?.(p => { if (p.startsWith('site/assets/')) refreshList() })
+  window.grapestrap?.watcher?.onDeleted?.(p => { if (p.startsWith('site/assets/')) refreshList() })
 }
 
 async function refreshList() {
@@ -104,8 +104,10 @@ function paint() {
 
 function renderTile(kind, name) {
   const projectDir = projectState.current?.projectDir || ''
+  // Path stored in HTML stays relative-to-site (matches the deployable layout);
+  // preview URL points at <projectDir>/site/assets/<kind>/<name> on disk.
   const relPath = `assets/${kind}/${name}`
-  const absUrl = projectDir ? `file://${projectDir}/${relPath}` : relPath
+  const absUrl = projectDir ? `file://${projectDir}/site/${relPath}` : relPath
   const isImage = kind === 'images'
   return `
     <div class="gstrap-am-tile" data-asset-kind="${kind}" data-asset-name="${escAttr(name)}"
@@ -116,7 +118,7 @@ function renderTile(kind, name) {
           : `<span class="gstrap-am-tile-glyph">${kind === 'fonts' ? 'A' : '▶'}</span>`}
       </div>
       <div class="gstrap-am-tile-name">${escHtml(name)}</div>
-      <button class="gstrap-am-tile-x" data-asset-delete="${escAttr(relPath)}" title="Delete">×</button>
+      <button class="gstrap-am-tile-x" data-asset-delete="${escAttr('site/' + relPath)}" title="Delete">×</button>
     </div>
   `
 }

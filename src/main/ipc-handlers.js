@@ -65,9 +65,30 @@ export function registerIpcHandlers({ pluginRegistry }) {
 
   // ─── Projects ──────────────────────────────────────────────────────────────
   ipcMain.handle('project:new', async (_e, { name, location }) => {
-    const target = location || (await pickNewProjectPath(name))
-    if (!target) return null
-    const result = await createProject({ targetPath: target, name })
+    // `location` is the full manifest path. When omitted, we ask the user
+    // for a PARENT folder (not a save-as path), then create a new
+    // <slug>/ subfolder inside it and put the .gstrap there. This matches
+    // the v0.0.2-alpha.2 layout: one folder per project, manifest at root,
+    // site/ alongside.
+    let target = location
+    if (!target) {
+      const parent = await pickNewProjectParent()
+      if (!parent) return null
+      const slug = (name || 'project').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project'
+      const projectFolder = join(parent, slug)
+      try {
+        const entries = await fsp.readdir(projectFolder).catch(() => null)
+        if (entries && entries.length > 0) {
+          throw new Error(`Folder "${slug}" already exists in that location and isn't empty.`)
+        }
+      } catch (err) {
+        if (!/already exists/.test(err.message)) throw err
+        else throw err
+      }
+      await fsp.mkdir(projectFolder, { recursive: true })
+      target = join(projectFolder, `${slug}.gstrap`)
+    }
+    await createProject({ targetPath: target, name })
     await bindProjectWatcher(target)
     log.info(`Created project: ${target}`)
     return await loadProject(target)
@@ -86,8 +107,19 @@ export function registerIpcHandlers({ pluginRegistry }) {
     const sourceDir = opts?.sourceDir || (await pickImportSourceDir())
     if (!sourceDir) return null
     const suggestedName = opts?.name || sourceDir.split(/[\\/]/).filter(Boolean).pop() || 'Imported'
-    const targetPath = opts?.targetPath || (await pickNewProjectPath(suggestedName))
-    if (!targetPath) return null
+    let targetPath = opts?.targetPath
+    if (!targetPath) {
+      const parent = await pickNewProjectParent()
+      if (!parent) return null
+      const slug = suggestedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'imported'
+      const projectFolder = join(parent, slug)
+      const entries = await fsp.readdir(projectFolder).catch(() => null)
+      if (entries && entries.length > 0) {
+        throw new Error(`Folder "${slug}" already exists in that location and isn't empty.`)
+      }
+      await fsp.mkdir(projectFolder, { recursive: true })
+      targetPath = join(projectFolder, `${slug}.gstrap`)
+    }
     await importDirectory({ sourceDir, targetPath, name: suggestedName })
     await bindProjectWatcher(targetPath)
     log.info(`Imported directory ${sourceDir} → ${targetPath}`)
@@ -99,9 +131,23 @@ export function registerIpcHandlers({ pluginRegistry }) {
   })
 
   ipcMain.handle('project:save-as', async (_e, project) => {
-    const target = await pickNewProjectPath(project.manifest?.metadata?.name || 'Untitled')
-    if (!target) return null
-    const reseated = { ...project, manifestPath: target, projectDir: target.replace(/\.gstrap$/, '') }
+    // Save-as in the v0.0.2-alpha.2 layout: pick a parent folder, create a
+    // new <slug>/ inside it, write the manifest + site/ tree there. The
+    // existing project's projectDir is the source for any unwritten
+    // assets the user might want preserved (deferred — for v0.0.2 the
+    // save flushes pages/templates/library/globalCSS only).
+    const parent = await pickNewProjectParent()
+    if (!parent) return null
+    const name = project.manifest?.metadata?.name || 'Untitled'
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project'
+    const projectFolder = join(parent, slug)
+    const entries = await fsp.readdir(projectFolder).catch(() => null)
+    if (entries && entries.length > 0) {
+      throw new Error(`Folder "${slug}" already exists in that location and isn't empty.`)
+    }
+    await fsp.mkdir(projectFolder, { recursive: true })
+    const target = join(projectFolder, `${slug}.gstrap`)
+    const reseated = { ...project, manifestPath: target, projectDir: projectFolder }
     return saveProject(reseated)
   })
 
@@ -144,7 +190,7 @@ export function registerIpcHandlers({ pluginRegistry }) {
   ipcMain.handle('file:list',       (_e, p)        => listDir(p))
   ipcMain.handle('file:exists',     (_e, p)        => exists(p))
 
-  // ─── Image-import helper: open file picker, copy to assets/images/ ─────────
+  // ─── Image-import helper: open file picker, copy to site/assets/images/ ──
   ipcMain.handle('file:import-image', async () => {
     const result = await dialog.showOpenDialog({
       title: 'Import image',
@@ -152,7 +198,7 @@ export function registerIpcHandlers({ pluginRegistry }) {
       filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return null
-    return copyAsset(result.filePaths[0], 'assets/images')
+    return copyAsset(result.filePaths[0], 'site/assets/images')
   })
 
   // ─── Asset Manager — multi-kind file import + listing ──────────────────────
@@ -168,7 +214,7 @@ export function registerIpcHandlers({ pluginRegistry }) {
     if (result.canceled || result.filePaths.length === 0) return []
     const added = []
     for (const src of result.filePaths) {
-      const r = await copyAsset(src, `assets/${kind}`)
+      const r = await copyAsset(src, `site/assets/${kind}`)
       added.push(r.path)
     }
     return added
@@ -178,7 +224,7 @@ export function registerIpcHandlers({ pluginRegistry }) {
     const out = { images: [], fonts: [], videos: [] }
     for (const kind of Object.keys(out)) {
       try {
-        const entries = await listDir(`assets/${kind}`)
+        const entries = await listDir(`site/assets/${kind}`)
         out[kind] = entries.filter(e => e.type === 'file').map(e => e.name)
       } catch { /* dir doesn't exist yet */ }
     }
@@ -224,6 +270,19 @@ async function pickOpenProjectPath() {
     title: 'Open GrapeStrap project',
     properties: ['openFile'],
     filters: [{ name: 'GrapeStrap project', extensions: ['gstrap'] }]
+  }
+  const result = parent
+    ? await dialog.showOpenDialog(parent, opts)
+    : await dialog.showOpenDialog(opts)
+  return (result.canceled || result.filePaths.length === 0) ? null : result.filePaths[0]
+}
+
+async function pickNewProjectParent() {
+  const parent = parentWindow()
+  const opts = {
+    title: 'Choose where to create the project folder',
+    properties: ['openDirectory', 'createDirectory'],
+    buttonLabel: 'Create here'
   }
   const result = parent
     ? await dialog.showOpenDialog(parent, opts)
