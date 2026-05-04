@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.1] — 2026-05-04 (patch)
+
+### Added
+- **Asset Manager panel** (`panels/asset-manager/`). Third tab in the left-column GL stack alongside Project + Library. Three sections — Images / Fonts / Videos — each listing files in `assets/<kind>/` with per-section "+ Add" file-picker (filtered by kind) that copies into the project tree. Image tiles render thumbnails via `file://<projectDir>/assets/images/<name>` URLs; clicking an image tile inserts `<img src="assets/images/<name>" class="img-fluid">` at the canvas selection (anchor-aware placement). Per-tile × delete unlinks. Watcher-driven refresh so dropping a file into `assets/` from outside the app surfaces it without restart.
+- **Live image preview via `<base href>`**. The canvas iframe now carries a `<base href="file://<projectDir>/" data-grapestrap-base>` injected at `canvas:frame:load` and refreshed on `project:opened` / `project:closed`. Relative `assets/images/...` paths in saved HTML resolve at preview time without the renderer rewriting `src` attributes. The base never lands on disk — `editor.getHtml()` is body-only.
+- **File → Import Folder…**. New menu item + `cmdImportFolder` + `project:import-directory` IPC. Pick a source directory, pick a target `.gstrap` manifest path, and the importer copies the source tree into a new project: top-level / `pages/` HTML files become `pages/<name>.html` (with `<body>` extraction + title/description capture into `page.head` for full-document inputs); `assets/` tree preserved verbatim; loose top-level images / fonts / videos are routed into `assets/<kind>/`; top-level `style.css` becomes the project's globalCSS. Originals are NEVER modified — import = copy.
+- Two new Playwright specs: Asset Manager click-insert end-to-end with `<base href>` verification; Import Folder scan-and-open with a representative source dir (full-document index.html + body-only about.html + assets/images/foo.png + style.css). 31 → 33 specs green.
+
+### Fixed (carried from 2026-05-04 follow-up after v0.0.2-alpha.0 cut)
+- **Plugin compatibility regression after the v0.0.2 version bump.** All five bundled plugin manifests declared `grapestrapVersion: "^0.0.1"`, which under semver's caret rule for 0.0.x means `>=0.0.1 <0.0.2` — the version bump made every plugin fail the discovery filter and the renderer found zero plugins. Widened to `>=0.0.1 <0.1.0` (forward-compat across the v0.0.x and v0.1.x lines). Reported on nola1; broke 8 specs that had been passing.
+- **DOM tree / Properties / Library / Project panels couldn't scroll past the viewport.** Hosts were `height: 100%; overflow: auto` but Golden Layout's `.lm_content` parent had no explicit height in CSS (only `position: relative`), so `height: 100%` resolved to whatever the children stacked to. Changed each host to `position: absolute; inset: 0` inside the `lm_content` parent — `overflow-y: auto` now has a definite area. Reported on nola1 alongside the plugin regression.
+
 ## [v0.0.2-alpha] — 2026-05-04
 
 Phase 2 of the v4 build plan: Multi-Page editing primitives + Dreamweaver-parity tools + Style Manager polish. Closes the v0.0.1 walking-skeleton gaps and lights up every Phase 2 must-ship feature.

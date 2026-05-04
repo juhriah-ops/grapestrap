@@ -23,6 +23,7 @@ import { renderCanvas }      from '../panels/canvas/index.js'
 import { renderProperties }  from '../panels/properties-side/index.js'
 import { renderCustomCss }   from '../panels/custom-css/index.js'
 import { renderLibraryItems } from '../panels/library-items/index.js'
+import { renderAssetManager } from '../panels/asset-manager/index.js'
 import { relayoutAllMonaco } from '../editor/monaco-init.js'
 import { getEditor }         from '../editor/grapesjs-init.js'
 
@@ -45,6 +46,8 @@ const DEFAULT_CONFIG = {
           { type: 'component', componentType: 'file-manager',   title: 'Project',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
           { type: 'component', componentType: 'library-items',  title: 'Library',
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
+          { type: 'component', componentType: 'asset-manager',  title: 'Assets',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       },
@@ -83,6 +86,7 @@ export function initGoldenLayout(host) {
 
   layout.registerComponentFactoryFunction('file-manager',   container => renderFileManager(container.element))
   layout.registerComponentFactoryFunction('library-items',  container => renderLibraryItems(container.element))
+  layout.registerComponentFactoryFunction('asset-manager',  container => renderAssetManager(container.element))
   layout.registerComponentFactoryFunction('dom-tree',       container => renderDomTree(container.element))
   layout.registerComponentFactoryFunction('canvas',         container => renderCanvas(container.element))
   layout.registerComponentFactoryFunction('properties',     container => renderProperties(container.element))

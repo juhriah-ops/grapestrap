@@ -33,6 +33,7 @@ const grapestrap = {
   project: {
     new:           (config)         => ipcRenderer.invoke('project:new', config),
     open:          (path)           => ipcRenderer.invoke('project:open', path),
+    importDir:     (opts)           => ipcRenderer.invoke('project:import-directory', opts),
     save:          (project)        => ipcRenderer.invoke('project:save', project),
     saveAs:        (project)        => ipcRenderer.invoke('project:save-as', project),
     export:        (project, dir)   => ipcRenderer.invoke('project:export', project, dir),
@@ -50,7 +51,9 @@ const grapestrap = {
     copyAsset:   (src, sub)    => ipcRenderer.invoke('file:copy-asset', src, sub),
     list:        (path)        => ipcRenderer.invoke('file:list', path),
     exists:      (path)        => ipcRenderer.invoke('file:exists', path),
-    importImage: ()            => ipcRenderer.invoke('file:import-image')
+    importImage: ()            => ipcRenderer.invoke('file:import-image'),
+    importAsset: (kind)        => ipcRenderer.invoke('file:import-asset', kind),
+    listAssets:  ()            => ipcRenderer.invoke('file:list-assets')
   },
 
   // ─── Watcher events from main → renderer ───────────────────────────────────

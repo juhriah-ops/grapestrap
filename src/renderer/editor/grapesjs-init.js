@@ -117,6 +117,7 @@ export function initGrapesJS(container) {
     const doc = frameEl?.contentDocument
     if (!doc) return
     syncGlobalCssIntoCanvas(doc)
+    syncBaseHrefIntoCanvas(doc)
     doc.addEventListener('contextmenu', evt => {
       evt.preventDefault()
       // Synthesise a click on the same target so GrapesJS selects what the
@@ -169,8 +170,8 @@ export function initGrapesJS(container) {
   // as a <style> tag so live preview reflects pseudo-class rules typed in the
   // Style Manager AND so the Cascade view can read them via document.styleSheets.
   // canvas:frame:load sets the initial sync; project lifecycle keeps it fresh.
-  eventBus.on('project:opened',     () => syncGlobalCssIntoCanvas())
-  eventBus.on('project:closed',     () => syncGlobalCssIntoCanvas())
+  eventBus.on('project:opened',     () => { syncGlobalCssIntoCanvas(); syncBaseHrefIntoCanvas() })
+  eventBus.on('project:closed',     () => { syncGlobalCssIntoCanvas(); syncBaseHrefIntoCanvas() })
   eventBus.on('project:css-changed',() => syncGlobalCssIntoCanvas())
 
   log.info('GrapesJS initialized')
@@ -193,6 +194,34 @@ function syncGlobalCssIntoCanvas(docArg) {
     doc.head.appendChild(tag)
   }
   tag.textContent = projectState.current?.globalCSS || ''
+}
+
+// Inject (or update) a `<base href="file://<projectDir>/">` so relative asset
+// paths in the canvas html (e.g. `assets/images/foo.png` written by the
+// Asset Manager or imported pages) resolve to disk for live preview without
+// rewriting srcs. The base only lives inside the canvas iframe — saved html
+// comes from editor.getHtml() which is body-only, so no `<base>` ever lands
+// on disk. Tag is identified by `data-grapestrap-base`.
+function syncBaseHrefIntoCanvas(docArg) {
+  const doc = docArg || editor?.Canvas?.getFrameEl()?.contentDocument
+  if (!doc) return
+  const projectDir = projectState.current?.projectDir
+  let tag = doc.querySelector('base[data-grapestrap-base]')
+  if (!projectDir) {
+    if (tag) tag.remove()
+    return
+  }
+  if (!tag) {
+    tag = doc.createElement('base')
+    tag.setAttribute('data-grapestrap-base', '')
+    // <base> must be the first head element to apply to subsequent resources;
+    // the GrapesJS frame's bundled BS / FA links are created BEFORE this fires
+    // so they're absolute already (./bootstrap/css/...) and unaffected.
+    doc.head.insertBefore(tag, doc.head.firstChild)
+  }
+  // Trailing slash matters — without it, relative paths resolve as if from
+  // the parent directory of projectDir.
+  tag.setAttribute('href', `file://${projectDir.replace(/\/?$/, '/')}`)
 }
 
 export function getEditor() {

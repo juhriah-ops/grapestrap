@@ -22,6 +22,7 @@ export function buildMenu({ onAction }) {
       { label: 'New Project…',       accelerator: 'CmdOrCtrl+N',      click: send('file:new-project') },
       { label: 'New Page…',          accelerator: 'CmdOrCtrl+Shift+N', click: send('file:new-page') },
       { label: 'Open Project…',      accelerator: 'CmdOrCtrl+O',      click: send('file:open-project') },
+      { label: 'Import Folder…',                                       click: send('file:import-folder') },
       { label: 'Open Recent', role: 'recentDocuments', submenu: [{ role: 'clearRecentDocuments' }] },
       { type: 'separator' },
       { label: 'Save',               accelerator: 'CmdOrCtrl+S',       click: send('file:save') },

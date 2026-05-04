@@ -21,10 +21,20 @@ import {
 } from './file-operations.js'
 import {
   createProject, loadProject, saveProject,
-  exportProject, writeRecovery, readRecovery
+  exportProject, writeRecovery, readRecovery,
+  importDirectory
 } from './project-manager.js'
 
 let pluginRegistryRef = null
+
+// Asset kind → file picker filter. The kind doubles as the subfolder name
+// under assets/ (e.g. 'images' → assets/images/foo.png). Plugins can extend
+// asset kinds in v0.0.3 by registering custom filters.
+const ASSET_KIND_FILTERS = {
+  images: { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'avif'] },
+  fonts:  { name: 'Fonts',  extensions: ['woff', 'woff2', 'ttf', 'otf', 'eot'] },
+  videos: { name: 'Videos', extensions: ['mp4', 'webm', 'mov', 'm4v', 'ogg'] }
+}
 
 export function registerIpcHandlers({ pluginRegistry }) {
   pluginRegistryRef = pluginRegistry
@@ -70,6 +80,18 @@ export function registerIpcHandlers({ pluginRegistry }) {
     await bindProjectWatcher(target)
     log.info(`Opened project: ${target}`)
     return project
+  })
+
+  ipcMain.handle('project:import-directory', async (_e, opts) => {
+    const sourceDir = opts?.sourceDir || (await pickImportSourceDir())
+    if (!sourceDir) return null
+    const suggestedName = opts?.name || sourceDir.split(/[\\/]/).filter(Boolean).pop() || 'Imported'
+    const targetPath = opts?.targetPath || (await pickNewProjectPath(suggestedName))
+    if (!targetPath) return null
+    await importDirectory({ sourceDir, targetPath, name: suggestedName })
+    await bindProjectWatcher(targetPath)
+    log.info(`Imported directory ${sourceDir} → ${targetPath}`)
+    return await loadProject(targetPath)
   })
 
   ipcMain.handle('project:save', async (_e, project) => {
@@ -133,6 +155,36 @@ export function registerIpcHandlers({ pluginRegistry }) {
     return copyAsset(result.filePaths[0], 'assets/images')
   })
 
+  // ─── Asset Manager — multi-kind file import + listing ──────────────────────
+  // The kind argument determines BOTH the dialog filter and the target subdir.
+  // Returns the list of relative paths added (so the panel can paint optimistic).
+  ipcMain.handle('file:import-asset', async (_e, kind) => {
+    const filter = ASSET_KIND_FILTERS[kind] || ASSET_KIND_FILTERS.images
+    const result = await dialog.showOpenDialog({
+      title: `Import ${kind}`,
+      properties: ['openFile', 'multiSelections'],
+      filters: [filter]
+    })
+    if (result.canceled || result.filePaths.length === 0) return []
+    const added = []
+    for (const src of result.filePaths) {
+      const r = await copyAsset(src, `assets/${kind}`)
+      added.push(r.path)
+    }
+    return added
+  })
+
+  ipcMain.handle('file:list-assets', async () => {
+    const out = { images: [], fonts: [], videos: [] }
+    for (const kind of Object.keys(out)) {
+      try {
+        const entries = await listDir(`assets/${kind}`)
+        out[kind] = entries.filter(e => e.type === 'file').map(e => e.name)
+      } catch { /* dir doesn't exist yet */ }
+    }
+    return out
+  })
+
   // ─── External shell actions ────────────────────────────────────────────────
   ipcMain.handle('shell:open-external', (_e, url) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)
@@ -172,6 +224,18 @@ async function pickOpenProjectPath() {
     title: 'Open GrapeStrap project',
     properties: ['openFile'],
     filters: [{ name: 'GrapeStrap project', extensions: ['gstrap'] }]
+  }
+  const result = parent
+    ? await dialog.showOpenDialog(parent, opts)
+    : await dialog.showOpenDialog(opts)
+  return (result.canceled || result.filePaths.length === 0) ? null : result.filePaths[0]
+}
+
+async function pickImportSourceDir() {
+  const parent = parentWindow()
+  const opts = {
+    title: 'Import folder as GrapeStrap project',
+    properties: ['openDirectory']
   }
   const result = parent
     ? await dialog.showOpenDialog(parent, opts)

@@ -22,6 +22,188 @@ import { app } from 'electron'
 const MANIFEST_VERSION = '1.0'
 const FORMAT_TAG = 'grapestrap-project'
 
+/**
+ * Import an existing static-site directory as a new GrapeStrap project.
+ *
+ * Copies the source tree into a new project directory (the parent of
+ * targetPath) and generates a `.gstrap` manifest. We deliberately don't edit
+ * the source — copying first avoids a footgun where the user opens their
+ * deployed site, hits Save, and discovers GrapeStrap re-wrote every HTML to
+ * body-only form (until full-document round-trip lands in v0.0.3).
+ *
+ * Discovery rules:
+ *   - HTML files at the top level OR under `pages/` become pages. Names
+ *     come from the file basename (sans extension).
+ *   - `assets/` subtree (images / fonts / videos / anything) is preserved
+ *     verbatim. Top-level loose images are also moved into
+ *     `assets/images/<name>` so the Asset Manager picks them up.
+ *   - A top-level `style.css` becomes the project's globalCSS.
+ *   - Hidden dotfiles, node_modules, .git, .gstrap, recovery files are
+ *     skipped.
+ *
+ * Body extraction: if an imported HTML is a full document (has
+ * `<html>`/`<head>`/`<body>`), we extract the body's inner HTML for the
+ * page's stored html. The page's `head` metadata captures title +
+ * description so a v0.0.3 export round-trip can re-wrap. Lossy by design
+ * for v0.0.2.
+ */
+export async function importDirectory({ sourceDir, targetPath, name }) {
+  const projectDir = dirname(targetPath)
+  await fsp.mkdir(projectDir, { recursive: true })
+  await fsp.mkdir(join(projectDir, 'pages'), { recursive: true })
+  await fsp.mkdir(join(projectDir, 'assets', 'images'), { recursive: true })
+  await fsp.mkdir(join(projectDir, 'assets', 'fonts'),  { recursive: true })
+  await fsp.mkdir(join(projectDir, 'assets', 'videos'), { recursive: true })
+
+  const pages = []
+  let globalCSSContent = ''
+
+  const SKIP_DIRS = new Set(['.git', '.gstrap', '.svn', 'node_modules', '__MACOSX'])
+
+  // Walk the source directory tree, copying assets and collecting HTML.
+  async function walk(srcRel) {
+    const srcAbs = join(sourceDir, srcRel)
+    const entries = await fsp.readdir(srcAbs, { withFileTypes: true })
+    for (const entry of entries) {
+      const entryRel = srcRel ? `${srcRel}/${entry.name}` : entry.name
+      if (entry.name.startsWith('.')) continue
+      if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue
+
+      const srcEntry = join(sourceDir, entryRel)
+      if (entry.isDirectory()) {
+        // Recurse — copy assets/* mirroring source structure.
+        await walk(entryRel)
+        continue
+      }
+      if (!entry.isFile()) continue
+
+      const ext = extname(entry.name).toLowerCase()
+      // HTML at top level → pages/. HTML in pages/ → pages/. HTML elsewhere
+      // (e.g. templates/) → preserved as a page with its own filename to
+      // avoid collisions, prefixed by parent dir.
+      if (ext === '.html' || ext === '.htm') {
+        const baseName = basename(entry.name, ext)
+        const isTopLevel = !srcRel
+        const isInPages  = srcRel === 'pages'
+        let pageName = baseName
+        if (!isTopLevel && !isInPages) pageName = `${srcRel.replace(/\//g, '-')}-${baseName}`
+        // Avoid collisions if multiple files map to the same name.
+        let unique = pageName
+        let n = 1
+        while (pages.find(p => p.name === unique)) unique = `${pageName}-${++n}`
+
+        const raw = await fsp.readFile(srcEntry, 'utf8')
+        const { body, title, description } = extractBody(raw)
+        const targetFile = `pages/${unique}.html`
+        await fsp.writeFile(join(projectDir, targetFile), body, 'utf8')
+        pages.push({
+          name: unique,
+          file: targetFile,
+          templateName: null,
+          regions: {},
+          head: { title: title || unique, description: description || '', customMeta: [], customLinks: [], customScripts: [] }
+        })
+        continue
+      }
+
+      // style.css at top level → project globalCSS.
+      if (!srcRel && entry.name.toLowerCase() === 'style.css') {
+        globalCSSContent = await fsp.readFile(srcEntry, 'utf8')
+        continue
+      }
+
+      // assets/* tree → preserve structure.
+      if (srcRel.startsWith('assets/') || srcRel === 'assets') {
+        const dst = join(projectDir, entryRel)
+        await fsp.mkdir(dirname(dst), { recursive: true })
+        await fsp.copyFile(srcEntry, dst)
+        continue
+      }
+
+      // Top-level loose images / fonts / videos → assets/<kind>/<name> so
+      // the Asset Manager surfaces them automatically.
+      const kind = guessAssetKind(ext)
+      if (kind) {
+        const dst = join(projectDir, 'assets', kind, entry.name)
+        await fsp.copyFile(srcEntry, dst)
+        continue
+      }
+
+      // Anything else at top level (txt, json, etc.) — copy as-is so user's
+      // existing .htaccess / favicon.ico / robots.txt survive.
+      if (!srcRel) {
+        await fsp.copyFile(srcEntry, join(projectDir, entry.name))
+      }
+    }
+  }
+  await walk('')
+
+  if (pages.length === 0) {
+    // Empty project gets a blank index so the canvas isn't a void.
+    const idx = renderBlankIndex(name)
+    await fsp.writeFile(join(projectDir, 'pages', 'index.html'), idx, 'utf8')
+    pages.push({
+      name: 'index', file: 'pages/index.html', templateName: null, regions: {},
+      head: { title: name, description: '', customMeta: [], customLinks: [], customScripts: [] }
+    })
+  }
+
+  if (!globalCSSContent) globalCSSContent = '/* Project-global custom CSS */\n'
+  await fsp.writeFile(join(projectDir, 'style.css'), globalCSSContent, 'utf8')
+
+  const now = new Date().toISOString()
+  const manifest = {
+    version: MANIFEST_VERSION,
+    format: FORMAT_TAG,
+    metadata: {
+      name,
+      created: now,
+      modified: now,
+      lastSavedAt: now,
+      appVersion: app.getVersion(),
+      importedFrom: sourceDir
+    },
+    pages,
+    templates: [],
+    libraryItems: [],
+    snippets: [],
+    globalCSS: 'style.css',
+    palette: [],
+    assets: [],
+    vendorDeps: [],
+    plugins: [],
+    preferences: {
+      exportMinify: false,
+      exportBundleBootstrap: true,
+      exportIncludeComments: false
+    }
+  }
+  await fsp.writeFile(targetPath, JSON.stringify(manifest, null, 2), 'utf8')
+  return { manifest, projectPath: targetPath }
+}
+
+function extractBody(html) {
+  // Cheap regex extraction — no DOM in main process. Captures <title> and
+  // <meta name=description> from head, returns body innerHTML if a body tag
+  // exists; else the whole html as-is (treat as already-fragmented).
+  const out = { body: html, title: '', description: '' }
+  const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)
+  if (titleMatch) out.title = titleMatch[1].trim()
+  const descMatch = /<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i.exec(html)
+  if (descMatch) out.description = descMatch[1]
+  const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)
+  if (bodyMatch) out.body = bodyMatch[1].trim() + '\n'
+  return out
+}
+
+function guessAssetKind(ext) {
+  const e = ext.replace(/^\./, '').toLowerCase()
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'avif', 'ico'].includes(e)) return 'images'
+  if (['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(e))                       return 'fonts'
+  if (['mp4', 'webm', 'mov', 'm4v', 'ogg'].includes(e))                         return 'videos'
+  return null
+}
+
 export async function createProject({ targetPath, name, templateId = 'blank' }) {
   const projectDir = dirname(targetPath)
   await fsp.mkdir(projectDir, { recursive: true })

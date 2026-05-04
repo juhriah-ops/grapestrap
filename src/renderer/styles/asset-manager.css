@@ -1,0 +1,129 @@
+/* GrapeStrap — Asset Manager panel.
+
+   Tab in the left-column GL stack alongside Project + Library. Three
+   sections (Images / Fonts / Videos), each a header + add-button + tile
+   grid. Image tiles render thumbnails by URL into the iframe-able
+   `file://<projectDir>/assets/...` path so previews are live without an
+   extra IPC round-trip per tile. */
+
+.gstrap-am-host {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 12px;
+  overflow-y: auto;
+}
+
+.gstrap-am-empty {
+  padding: 14px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.gstrap-am-section {
+  border-bottom: 1px solid var(--border);
+}
+.gstrap-am-section:last-child { border-bottom: none; }
+
+.gstrap-am-section-head {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+}
+.gstrap-am-section-title {
+  flex: 1;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+}
+.gstrap-am-add {
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.gstrap-am-add:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+  border-color: var(--accent);
+}
+
+.gstrap-am-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  padding: 8px;
+}
+.gstrap-am-empty-section {
+  grid-column: 1 / -1;
+  padding: 10px 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.gstrap-am-tile {
+  position: relative;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.gstrap-am-tile:hover {
+  border-color: var(--accent);
+}
+.gstrap-am-tile-media {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.gstrap-am-tile-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gstrap-am-tile-glyph {
+  font-size: 22px;
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.gstrap-am-tile-name {
+  padding: 3px 5px;
+  font-size: 10px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.gstrap-am-tile-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  line-height: 14px;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+}
+.gstrap-am-tile:hover .gstrap-am-tile-x { opacity: 1; }
+.gstrap-am-tile-x:hover { background: rgba(220, 53, 69, 0.85); }

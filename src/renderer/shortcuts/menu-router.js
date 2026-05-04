@@ -77,6 +77,7 @@ async function dispatchCommand(action) {
     case 'file:new-project':   return cmdNewProject()
     case 'file:new-page':      return cmdNewPage()
     case 'file:open-project':  return cmdOpenProject()
+    case 'file:import-folder': return cmdImportFolder()
     case 'file:save':          return cmdSave()
     case 'file:save-as':       return cmdSaveAs()
     case 'file:close-tab':     return cmdCloseTab()
@@ -146,6 +147,22 @@ async function cmdOpenProject() {
     projectState.set(project)
     if (project.pages?.[0]) pageState.open(project.pages[0].name)
     await window.grapestrap.project.addRecent(project.manifestPath, project.manifest.metadata.name)
+  }
+}
+
+async function cmdImportFolder() {
+  // Two dialogs: source folder picker, then "save manifest as…" target.
+  // The main-side handler chains them when the renderer doesn't pre-supply
+  // either path. Returns a fully-loaded project on success.
+  const project = await window.grapestrap.project.importDir()
+  if (project) {
+    projectState.set(project)
+    if (project.pages?.[0]) pageState.open(project.pages[0].name)
+    await window.grapestrap.project.addRecent(project.manifestPath, project.manifest.metadata.name)
+    eventBus.emit('toast', {
+      type: 'success',
+      message: `Imported ${project.pages.length} page(s) from ${project.manifest.metadata.importedFrom || 'folder'}.`
+    })
   }
 }
 

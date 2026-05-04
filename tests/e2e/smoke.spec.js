@@ -2032,6 +2032,148 @@ test('Color picker: opens from pseudo-state trigger, picks a swatch, writes back
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Asset Manager: lists project assets, click-inserts an image into the canvas', async () => {
+  // v0.0.2 patch — Asset Manager panel + base href preview. Verifies:
+  //   1. The Assets tab renders with three sections (Images / Fonts / Videos)
+  //      after a project is open.
+  //   2. file:list-assets returns files dropped into assets/images/ on disk.
+  //   3. Clicking an image tile inserts <img src="assets/images/foo.png">
+  //      into the canvas at the current selection.
+  //   4. The canvas iframe has a <base href> pointing at the project dir so
+  //      relative `assets/...` URLs resolve to disk for live preview.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-am-'))
+  const projectPath = join(projectDir, 'am.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Drop a tiny image into the project's assets/images/ on disk so
+  // file:list-assets surfaces it.
+  const imgPath = join(projectDir, 'assets', 'images', 'pixel.png')
+  // 1×1 transparent PNG — minimum viable for the renderer to lazy-load.
+  const png1x1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  )
+  await fsp.writeFile(imgPath, png1x1)
+
+  // ── 1. Render the asset manager (the GL stack tab is hidden behind Project,
+  //   so directly trigger the panel paint via the eventBus path it listens on.)
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('assets:changed'))
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('[data-asset-name="pixel.png"]').length > 0,
+    null, { timeout: 3_000 }
+  )
+
+  // ── 2. Verify the listing reflects what's on disk.
+  const listed = await appWindow.evaluate(() => window.grapestrap.file.listAssets())
+  expect(listed.images).toContain('pixel.png')
+
+  // ── 3. Click the tile → <img> appears in the canvas.
+  await selectFirstByTag(appWindow, 'main')
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-asset-name="pixel.png"]').click()
+  })
+  await appWindow.waitForFunction(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    return doc.querySelector('img[src="assets/images/pixel.png"]') != null
+  }, null, { timeout: 3_000 })
+
+  // ── 4. <base href> points at the project dir so the inserted img has a
+  //    resolvable absolute URL.
+  const baseInfo = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const tag = doc.querySelector('base[data-grapestrap-base]')
+    const img = doc.querySelector('img[src="assets/images/pixel.png"]')
+    return {
+      hasBase: !!tag,
+      baseHref: tag?.getAttribute('href') || '',
+      imgResolved: img?.src || ''
+    }
+  })
+  expect(baseInfo.hasBase).toBe(true)
+  expect(baseInfo.baseHref).toMatch(/^file:\/\//)
+  expect(baseInfo.imgResolved).toContain('assets/images/pixel.png')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Import folder: scans HTML + assets and opens as a project', async () => {
+  // v0.0.2 patch — file:import-folder. Verifies:
+  //   1. Pre-built source dir with index.html (full-document) + about.html
+  //      (body-only) + assets/images/foo.png is imported.
+  //   2. Resulting project has both pages registered, body extracted from
+  //      the full-document case, title captured into page.head.
+  //   3. assets/images/foo.png survives intact in the new project.
+  //   4. Originals are NOT modified (safety: import = copy).
+  const sourceDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-imp-src-'))
+  const targetDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-imp-dst-'))
+  const targetPath = join(targetDir, 'imported.gstrap')
+
+  // Build a representative static-site source.
+  await fsp.writeFile(join(sourceDir, 'index.html'),
+    '<!doctype html><html><head><title>My Site</title>' +
+    '<meta name="description" content="hello"></head>' +
+    '<body><main><h1>imported</h1></main></body></html>', 'utf8')
+  await fsp.writeFile(join(sourceDir, 'about.html'),
+    '<section class="about"><h2>about</h2></section>', 'utf8')
+  await fsp.writeFile(join(sourceDir, 'style.css'),
+    '.imported { color: rebeccapurple; }', 'utf8')
+  await fsp.mkdir(join(sourceDir, 'assets', 'images'), { recursive: true })
+  const png1x1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  )
+  await fsp.writeFile(join(sourceDir, 'assets', 'images', 'foo.png'), png1x1)
+
+  const { app, appWindow } = await launch()
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+
+  // Bypass the dialog pickers by passing both paths through the IPC directly.
+  const project = await appWindow.evaluate(opts =>
+    window.grapestrap.project.importDir(opts), { sourceDir, targetPath, name: 'imported' }
+  )
+  expect(project).toBeTruthy()
+  expect(project.pages.length).toBeGreaterThanOrEqual(2)
+
+  const pageNames = project.pages.map(p => p.name)
+  expect(pageNames).toEqual(expect.arrayContaining(['index', 'about']))
+
+  // ── 2. Index html had a <body> wrapper — body content was extracted.
+  const indexPage = project.pages.find(p => p.name === 'index')
+  expect(indexPage.html).toContain('<main>')
+  expect(indexPage.html).not.toContain('<body')
+  expect(indexPage.head.title).toBe('My Site')
+  expect(indexPage.head.description).toBe('hello')
+
+  // about.html had no body wrapper — html stays as-is.
+  const aboutPage = project.pages.find(p => p.name === 'about')
+  expect(aboutPage.html).toContain('class="about"')
+
+  // ── 3. Asset survived.
+  const assetExists = await fsp.access(join(targetDir, 'assets', 'images', 'foo.png'))
+    .then(() => true, () => false)
+  expect(assetExists).toBe(true)
+
+  // globalCSS was preserved from the source style.css.
+  expect(project.globalCSS).toContain('rebeccapurple')
+
+  // ── 4. Originals untouched.
+  const sourceIndex = await fsp.readFile(join(sourceDir, 'index.html'), 'utf8')
+  expect(sourceIndex).toContain('<!doctype html>')
+  expect(sourceIndex).toContain('My Site')
+
+  await app.close()
+  await fsp.rm(sourceDir, { recursive: true, force: true })
+  await fsp.rm(targetDir, { recursive: true, force: true })
+})
+
 test('Split view: Design and Code panes lay out side-by-side, not overlapping', async () => {
   // Reported on nola1 2026-05-04: in Split mode, the Canvas iframe paints
   // on top of the Monaco code pane — line numbers visible behind the canvas.
