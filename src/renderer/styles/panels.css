@@ -132,3 +132,22 @@
   position: absolute;
   inset: 0;
 }
+
+/* Split mode: opt out of the absolute-overlay layout that's correct for
+   single-pane modes, switch the host to a flex row, and let each pane take
+   half the width. The vertical divider doubles as a visual seam. */
+.gstrap-canvas-host.is-split {
+  display: flex;
+  flex-direction: row;
+}
+.gstrap-canvas-host.is-split .gstrap-canvas-design,
+.gstrap-canvas-host.is-split .gstrap-canvas-code {
+  position: relative;
+  inset: auto;
+  flex: 1 1 50%;
+  min-width: 0;
+  height: 100%;
+}
+.gstrap-canvas-host.is-split .gstrap-canvas-code {
+  border-left: 1px solid var(--border);
+}

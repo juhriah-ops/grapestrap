@@ -1555,6 +1555,54 @@ test('Style Manager: Cascade view lists rules from project style.css and Bootstr
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Split view: Design and Code panes lay out side-by-side, not overlapping', async () => {
+  // Reported on nola1 2026-05-04: in Split mode, the Canvas iframe paints
+  // on top of the Monaco code pane — line numbers visible behind the canvas.
+  // Root cause: .gstrap-canvas-design and .gstrap-canvas-code are both
+  // position:absolute inset:0; the .is-split CSS hook in applyViewMode was
+  // a no-op until 33b0569's follow-up landed the 50/50 flex layout.
+  // This spec asserts (a) both panes are non-zero in split mode, (b) they
+  // don't overlap — design's right edge ≤ code's left edge.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-split-'))
+  const projectPath = join(projectDir, 'split.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Switch to Split mode via the same command path the toolbar uses.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'view:mode-split')
+  })
+  await appWindow.waitForSelector('.gstrap-canvas-host.is-split', { timeout: 3_000 })
+  // Give the rAF + GL refresh a moment to settle.
+  await appWindow.waitForTimeout(200)
+
+  const rects = await appWindow.evaluate(() => {
+    const design = document.querySelector('.gstrap-canvas-design')
+    const code   = document.querySelector('.gstrap-canvas-code')
+    const d = design.getBoundingClientRect()
+    const c = code.getBoundingClientRect()
+    return {
+      design: { x: d.x, w: d.width, h: d.height, right: d.right },
+      code:   { x: c.x, w: c.width, h: c.height, left:  c.left  },
+      designHidden: design.hasAttribute('hidden'),
+      codeHidden:   code.hasAttribute('hidden')
+    }
+  })
+
+  expect(rects.designHidden).toBe(false)
+  expect(rects.codeHidden).toBe(false)
+  expect(rects.design.w).toBeGreaterThan(40)
+  expect(rects.code.w).toBeGreaterThan(40)
+  expect(rects.design.h).toBeGreaterThan(40)
+  // The two rects must NOT overlap. Design's right edge should be at or
+  // before Code's left edge (allow a 1px tolerance for the divider border).
+  expect(rects.design.right).toBeLessThanOrEqual(rects.code.left + 1)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Style Manager: pseudo-state on element with no usable selector toasts and stays Normal', async () => {
   // v0.0.2 chunk C — pickSelector returns null when an element has only
   // BS-utility classes (or no classes). The bar should refuse to switch and

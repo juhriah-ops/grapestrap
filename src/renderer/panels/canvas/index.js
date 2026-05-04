@@ -140,13 +140,19 @@ function applyViewMode(host, next, prev) {
 
   // Force a Monaco layout() once the show/hide transition is paint-stable
   // so an editor that was hidden when first created (size 0) lays out
-  // correctly the first time it becomes visible.
-  if (next === 'code' || next === 'split') {
-    requestAnimationFrame(() => {
+  // correctly the first time it becomes visible. Same rAF tick we ask
+  // GrapesJS to refresh — the canvas-design pane shrinks from 100% to 50%
+  // width on the way INTO split mode, and grows back on the way OUT, but
+  // the host stays the same size so installCanvasResizeWatcher doesn't fire.
+  // Without this explicit refresh, the GrapesJS iframe rulers and selection
+  // overlays draw at the old width and the canvas paints over the code pane.
+  requestAnimationFrame(() => {
+    if (next === 'code' || next === 'split') {
       const monaco = window.__gstrap?.pluginRegistry?.bound?.monaco
       monaco?.editor?.getEditors?.().forEach(e => { try { e.layout?.() } catch (_) {} })
-    })
-  }
+    }
+    try { getEditor()?.refresh?.() } catch (_) { /* GrapesJS not ready */ }
+  })
 
   onViewModeChange(prev, next)
 }
