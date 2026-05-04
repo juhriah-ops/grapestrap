@@ -19,6 +19,7 @@ import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-
 import { showTextPrompt } from '../dialogs/text-prompt.js'
 import { duplicateComponent, deleteComponent } from './component-actions.js'
 import { propagateLibraryItem } from '../panels/library-items/propagate.js'
+import { openPagePropertiesDialog } from '../dialogs/page-properties.js'
 import { log } from '../log.js'
 
 // Pull the currently-displayed canvas html into the active tab's source-of-
@@ -78,6 +79,7 @@ async function dispatchCommand(action) {
     case 'file:new-page':      return cmdNewPage()
     case 'file:open-project':  return cmdOpenProject()
     case 'file:import-folder': return cmdImportFolder()
+    case 'file:page-properties': return openPagePropertiesDialog()
     case 'file:save':          return cmdSave()
     case 'file:save-as':       return cmdSaveAs()
     case 'file:close-tab':     return cmdCloseTab()

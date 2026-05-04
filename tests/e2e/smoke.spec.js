@@ -2283,6 +2283,134 @@ test('Asset Manager: drag-drop multiple files writes them all to site/assets/', 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Page Properties: title/description/favicon/custom-meta land in saved manifest + exported HTML', async () => {
+  // v0.0.2 follow-up — File → Page Properties dialog. Reported on nola1
+  // as "favicon upload with meta data edit." Verifies:
+  //   1. Setting title + description + project favicon + a custom meta
+  //      tag through the dialog persists to projectState (page.head +
+  //      manifest.metadata.favicon).
+  //   2. Saving and re-loading the project on disk preserves the values.
+  //   3. Exporting the project emits a `<link rel=icon>` for the
+  //      favicon, the custom <meta name=...>, and the page <title>.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pp-'))
+  const projectPath = join(projectDir, 'pp.gstrap')
+  const outputDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pp-out-'))
+
+  // Drop a favicon into the project's site/assets/images/ before launch
+  // so the dialog's picker has something to pick.
+  // (The dialog reads from window.__gstrap_assets which the Asset Manager
+  // populates; we simulate that population below via assets:changed.)
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  await fsp.mkdir(join(projectDir, 'site', 'assets', 'images'), { recursive: true })
+  await fsp.writeFile(join(projectDir, 'site', 'assets', 'images', 'favicon.png'), Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  ))
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('assets:changed'))
+  await appWindow.waitForFunction(
+    () => (window.__gstrap_assets?.images || []).includes('favicon.png'),
+    null, { timeout: 3_000 }
+  )
+
+  // Open the Page Properties dialog.
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('command', 'file:page-properties'))
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-pp-field="title"]'),
+    null, { timeout: 3_000 }
+  )
+
+  // ── 1. Fill general tab. ────────────────────────────────────────────────
+  await appWindow.evaluate(() => {
+    const t = document.querySelector('[data-pp-field="title"]')
+    t.value = 'Hello World'
+    t.dispatchEvent(new Event('input', { bubbles: true }))
+    const d = document.querySelector('[data-pp-field="description"]')
+    d.value = 'A demo page.'
+    d.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+
+  // Switch to Favicon tab and pick the file.
+  await appWindow.evaluate(() => document.querySelector('[data-pp-tab="favicon"]').click())
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-pp-action="set-project-favicon"][data-pp-arg="assets/images/favicon.png"]'),
+    null, { timeout: 3_000 }
+  )
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-pp-action="set-project-favicon"][data-pp-arg="assets/images/favicon.png"]').click()
+  })
+
+  // Switch to Meta tab, add a custom meta.
+  await appWindow.evaluate(() => document.querySelector('[data-pp-tab="meta"]').click())
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-pp-action="meta-add"]'),
+    null, { timeout: 3_000 }
+  )
+  await appWindow.evaluate(() => document.querySelector('[data-pp-action="meta-add"]').click())
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-pp-field="meta.name"][data-pp-index="0"]'),
+    null, { timeout: 3_000 }
+  )
+  await appWindow.evaluate(() => {
+    const n = document.querySelector('[data-pp-field="meta.name"][data-pp-index="0"]')
+    n.value = 'keywords'
+    n.dispatchEvent(new Event('input', { bubbles: true }))
+    const c = document.querySelector('[data-pp-field="meta.content"][data-pp-index="0"]')
+    c.value = 'bootstrap, demo'
+    c.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+
+  // Save the dialog → projectState reflects all three.
+  await appWindow.evaluate(() => document.querySelector('[data-pp-action="save"]').click())
+  await appWindow.waitForFunction(
+    () => !document.querySelector('[data-pp-field="title"]'),  // dialog closed
+    null, { timeout: 3_000 }
+  )
+
+  const stateAfter = await appWindow.evaluate(() => {
+    const ps = window.__gstrap.projectState
+    const page = ps.current.pages.find(p => p.name === 'index')
+    return {
+      title: page.head.title,
+      description: page.head.description,
+      customMeta: page.head.customMeta,
+      projectFavicon: ps.current.manifest.metadata.favicon
+    }
+  })
+  expect(stateAfter.title).toBe('Hello World')
+  expect(stateAfter.description).toBe('A demo page.')
+  expect(stateAfter.customMeta).toEqual([{ name: 'keywords', content: 'bootstrap, demo' }])
+  expect(stateAfter.projectFavicon).toBe('assets/images/favicon.png')
+
+  // ── 2. Save to disk + reload + verify persistence. ──────────────────────
+  await appWindow.evaluate(async () => {
+    await window.grapestrap.project.save(window.__gstrap.projectState.current)
+  })
+  const onDiskManifest = JSON.parse(await fsp.readFile(projectPath, 'utf8'))
+  expect(onDiskManifest.metadata.favicon).toBe('assets/images/favicon.png')
+  const indexPageEntry = onDiskManifest.pages.find(p => p.name === 'index')
+  expect(indexPageEntry.head.title).toBe('Hello World')
+  expect(indexPageEntry.head.customMeta).toEqual([{ name: 'keywords', content: 'bootstrap, demo' }])
+
+  // ── 3. Export emits favicon link + custom meta + title. ─────────────────
+  await appWindow.evaluate(async out => {
+    const project = window.__gstrap.projectState.current
+    return await window.grapestrap.project.export(project, out)
+  }, outputDir)
+
+  const indexHtml = await fsp.readFile(join(outputDir, 'index.html'), 'utf8')
+  expect(indexHtml).toMatch(/<title>Hello World<\/title>/)
+  expect(indexHtml).toMatch(/<meta name="description" content="A demo page\.">/)
+  expect(indexHtml).toMatch(/<meta name="keywords" content="bootstrap, demo">/)
+  expect(indexHtml).toMatch(/<link rel="icon" href="assets\/images\/favicon\.png" type="image\/png">/)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+  await fsp.rm(outputDir,  { recursive: true, force: true })
+})
+
 test('Breakpoint slider: scrubbing the slider resizes the canvas iframe + flips active BP', async () => {
   // Reported on nola1: "another functionality need is the breakpoints slide
   // gauge so you can edit what visible and layout at the breakpoints."

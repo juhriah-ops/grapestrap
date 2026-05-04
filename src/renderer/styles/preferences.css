@@ -172,3 +172,148 @@
   padding: 0 4px;
   border-radius: 2px;
 }
+
+/* ── Page Properties dialog (reuses .gstrap-prefs-* shell) ──────────────── */
+.gstrap-pp-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-3);
+}
+.gstrap-pp-primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+.gstrap-pp-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.gstrap-pp-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+}
+.gstrap-pp-input {
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 12px;
+  padding: 4px 8px;
+  font-family: inherit;
+}
+.gstrap-pp-input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.gstrap-pp-textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+.gstrap-pp-hint {
+  font-size: 10px;
+  color: var(--text-3);
+}
+.gstrap-pp-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--bg-1);
+  padding: 0 3px;
+  border-radius: 2px;
+  color: var(--text-1);
+}
+.gstrap-pp-favicon {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gstrap-pp-fav-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.gstrap-pp-fav-current img {
+  width: 24px; height: 24px; object-fit: contain;
+}
+.gstrap-pp-fav-current code {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gstrap-pp-fav-empty {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+  padding: 6px 0;
+}
+.gstrap-pp-fav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px;
+}
+.gstrap-pp-fav-tile {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.gstrap-pp-fav-tile:hover { border-color: var(--accent); }
+.gstrap-pp-fav-tile.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.gstrap-pp-fav-tile img {
+  width: 32px; height: 32px; object-fit: contain;
+}
+.gstrap-pp-fav-name {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gstrap-pp-meta-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.gstrap-pp-meta-table th {
+  text-align: left;
+  font-weight: normal;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  padding: 2px 4px 4px;
+}
+.gstrap-pp-meta-table td {
+  padding: 2px 4px;
+}
+.gstrap-pp-meta-table input { width: 100%; }

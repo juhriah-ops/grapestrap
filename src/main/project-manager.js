@@ -534,6 +534,32 @@ export async function exportProject(project, outputDir) {
 
 function wrapPageHtml(page, manifest) {
   const head = page.head || {}
+  const meta = manifest.metadata || {}
+  // Favicon precedence: per-page override > project-wide default. Path is
+  // relative to the project's site/ root, so it ships at the same location
+  // it sits on disk (export flat-mirrors site/, with css/ and js/ added at
+  // the root for the bundled Bootstrap).
+  const favicon = head.favicon || meta.favicon || ''
+  const customMeta    = Array.isArray(head.customMeta)    ? head.customMeta    : []
+  const customLinks   = Array.isArray(head.customLinks)   ? head.customLinks   : []
+  const customScripts = Array.isArray(head.customScripts) ? head.customScripts : []
+
+  const faviconLink = favicon
+    ? `<link rel="icon" href="${escapeHtml(favicon)}"${faviconType(favicon)}>`
+    : ''
+  const metaTags = customMeta
+    .filter(m => m && m.name && m.content)
+    .map(m => `<meta name="${escapeHtml(m.name)}" content="${escapeHtml(m.content)}">`)
+    .join('\n  ')
+  const linkTags = customLinks
+    .filter(l => l && l.href)
+    .map(l => `<link${l.rel ? ` rel="${escapeHtml(l.rel)}"` : ''} href="${escapeHtml(l.href)}"${l.type ? ` type="${escapeHtml(l.type)}"` : ''}>`)
+    .join('\n  ')
+  const scriptTags = customScripts
+    .filter(s => s && s.src)
+    .map(s => `<script src="${escapeHtml(s.src)}"${s.defer ? ' defer' : ''}${s.async ? ' async' : ''}></script>`)
+    .join('\n  ')
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -541,15 +567,28 @@ function wrapPageHtml(page, manifest) {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${escapeHtml(head.title || page.name)}</title>
   ${head.description ? `<meta name="description" content="${escapeHtml(head.description)}">` : ''}
+  ${metaTags ? metaTags : ''}
+  ${faviconLink}
   <link rel="stylesheet" href="css/bootstrap.css">
   <link rel="stylesheet" href="css/style.css">
+  ${linkTags}
 </head>
 <body>
 ${page.html || ''}
   <script src="js/bootstrap.bundle.js"></script>
+  ${scriptTags}
 </body>
 </html>
 `
+}
+
+function faviconType(path) {
+  const ext = (path.split('.').pop() || '').toLowerCase()
+  if (ext === 'png')  return ' type="image/png"'
+  if (ext === 'svg')  return ' type="image/svg+xml"'
+  if (ext === 'ico')  return ' type="image/x-icon"'
+  if (ext === 'webp') return ' type="image/webp"'
+  return ''
 }
 
 function escapeHtml(s) {
