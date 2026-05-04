@@ -152,7 +152,17 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
       // and ship with the deployable web content.
       if (!srcRel) {
         await fsp.copyFile(srcEntry, join(site, entry.name))
+        continue
       }
+
+      // Files in arbitrary subdirs (css/, js/, fonts-extra/, vendor/, etc.)
+      // — preserve verbatim under site/<srcRel>/<name>. Without this branch
+      // the importer was silently dropping every non-assets/, non-pages/
+      // subfolder, which broke users whose static-site layout used the
+      // conventional css/ and js/ split. Reported on nola1 2026-05-04.
+      const dst = join(site, entryRel)
+      await fsp.mkdir(dirname(dst), { recursive: true })
+      await fsp.copyFile(srcEntry, dst)
     }
   }
   await walk('')
@@ -203,15 +213,45 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
 
 function extractBody(html) {
   // Cheap regex extraction — no DOM in main process. Captures <title> and
-  // <meta name=description> from head, returns body innerHTML if a body tag
-  // exists; else the whole html as-is (treat as already-fragmented).
+  // <meta name=description> from head, returns body innerHTML if a body
+  // tag exists; else the whole html as-is (treat as already-fragmented).
+  //
+  // CSS/JS preservation: stylesheet <link>s and <script src>s from <head>
+  // are HOISTED INTO THE BODY content as its first children. Browsers
+  // accept these in body and still apply them, so the imported page
+  // renders with the user's CSS/JS in the canvas preview without us
+  // needing per-page head injection. Inline <style> blocks and <script>
+  // bodies in head are also preserved this way. This is lossy for true
+  // head-only metadata (favicon, OG tags, etc.) — full <head> round-trip
+  // arrives in v0.0.3 alongside Page Properties.
   const out = { body: html, title: '', description: '' }
   const titleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)
   if (titleMatch) out.title = titleMatch[1].trim()
   const descMatch = /<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i.exec(html)
   if (descMatch) out.description = descMatch[1]
   const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)
-  if (bodyMatch) out.body = bodyMatch[1].trim() + '\n'
+  if (!bodyMatch) return out
+
+  // Pull the resource-loading head tags so the imported page still renders
+  // its CSS / JS in the canvas. Order matches source-document order.
+  const headMatch = /<head[^>]*>([\s\S]*?)<\/head>/i.exec(html)
+  let preserved = ''
+  if (headMatch) {
+    const headInner = headMatch[1]
+    const tagPattern =
+      /<link\b[^>]*\brel\s*=\s*["']?(?:stylesheet|preload|modulepreload)["']?[^>]*>/gi
+    const scriptPattern  = /<script\b[^>]*>[\s\S]*?<\/script>/gi
+    const styleBlock     = /<style\b[^>]*>[\s\S]*?<\/style>/gi
+    const matches = []
+    for (const re of [tagPattern, scriptPattern, styleBlock]) {
+      let m
+      while ((m = re.exec(headInner)) !== null) matches.push({ idx: m.index, html: m[0] })
+    }
+    matches.sort((a, b) => a.idx - b.idx)
+    if (matches.length) preserved = matches.map(m => m.html).join('\n') + '\n'
+  }
+
+  out.body = (preserved + bodyMatch[1].trim() + '\n').replace(/^\s+/, '')
   return out
 }
 
@@ -428,12 +468,26 @@ export async function exportProject(project, outputDir) {
   await fsp.mkdir(join(outputDir, 'js'),  { recursive: true })
   await fsp.mkdir(join(outputDir, 'assets'), { recursive: true })
 
-  // Bundle Bootstrap if enabled
+  // Bundle Bootstrap if enabled. Errors here used to be swallowed silently;
+  // when node_modules/bootstrap/dist/ wasn't reachable from app.getAppPath()
+  // (packaged builds, dev installs that skipped npm install), the export
+  // would produce empty css/ and js/ folders with no warning. Now we
+  // collect the errors and re-throw at the end so the renderer can toast.
   if (project.manifest.preferences?.exportBundleBootstrap !== false) {
     const bsCss = resolve(app.getAppPath(), 'node_modules/bootstrap/dist/css/bootstrap.min.css')
     const bsJs  = resolve(app.getAppPath(), 'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js')
-    try { await fsp.copyFile(bsCss, join(outputDir, 'css', 'bootstrap.min.css')) } catch {}
-    try { await fsp.copyFile(bsJs,  join(outputDir, 'js',  'bootstrap.bundle.min.js')) } catch {}
+    const failures = []
+    try { await fsp.copyFile(bsCss, join(outputDir, 'css', 'bootstrap.min.css')) }
+    catch (err) { failures.push(`bootstrap.min.css: ${err?.code || err?.message || err}`) }
+    try { await fsp.copyFile(bsJs,  join(outputDir, 'js',  'bootstrap.bundle.min.js')) }
+    catch (err) { failures.push(`bootstrap.bundle.min.js: ${err?.code || err?.message || err}`) }
+    if (failures.length) {
+      throw new Error(
+        `Could not bundle Bootstrap into the export — ${failures.join('; ')}. ` +
+        `Tried to read from ${dirname(bsCss)}. ` +
+        `Run \`npm install\` in the GrapeStrap project root, or disable bundling in the project's preferences.exportBundleBootstrap.`
+      )
+    }
   }
 
   // Copy custom CSS

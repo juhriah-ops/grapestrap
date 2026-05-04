@@ -2236,6 +2236,65 @@ test('Import folder: scans HTML + assets and opens as a project', async () => {
   await fsp.rm(targetDir, { recursive: true, force: true })
 })
 
+test('Import folder: preserves head <link>/<script> + arbitrary subdirs (css/, js/)', async () => {
+  // Reported on nola1 2026-05-04: imported pages rendered without their
+  // CSS, and css/ + js/ subdirs in the source were silently dropped.
+  // Verifies:
+  //   1. Source with <link rel=stylesheet href=css/style.css> in <head>
+  //      survives import — body content has the <link> hoisted as its
+  //      first child so the canvas preview applies the styles.
+  //   2. css/style.css and js/main.js arbitrary subdirs are preserved
+  //      verbatim under site/<rel>/.
+  //   3. Inline <style> and <script> blocks in head also survive.
+  const sourceDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-imp2-src-'))
+  const targetDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-imp2-dst-'))
+  const targetPath = join(targetDir, 'imported.gstrap')
+
+  await fsp.mkdir(join(sourceDir, 'css'), { recursive: true })
+  await fsp.mkdir(join(sourceDir, 'js'),  { recursive: true })
+  await fsp.writeFile(join(sourceDir, 'css', 'style.css'),
+    '.brand { color: rebeccapurple; }', 'utf8')
+  await fsp.writeFile(join(sourceDir, 'js', 'main.js'),
+    'console.log("hi")', 'utf8')
+  await fsp.writeFile(join(sourceDir, 'index.html'),
+    '<!doctype html><html>' +
+    '<head>' +
+      '<title>Linked</title>' +
+      '<link rel="stylesheet" href="css/style.css">' +
+      '<style>.inline { color: red }</style>' +
+      '<script src="js/main.js" defer></script>' +
+    '</head>' +
+    '<body><main class="brand">imported</main></body></html>', 'utf8')
+
+  const { app, appWindow } = await launch()
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+
+  const project = await appWindow.evaluate(opts =>
+    window.grapestrap.project.importDir(opts), { sourceDir, targetPath, name: 'imported' }
+  )
+  const indexPage = project.pages.find(p => p.name === 'index')
+
+  // 1. <link>, <style>, <script> from head hoisted into body content.
+  expect(indexPage.html).toMatch(/<link[^>]*rel=["']stylesheet["']/i)
+  expect(indexPage.html).toMatch(/href=["']css\/style\.css["']/i)
+  expect(indexPage.html).toMatch(/<style[^>]*>\.inline/i)
+  expect(indexPage.html).toMatch(/<script[^>]*src=["']js\/main\.js["']/i)
+  expect(indexPage.html).toContain('<main class="brand">imported</main>')
+
+  // 2. css/ and js/ subdirs preserved on disk.
+  const cssExists = await fsp.access(join(targetDir, 'site', 'css', 'style.css')).then(() => true, () => false)
+  const jsExists  = await fsp.access(join(targetDir, 'site', 'js',  'main.js')).then(() => true, () => false)
+  expect(cssExists).toBe(true)
+  expect(jsExists).toBe(true)
+
+  await app.close()
+  await fsp.rm(sourceDir, { recursive: true, force: true })
+  await fsp.rm(targetDir, { recursive: true, force: true })
+})
+
 test('Split view: Design and Code panes lay out side-by-side, not overlapping', async () => {
   // Reported on nola1 2026-05-04: in Split mode, the Canvas iframe paints
   // on top of the Monaco code pane — line numbers visible behind the canvas.
