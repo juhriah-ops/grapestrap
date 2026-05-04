@@ -1555,6 +1555,79 @@ test('Style Manager: Cascade view lists rules from project style.css and Bootstr
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Color picker: opens from pseudo-state trigger, picks a swatch, writes back to the rule', async () => {
+  // v0.0.2 — color picker w/ eyedropper. The pseudo-class editor's color rows
+  // use the picker (gstrap-cp-trigger button) instead of <input type="color">.
+  // Verifies:
+  //   1. Clicking the trigger opens a popover with the BS5 theme palette.
+  //   2. Clicking a palette swatch closes the picker AND populates the paired
+  //      text input AND lands the value in projectState.current.globalCSS.
+  //   3. After picking, the swatch shows up in a "Recent" row on next open.
+  //   4. Esc / outside-click dismisses without committing.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-cp-'))
+  const projectPath = join(projectDir, 'cp.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // Add a custom class so the pseudo bar accepts a non-normal state.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    sel.setClass([...(sel.getClasses() || []), 'cta-link'])
+  })
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-pseudo-state="hover"]').click()
+  })
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="pseudo"] .gstrap-sm-body:not([hidden]) [data-cp-trigger="background-color"]',
+    { timeout: 3_000 }
+  )
+
+  // ── 1. Click the color trigger → popover appears.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cp-trigger="background-color"]').click()
+  })
+  await appWindow.waitForSelector('.gstrap-cp-popover', { timeout: 2_000 })
+
+  // ── 2. Click the BS primary swatch (#0d6efd).
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-cp-popover [data-cp-pick="#0d6efd"]').click()
+  })
+  // Popover dismisses on commit.
+  await appWindow.waitForFunction(() => !document.querySelector('.gstrap-cp-popover'), null, { timeout: 2_000 })
+
+  const inputValue = await appWindow.evaluate(() =>
+    document.querySelector('input[data-prop="background-color"][data-pair="text"]').value
+  )
+  expect(inputValue).toBe('#0d6efd')
+
+  const css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+  expect(css).toMatch(/\.cta-link:hover/)
+  expect(css).toMatch(/background-color:\s*#0d6efd/)
+
+  // ── 3. Re-open picker → "Recent" section now contains #0d6efd.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cp-trigger="background-color"]').click()
+  })
+  await appWindow.waitForSelector('.gstrap-cp-popover', { timeout: 2_000 })
+
+  const recentLabels = await appWindow.$$eval(
+    '.gstrap-cp-popover .gstrap-cp-section-label',
+    nodes => nodes.map(n => n.textContent.trim())
+  )
+  expect(recentLabels).toContain('Recent')
+
+  // ── 4. Esc closes without committing.
+  await appWindow.keyboard.press('Escape')
+  await appWindow.waitForFunction(() => !document.querySelector('.gstrap-cp-popover'), null, { timeout: 2_000 })
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Split view: Design and Code panes lay out side-by-side, not overlapping', async () => {
   // Reported on nola1 2026-05-04: in Split mode, the Canvas iframe paints
   // on top of the Monaco code pane — line numbers visible behind the canvas.

@@ -20,6 +20,7 @@
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { readRule, writeRule, pickSelector, isBsUtility } from './css-rule-utils.js'
+import { openColorPicker } from '../color-picker/index.js'
 
 export const id = 'pseudo'
 export const label = 'Pseudo-class Styles'
@@ -97,6 +98,30 @@ export function render(host, ctx) {
     input.addEventListener('change', () => writeFromInputs(host, selector, pseudoState))
   })
 
+  // Wire color triggers to open the picker. The trigger button is per-row;
+  // it shows the live color via --cp-color, and clicking opens the popover
+  // anchored to it. Picker writes back into the paired text input so
+  // writeFromInputs sees the new value.
+  host.querySelectorAll('[data-cp-trigger]').forEach(btn => {
+    syncTriggerColor(btn, host)
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.cpTrigger
+      const textInput = host.querySelector(`input[data-prop="${key}"][data-pair="text"]`)
+      const current   = textInput?.value || ''
+      openColorPicker({
+        anchor: btn,
+        value: current,
+        onChange: next => {
+          if (textInput) {
+            textInput.value = next
+            textInput.dispatchEvent(new Event('input', { bubbles: true }))
+          }
+          syncTriggerColor(btn, host)
+        }
+      })
+    })
+  })
+
   host.querySelector('[data-clear-rule]')?.addEventListener('click', () => {
     const css = projectState.current.globalCSS || ''
     projectState.current.globalCSS = writeRule(css, selector, pseudoState, {})
@@ -108,12 +133,12 @@ export function render(host, ctx) {
 
 function renderRow(prop, value) {
   if (prop.kind === 'color') {
-    const safe = /^#[0-9a-f]{3,8}$/i.test(value) ? value : ''
     return `
       <div class="gstrap-sm-row">
         <label class="gstrap-sm-label">${prop.label}</label>
         <div class="gstrap-sm-pseudo-pair">
-          <input type="color" data-prop="${prop.key}" data-pair="color" value="${safe || '#000000'}" />
+          <button type="button" class="gstrap-cp-trigger" data-cp-trigger="${prop.key}"
+                  aria-label="Pick ${prop.label}"></button>
           <input type="text"  data-prop="${prop.key}" data-pair="text"
                  value="${escapeAttr(value)}" placeholder="#0d6efd or var(--bs-primary)" />
         </div>
@@ -150,29 +175,25 @@ function renderRow(prop, value) {
 
 function writeFromInputs(host, selector, pseudoState) {
   const props = {}
-  // Pair colors: prefer the text input if it has a non-empty value (lets user
-  // type `var(--bs-primary)`), else use the color picker.
   const seen = new Set()
   for (const el of host.querySelectorAll('[data-prop]')) {
     const key = el.dataset.prop
     if (seen.has(key)) continue
-    const pair = el.dataset.pair
-    if (pair) {
-      const text  = host.querySelector(`[data-prop="${key}"][data-pair="text"]`)?.value.trim() || ''
-      const color = host.querySelector(`[data-prop="${key}"][data-pair="color"]`)?.value || ''
-      const value = text || (color && color !== '#000000' ? color : '')
-      if (value) props[key] = value
-      seen.add(key)
-    } else {
-      const v = (el.value ?? '').trim()
-      if (v) props[key] = v
-      seen.add(key)
-    }
+    const v = (el.value ?? '').trim()
+    if (v) props[key] = v
+    seen.add(key)
   }
   const css = projectState.current.globalCSS || ''
   projectState.current.globalCSS = writeRule(css, selector, pseudoState, props)
   projectState.markCssDirty()
   eventBus.emit('project:css-changed')
+}
+
+function syncTriggerColor(btn, host) {
+  const key = btn.dataset.cpTrigger
+  const input = host.querySelector(`input[data-prop="${key}"][data-pair="text"]`)
+  const value = input?.value || ''
+  btn.style.setProperty('--cp-color', value || 'transparent')
 }
 
 function escapeAttr(s) {

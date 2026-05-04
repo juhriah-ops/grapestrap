@@ -1,0 +1,172 @@
+/* GrapeStrap — Color picker popover.
+
+   Anchored to a trigger element (typically the small color-trigger button in
+   the pseudo-class state editor). Positions below the trigger by default, flips
+   above when the viewport doesn't fit. The popover is appended to
+   #gstrap-modals so its z-index sits above all panels.
+
+   Swatches are pure HTML buttons; per-swatch background comes from a
+   data-cp-color attribute via attr() — keeps the markup class-only with no
+   inline styles. Theme colors and recent colors share the same primitive. */
+
+.gstrap-cp-popover {
+  position: fixed;
+  z-index: 12000;
+  min-width: 240px;
+  max-width: 280px;
+  background: var(--bg-2);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.gstrap-cp-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gstrap-cp-preview {
+  width: 24px; height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  flex-shrink: 0;
+  background-image:
+    linear-gradient(45deg, #555 25%, transparent 25%),
+    linear-gradient(-45deg, #555 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #555 75%),
+    linear-gradient(-45deg, transparent 75%, #555 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  position: relative;
+}
+.gstrap-cp-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--cp-color, transparent);
+}
+/* Tunnel the data-cp-color attr into a CSS custom property so we don't need
+   inline style="--cp-color: ..." sprinkled in every swatch. */
+/* --cp-color is set via JS — see panels/color-picker/index.js. */
+
+.gstrap-cp-input {
+  flex: 1;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 4px 6px;
+  min-width: 0;
+}
+.gstrap-cp-input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.gstrap-cp-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+}
+
+.gstrap-cp-swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+.gstrap-cp-swatch {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  /* Same checkerboard backing as the preview so transparent shows through. */
+  background-image:
+    linear-gradient(45deg, #555 25%, transparent 25%),
+    linear-gradient(-45deg, #555 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #555 75%),
+    linear-gradient(-45deg, transparent 75%, #555 75%);
+  background-size: 6px 6px;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0;
+}
+.gstrap-cp-swatch::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: var(--cp-color, transparent);
+}
+.gstrap-cp-swatch:hover {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+.gstrap-cp-swatch.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.gstrap-cp-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.gstrap-cp-btn {
+  flex: 1;
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.gstrap-cp-btn:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+}
+.gstrap-cp-eyedrop-icon {
+  font-size: 13px;
+  margin-right: 2px;
+}
+
+/* Color trigger button — used by the pseudo-class editor (and any future
+   consumer) instead of <input type="color">. Shows the current color as a
+   filled square with a thin border. */
+.gstrap-cp-trigger {
+  width: 28px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-1);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  flex-shrink: 0;
+  background-image:
+    linear-gradient(45deg, #555 25%, transparent 25%),
+    linear-gradient(-45deg, #555 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #555 75%),
+    linear-gradient(-45deg, transparent 75%, #555 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+.gstrap-cp-trigger::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: var(--cp-color, transparent);
+}
+.gstrap-cp-trigger:hover { border-color: var(--accent); }
+.gstrap-cp-trigger:focus { outline: 1px solid var(--accent); outline-offset: 1px; }
