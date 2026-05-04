@@ -7,12 +7,12 @@
    extra IPC round-trip per tile. */
 
 .gstrap-am-host {
-  position: absolute;
-  inset: 0;
+  position: absolute !important;
+  inset: 0 !important;
   background: var(--bg-2);
   color: var(--text-1);
   font-size: 12px;
-  overflow-y: auto;
+  overflow-y: auto !important;
 }
 
 .gstrap-am-empty {

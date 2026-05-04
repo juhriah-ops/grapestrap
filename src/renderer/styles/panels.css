@@ -15,15 +15,20 @@
 
 /* ── File manager ─────────────────────────────────────────────────────────── */
 /* Panel hosts position absolute inside their GL `.lm_content` parent (which
-   has `position: relative` from goldenlayout-base.css) so `height: 100%`
-   resolves to a definite pixel value — without this, GL gives the host its
-   parent's content height which collapses to whatever the children stack
-   to, and `overflow: auto` can't kick in. Reported on nola1 2026-05-04:
-   DOM tree + Properties panels couldn't scroll past the visible viewport. */
+   has `position: relative; overflow: hidden` from goldenlayout-base.css) so
+   `inset: 0` resolves to a definite pixel area and `overflow-y: auto` can
+   kick in. Reported on nola1 2026-05-04: DOM tree + Properties panels
+   couldn't scroll past the visible viewport.
+
+   `!important` matters: the renderer adds the host class TO the lm_content
+   element, so GL's `.lm_content` rules and our class compete at equal
+   specificity. Vite imports goldenlayout-base.css from JS and Electron
+   serves the resulting CSS AFTER our link tags, so the GL rules win the
+   tie unless we promote ours. */
 .gstrap-fm-host {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
+  position: absolute !important;
+  inset: 0 !important;
+  overflow-y: auto !important;
   background: var(--bg-2);
   font-size: 13px;
 }
@@ -60,9 +65,9 @@
 
 /* ── Properties / Custom CSS containers ───────────────────────────────────── */
 .gstrap-props-host {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
+  position: absolute !important;
+  inset: 0 !important;
+  overflow-y: auto !important;
   background: var(--bg-2);
   font-size: 12px;
 }

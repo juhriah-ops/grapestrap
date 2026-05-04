@@ -2,9 +2,9 @@
    Indented rows, hover + selected state, monospace tags. */
 
 .gstrap-dom-host {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
+  position: absolute !important;
+  inset: 0 !important;
+  overflow-y: auto !important;
   background: var(--bg-2);
   color: var(--text-1);
   font-size: 12px;
