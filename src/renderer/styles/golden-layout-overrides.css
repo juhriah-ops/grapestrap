@@ -37,12 +37,30 @@
   border: 1px solid var(--border) !important;
 }
 
-/* View → Toggle commands set body classes that CSS uses to hide GL-managed
-   panels. Golden Layout doesn't re-flow when a panel is `display: none`
-   (the splitter slot remains), so the user sees a small empty gap where
-   the panel used to be — true relayout-on-hide arrives in v0.0.3 with
-   the proper GL v2 item.hide()/show() integration. */
-body.is-hide-file-manager .lm_content.gstrap-fm-host  { display: none !important; }
-body.is-hide-properties   .lm_content.gstrap-props-host { display: none !important; }
-body.is-hide-dom-tree     .lm_content.gstrap-dom-host { display: none !important; }
-body.is-hide-custom-css   .lm_content.gstrap-cssp-host { display: none !important; }
+/* View → Toggle commands set body classes that hide GL-managed panels.
+   We target the `.lm_item` wrapper (via :has) so the entire splitter
+   slot collapses, not just the inner content. Reported on nola1
+   2026-05-04: "the tool bar outline and box dont go away" — without
+   :has, only the inner .lm_content went display:none and the dark
+   wrapper box remained. Chromium 105+ ships :has(); we're on a more
+   recent Electron.
+
+   Three patterns:
+   - Single-component columns (Properties, DOM Tree, Custom CSS,
+     Insert) → hide the whole .lm_item; an adjacent splitter is
+     orphaned but only as a 1-2px hairline.
+   - Stacked-component columns (file-manager + library + asset-manager
+     share one stack in the left column) → hide just the matching tab
+     + content; the stack itself stays visible for the remaining
+     tabs. */
+
+body.is-hide-file-manager .lm_tab[title="Project"]      { display: none !important; }
+body.is-hide-file-manager .lm_content.gstrap-fm-host    { display: none !important; }
+
+/* `:has()` without a direct-descendant path matches EVERY ancestor with the
+   descendant — that collapsed the whole column tree, not just the leaf
+   .lm_item. Constrain to the direct relationship GL v2 uses so only the
+   leaf item collapses, not its outer column. */
+body.is-hide-properties .lm_item:has(> .lm_items > .lm_item_container > .lm_content.gstrap-props-host) { display: none !important; }
+body.is-hide-dom-tree   .lm_item:has(> .lm_items > .lm_item_container > .lm_content.gstrap-dom-host)   { display: none !important; }
+body.is-hide-custom-css .lm_item:has(> .lm_items > .lm_item_container > .lm_content.gstrap-cssp-host)  { display: none !important; }

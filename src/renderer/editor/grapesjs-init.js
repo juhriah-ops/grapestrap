@@ -174,6 +174,24 @@ export function initGrapesJS(container) {
   eventBus.on('project:closed',     () => { syncGlobalCssIntoCanvas(); syncBaseHrefIntoCanvas() })
   eventBus.on('project:css-changed',() => syncGlobalCssIntoCanvas())
 
+  // Defensive resync: GrapesJS sometimes rebuilds the iframe document on
+  // content reload (page swap, layout refresh). The injected <base> +
+  // <style data-grapestrap-globalcss> can get clobbered, which silently
+  // breaks every relative `assets/...` image src + bg-image url. Reported
+  // on nola1 as "images break on resize and are no longer visible."
+  // rAF-coalesced so the per-component-add storm during setComponents
+  // collapses into one sync per frame.
+  let resyncPending = false
+  eventBus.on('canvas:content-changed', () => {
+    if (resyncPending) return
+    resyncPending = true
+    requestAnimationFrame(() => {
+      resyncPending = false
+      syncGlobalCssIntoCanvas()
+      syncBaseHrefIntoCanvas()
+    })
+  })
+
   log.info('GrapesJS initialized')
 
   return editor
