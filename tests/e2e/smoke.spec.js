@@ -2283,6 +2283,113 @@ test('Asset Manager: drag-drop multiple files writes them all to site/assets/', 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Style Manager: Columns sub-panel applies BS5 row splits via presets and per-col sizes', async () => {
+  // Reported on nola1: "in dreamweaver you can adjust rows and columns by
+  // 33 33 33 the movements are linked to bootstrap defaults." Verifies:
+  //   1. With a .row selected, the Columns sub-panel renders with all
+  //      preset buttons.
+  //   2. Clicking the 4/4/4 preset turns the row into 3 col-4 children.
+  //   3. Per-column size dropdown writes col-N to the right child.
+  //   4. Add Column appends a fresh .col child.
+  //   5. Per-breakpoint editing: switching to md scopes edits to col-md-N
+  //      while keeping the base col-N untouched.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-cols-'))
+  const projectPath = join(projectDir, 'cols.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Inject a BS5 row + 2 columns into the canvas, select the row.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    ed.setComponents(
+      '<div class="container py-5"><div class="row" id="testrow">' +
+      '<div class="col">A</div><div class="col">B</div>' +
+      '</div></div>'
+    )
+  })
+  await appWindow.waitForFunction(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return !!ed.getWrapper().find('#testrow').length
+  }, null, { timeout: 3_000 })
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const row = ed.getWrapper().find('#testrow')[0]
+    ed.select(row)
+  })
+
+  // Open the Columns sub-panel.
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-sm-section[data-sp="columns"] [data-toggle="columns"]').click()
+  })
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('.gstrap-sm-section[data-sp="columns"] [data-preset]'),
+    null, { timeout: 3_000 }
+  )
+
+  // ── 1+2. 4/4/4 preset: row gets three col-4 children. ────────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-preset="4,4,4"]').click()
+  })
+  const afterPreset = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const row = ed.getWrapper().find('#testrow')[0]
+    return row.components().map(c => c.getClasses())
+  })
+  expect(afterPreset.length).toBe(3)
+  for (const classes of afterPreset) {
+    expect(classes).toContain('col-4')
+  }
+
+  // ── 3. Per-column size dropdown — change col 1 to size 6. ────────────────
+  await appWindow.evaluate(() => {
+    const sel = document.querySelector('[data-col-size][data-col-index="0"]')
+    sel.value = '6'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  const afterResize = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const row = ed.getWrapper().find('#testrow')[0]
+    return row.components().map(c => c.getClasses())
+  })
+  expect(afterResize[0]).toContain('col-6')
+  expect(afterResize[0]).not.toContain('col-4')
+  expect(afterResize[1]).toContain('col-4')
+
+  // ── 4. Add column. ───────────────────────────────────────────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-add-col]').click()
+  })
+  const afterAdd = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const row = ed.getWrapper().find('#testrow')[0]
+    return row.components().length
+  })
+  expect(afterAdd).toBe(4)
+
+  // ── 5. Per-breakpoint editing: switch to md, set col 1 size 8. ───────────
+  await appWindow.evaluate(() => document.querySelector('[data-bp="md"]').click())
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-bp="md"].is-active'),
+    null, { timeout: 2_000 }
+  )
+  await appWindow.evaluate(() => {
+    const sel = document.querySelector('[data-col-size][data-col-index="0"]')
+    sel.value = '8'
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  const afterBp = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const row = ed.getWrapper().find('#testrow')[0]
+    return row.components().at(0).getClasses()
+  })
+  expect(afterBp).toContain('col-md-8')
+  expect(afterBp).toContain('col-6')  // base size preserved
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Style Manager: Background image picker writes a CSS rule scoped by selector', async () => {
   // Reported on nola1: "can we add photos to container backgrounds in
   // the properties toolbar." Background image goes into project

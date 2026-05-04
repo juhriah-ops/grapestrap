@@ -14,6 +14,44 @@
 
 export const BREAKPOINTS = ['', 'sm', 'md', 'lg', 'xl', 'xxl']
 
+// ── Grid / columns ───────────────────────────────────────────────────────────
+// BS5 12-column grid. A column's width per breakpoint is `col-<bp>-<n>`
+// where bp is one of BREAKPOINTS and n is 1..12 or 'auto'. Bare `col`
+// (no number) means "fill remaining" — equal-width with siblings.
+export const COL_SIZES = ['auto', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+
+export function colClass(size, bp = '') {
+  // size '' or undefined → bare `col` (fill).
+  // size === 'auto' → `col-auto` or `col-md-auto`.
+  // numeric → `col-N` or `col-md-N`.
+  if (!size) return bp ? `col-${bp}` : 'col'
+  return bp ? `col-${bp}-${size}` : `col-${size}`
+}
+
+export function colPattern(bp = '') {
+  // Matches col, col-N, col-auto for a specific breakpoint (or bare-bp if bp='').
+  // For bp='' we match `col` and `col-N` and `col-auto` but NOT `col-md-...`.
+  if (!bp) return /^col(?:-(?:auto|1[0-2]|[1-9]))?$/
+  return new RegExp(`^col-${bp}(?:-(?:auto|1[0-2]|[1-9]))?$`)
+}
+
+// Quick-split presets. Each preset is { label, sizes: [n,n,...] } where the
+// sizes array describes the columns left-to-right. Sums to 12 (or under, with
+// auto fillers) — the BS grid wraps at >12 which we don't want from a preset.
+export const COL_PRESETS = [
+  { label: '12',         sizes: ['12'] },
+  { label: '6 / 6',      sizes: ['6', '6'] },
+  { label: '4 / 4 / 4',  sizes: ['4', '4', '4'] },
+  { label: '3×4',        sizes: ['3', '3', '3', '3'] },
+  { label: '8 / 4',      sizes: ['8', '4'] },
+  { label: '4 / 8',      sizes: ['4', '8'] },
+  { label: '3 / 9',      sizes: ['3', '9'] },
+  { label: '9 / 3',      sizes: ['9', '3'] },
+  { label: '5 / 7',      sizes: ['5', '7'] },
+  { label: '7 / 5',      sizes: ['7', '5'] },
+  { label: '2 / 8 / 2',  sizes: ['2', '8', '2'] }
+]
+
 // ── Spacing ──────────────────────────────────────────────────────────────────
 // Returns class name for a given (property, side, scale, breakpoint).
 //   property: 'm' | 'p'

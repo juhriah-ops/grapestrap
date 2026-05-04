@@ -36,6 +36,7 @@ import { projectState } from '../../state/project-state.js'
 import * as spacing    from './spacing.js'
 import * as display    from './display.js'
 import * as flex       from './flex.js'
+import * as columns    from './columns.js'
 import * as text       from './text.js'
 import * as background from './background.js'
 import * as border     from './border.js'
@@ -45,7 +46,7 @@ import * as cascade    from './cascade.js'
 
 import { pickSelector, isBsUtility } from './css-rule-utils.js'
 
-const SUBPANELS = [spacing, display, flex, text, background, border, sizing, pseudo, cascade]
+const SUBPANELS = [spacing, display, flex, columns, text, background, border, sizing, pseudo, cascade]
 const DEFAULT_OPEN = new Set(['spacing'])
 
 const PSEUDO_STATES = [
