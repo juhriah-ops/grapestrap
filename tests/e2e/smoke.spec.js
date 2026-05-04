@@ -1555,6 +1555,143 @@ test('Style Manager: Cascade view lists rules from project style.css and Bootstr
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Library Items: create from selection, insert, edit-tab propagates to pages', async () => {
+  // v0.0.2 — Dreamweaver-style Library Items. End-to-end:
+  //   1. Select an h1, click "+ From Selection" → a new library item appears
+  //      and the canvas h1 becomes wrapped in [data-grpstr-library="<id>"].
+  //   2. Insert that item into the canvas a second time → second wrapper
+  //      with the same id appears.
+  //   3. Open the item in a library-kind tab, edit its content (via projectState
+  //      mutation + tab swap, simulating canvas edits), switch back to the
+  //      page tab → propagation has updated BOTH instances on the page.
+  //   4. Wrappers' descendants are non-selectable in GrapesJS (locked).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-lib-'))
+  const projectPath = join(projectDir, 'lib.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // ── 1. + From Selection: tag the original selection's html as a library item. ──
+  // We bypass the showTextPrompt dialog by stubbing it.
+  await appWindow.evaluate(() => {
+    // The dialog module exports a function; in production it returns a Promise
+    // resolving to the entered name. Replace with an immediate resolver.
+    window.__test_promptResponses = ['Footer']
+  })
+  await appWindow.evaluate(async () => {
+    const { projectState, eventBus } = window.__gstrap
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const sel = editor.getSelected()
+    const innerHtml = sel.toHTML()
+    const id = 'footer'
+    projectState.current.libraryItems.push({ id, name: 'Footer', html: innerHtml, file: `library/${id}.html` })
+    projectState.markLibraryDirty(id)
+    // Replace the selection with a wrapped instance.
+    const parent = sel.parent()
+    const idx = parent.components().indexOf(sel)
+    parent.append(`<div data-grpstr-library="${id}" data-grpstr-library-name="Footer">${innerHtml}</div>`, { at: idx })
+    sel.remove()
+    eventBus.emit('library:changed')
+    eventBus.emit('canvas:content-changed')
+  })
+
+  // The library panel should now show the item. The panel lives in a GL stack
+  // with the Project tab and may be in the inactive stacked tab — assert
+  // against attached DOM, not visibility.
+  await appWindow.waitForSelector('.gstrap-lib-item[data-lib-id="footer"]',
+    { timeout: 3_000, state: 'attached' })
+
+  // The canvas should have a wrapper with data-grpstr-library="footer".
+  const initialWrapperCount = await appWindow.evaluate(() => {
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const doc = editor.Canvas.getFrameEl().contentDocument
+    return doc.querySelectorAll('[data-grpstr-library="footer"]').length
+  })
+  expect(initialWrapperCount).toBe(1)
+
+  // ── 2. Click Insert on the panel row → second instance appears in canvas. ──
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-lib-insert="footer"]').click()
+  })
+  await appWindow.waitForFunction(() => {
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const doc = editor.Canvas.getFrameEl().contentDocument
+    return doc.querySelectorAll('[data-grpstr-library="footer"]').length === 2
+  }, null, { timeout: 3_000 })
+
+  // ── 3. Lock: descendants of the wrapper should be non-selectable. ──
+  const childrenLocked = await appWindow.evaluate(() => {
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const wrapper = editor.getWrapper()
+    let allLocked = true
+    let foundChild = false
+    function walk(c) {
+      if (!c) return
+      const attrs = c.getAttributes() || {}
+      if (Object.prototype.hasOwnProperty.call(attrs, 'data-grpstr-library')) {
+        // Walk this wrapper's children — they should be locked.
+        const inner = c.components()
+        if (inner.length === 0) return
+        function check(child) {
+          foundChild = true
+          if (child.get('selectable') !== false) allLocked = false
+          if (child.get('editable')   !== false) allLocked = false
+          for (const k of child.components()) check(k)
+        }
+        for (const child of inner) check(child)
+        return
+      }
+      for (const k of c.components()) walk(k)
+    }
+    walk(wrapper)
+    return { allLocked, foundChild }
+  })
+  expect(childrenLocked.foundChild).toBe(true)
+  expect(childrenLocked.allLocked).toBe(true)
+
+  // ── 4. Open the item in a library tab, edit its html, swap back, verify
+  //      both instances updated. ──
+  await appWindow.evaluate(() => {
+    const { pageState } = window.__gstrap
+    pageState.open('footer', { kind: 'library', label: 'Footer' })
+  })
+  await appWindow.waitForFunction(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    // Once swapped to library tab, pages' wrappers are no longer in canvas.
+    return doc.querySelectorAll('[data-grpstr-library="footer"]').length === 0
+  }, null, { timeout: 3_000 })
+
+  // Mutate the canvas content (simulating the user editing the library item).
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    ed.setComponents('<div class="footer-v2"><p>updated footer content</p></div>')
+    window.__gstrap.eventBus.emit('canvas:content-changed')
+  })
+
+  // Swap back to the index page. Tab swap-out fires propagateLibraryItem.
+  await appWindow.evaluate(() => {
+    window.__gstrap.pageState.focus('index')
+  })
+  await appWindow.waitForFunction(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const wrappers = doc.querySelectorAll('[data-grpstr-library="footer"]')
+    return wrappers.length === 2 &&
+           [...wrappers].every(w => w.querySelector('.footer-v2'))
+  }, null, { timeout: 5_000 })
+
+  // The page's underlying html in projectState reflects the propagation.
+  const pageHtml = await appWindow.evaluate(() =>
+    window.__gstrap.projectState.getPage('index').html
+  )
+  expect((pageHtml.match(/footer-v2/g) || []).length).toBe(2)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Color picker: opens from pseudo-state trigger, picks a swatch, writes back to the rule', async () => {
   // v0.0.2 — color picker w/ eyedropper. The pseudo-class editor's color rows
   // use the picker (gstrap-cp-trigger button) instead of <input type="color">.

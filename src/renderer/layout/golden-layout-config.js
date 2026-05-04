@@ -22,6 +22,7 @@ import { renderDomTree }     from '../panels/dom-tree/index.js'
 import { renderCanvas }      from '../panels/canvas/index.js'
 import { renderProperties }  from '../panels/properties-side/index.js'
 import { renderCustomCss }   from '../panels/custom-css/index.js'
+import { renderLibraryItems } from '../panels/library-items/index.js'
 import { relayoutAllMonaco } from '../editor/monaco-init.js'
 import { getEditor }         from '../editor/grapesjs-init.js'
 
@@ -38,10 +39,12 @@ const DEFAULT_CONFIG = {
     type: 'row',
     content: [
       {
-        type: 'column',
+        type: 'stack',
         width: 16,
         content: [
-          { type: 'component', componentType: 'file-manager', title: 'Project',
+          { type: 'component', componentType: 'file-manager',   title: 'Project',
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
+          { type: 'component', componentType: 'library-items',  title: 'Library',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       },
@@ -78,11 +81,12 @@ const DEFAULT_CONFIG = {
 export function initGoldenLayout(host) {
   layout = new GoldenLayout(host)
 
-  layout.registerComponentFactoryFunction('file-manager', container => renderFileManager(container.element))
-  layout.registerComponentFactoryFunction('dom-tree',     container => renderDomTree(container.element))
-  layout.registerComponentFactoryFunction('canvas',       container => renderCanvas(container.element))
-  layout.registerComponentFactoryFunction('properties',   container => renderProperties(container.element))
-  layout.registerComponentFactoryFunction('custom-css',   container => renderCustomCss(container.element))
+  layout.registerComponentFactoryFunction('file-manager',   container => renderFileManager(container.element))
+  layout.registerComponentFactoryFunction('library-items',  container => renderLibraryItems(container.element))
+  layout.registerComponentFactoryFunction('dom-tree',       container => renderDomTree(container.element))
+  layout.registerComponentFactoryFunction('canvas',         container => renderCanvas(container.element))
+  layout.registerComponentFactoryFunction('properties',     container => renderProperties(container.element))
+  layout.registerComponentFactoryFunction('custom-css',     container => renderCustomCss(container.element))
 
   layout.loadLayout(DEFAULT_CONFIG)
 

@@ -12,15 +12,17 @@ import { bindSync, onViewModeChange } from '../../editor/canvas-sync.js'
 import { pageState } from '../../state/page-state.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
+import { propagateLibraryItem } from '../library-items/propagate.js'
 
 let monacoPair = null
 
-// The canvas tracks which page it's currently displaying so that on tab swap
-// we can capture the outgoing page's html back into projectState before
-// loading the incoming one. `loadingTabName` is set during a programmatic
-// setComponents() call so the resulting component:add storm doesn't get
-// misread as a user edit and dirty-flag the page.
+// The canvas tracks which tab (page or library item) it's currently
+// displaying so that on tab swap we can capture the outgoing content back
+// into projectState before loading the incoming one. `loadingTabName` is
+// set during a programmatic setComponents() call so the resulting
+// component:add storm doesn't get misread as a user edit and dirty-flag.
 let currentTabName = null
+let currentTabKind = null
 let loadingTabName = null
 
 export function renderCanvas(host) {
@@ -68,11 +70,15 @@ export function renderCanvas(host) {
     loadingTabName = null
   })
 
-  // Real user edits dirty-flag the active page. Programmatic loads don't.
+  // Real user edits dirty-flag the active tab. Programmatic loads don't.
   eventBus.on('canvas:content-changed', () => {
     if (loadingTabName) return
     if (!currentTabName || !projectState.current) return
-    projectState.markPageDirty(currentTabName)
+    if (currentTabKind === 'library') {
+      projectState.markLibraryDirty(currentTabName)
+    } else {
+      projectState.markPageDirty(currentTabName)
+    }
   })
 }
 
@@ -80,19 +86,42 @@ function swapToTab(tab) {
   if (!tab || tab.pageName === currentTabName) return
   if (!projectState.current) return
 
-  // Capture outgoing page back into projectState (preserves unsaved edits
-  // across tab switches; markPageDirty was already called on the edits).
+  // Capture outgoing content back into projectState (preserves unsaved edits
+  // across tab switches; markPageDirty / markLibraryDirty already fired
+  // during the edits themselves).
   if (currentTabName) {
-    const out = projectState.getPage(currentTabName)
-    if (out) out.html = getCanvasHtml()
+    const captured = getCanvasHtml()
+    if (currentTabKind === 'library') {
+      const item = projectState.current.libraryItems?.find(it => it.id === currentTabName)
+      if (item) {
+        const prev = item.html
+        item.html = captured
+        // Library tab focus-out is the propagation moment — fan the new
+        // inner html out to every page that has an instance of this id.
+        // Skip if nothing actually changed to avoid spurious page dirties.
+        if (prev !== captured) propagateLibraryItem(item.id, captured)
+      }
+    } else {
+      const out = projectState.getPage(currentTabName)
+      if (out) out.html = captured
+    }
   }
 
-  const next = projectState.getPage(tab.pageName)
-  if (!next) return
+  let nextHtml = ''
+  if (tab.kind === 'library') {
+    const item = projectState.current.libraryItems?.find(it => it.id === tab.pageName)
+    if (!item) return
+    nextHtml = item.html ?? ''
+  } else {
+    const next = projectState.getPage(tab.pageName)
+    if (!next) return
+    nextHtml = next.html ?? ''
+  }
 
   loadingTabName = tab.pageName
-  loadHtmlIntoCanvas(next.html ?? '')
+  loadHtmlIntoCanvas(nextHtml)
   currentTabName = tab.pageName
+  currentTabKind = tab.kind || 'page'
   // setComponents fires synchronously; release the load guard on the next tick
   // to cover any straggler events fired in microtasks.
   queueMicrotask(() => { loadingTabName = null })

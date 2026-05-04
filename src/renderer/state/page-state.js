@@ -1,14 +1,16 @@
 /**
  * GrapeStrap — Per-tab page state
  *
- * Each open page tab holds:
+ * Each open tab holds:
+ *   - kind: 'page' | 'library'   (v0.0.2: library items open as tabs alongside pages)
+ *   - pageName: unique tab key (page name for kind='page', library item id for kind='library')
  *   - viewMode: 'design' | 'code' | 'split'
  *   - device: 'Desktop' | 'Tablet' | 'Mobile'
  *   - selectedElement: GrapesJS component ref (null if nothing selected)
  *   - monacoState: { html: { value, scroll, cursor }, css: { ... } }
  *
  * Switching tabs preserves all of this so the user returns to exactly where
- * they were. Closing a tab discards its page state.
+ * they were. Closing a tab discards its tab state.
  */
 
 import { eventBus } from './event-bus.js'
@@ -27,7 +29,9 @@ class PageStateManager {
       return this.tabs[existing]
     }
     const tab = {
+      kind: opts.kind || 'page',
       pageName,
+      label: opts.label || pageName,
       viewMode: opts.viewMode || 'design',
       device: opts.device || 'Desktop',
       selectedElement: null,

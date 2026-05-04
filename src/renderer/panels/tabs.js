@@ -45,8 +45,12 @@ function refresh(host) {
   row.innerHTML = pageState.tabs.map((t, i) => {
     const active = i === pageState.activeIndex ? 'is-active' : ''
     const dirty = t.dirty ? ' is-dirty' : ''
-    return `<div class="gstrap-tab ${active}${dirty}" data-tab="${escAttr(t.pageName)}">
-              <span class="gstrap-tab-label">${escHtml(t.pageName)}</span>
+    const kind = t.kind === 'library' ? ' is-library' : ''
+    const badge = t.kind === 'library' ? `<span class="gstrap-tab-badge" title="Library item">lib</span>` : ''
+    const label = t.label || t.pageName
+    return `<div class="gstrap-tab ${active}${dirty}${kind}" data-tab="${escAttr(t.pageName)}">
+              ${badge}
+              <span class="gstrap-tab-label">${escHtml(label)}</span>
               <button class="gstrap-tab-x" data-tab-close="${escAttr(t.pageName)}" title="Close">×</button>
             </div>`
   }).join('')

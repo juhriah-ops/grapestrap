@@ -18,19 +18,32 @@ import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
 import { showTextPrompt } from '../dialogs/text-prompt.js'
 import { duplicateComponent, deleteComponent } from './component-actions.js'
+import { propagateLibraryItem } from '../panels/library-items/propagate.js'
 import { log } from '../log.js'
 
-// Pull the currently-displayed canvas html into the active page in projectState
-// so that whatever's on screen is what gets persisted. Tab swaps already
-// capture-on-switch; this covers the case where the user edits then saves
-// without switching tabs first.
+// Pull the currently-displayed canvas html into the active tab's source-of-
+// truth in projectState (page html or library item html) so that whatever's
+// on screen is what gets persisted. Tab swaps already capture-on-switch; this
+// covers the case where the user edits then saves without switching tabs first.
 function flushActiveTabIntoProject() {
   if (!projectState.current) return
   const tab = pageState.active()
   if (!tab) return
+  const captured = getCanvasHtml()
+  if (tab.kind === 'library') {
+    const item = projectState.current.libraryItems?.find(it => it.id === tab.pageName)
+    if (!item) return
+    if (item.html !== captured) {
+      item.html = captured
+      // Save also propagates: an item edited and immediately saved (no tab
+      // swap) still fans out to all pages.
+      propagateLibraryItem(item.id, captured)
+    }
+    return
+  }
   const page = projectState.getPage(tab.pageName)
   if (!page) return
-  page.html = getCanvasHtml()
+  page.html = captured
 }
 
 export function wireMenuActions() {
