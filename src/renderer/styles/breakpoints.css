@@ -1,0 +1,119 @@
+/* GrapeStrap — Breakpoint slider strip.
+
+   Strip below the page tabs, above the canvas region. Drag the slider or
+   click a snap button to set the canvas iframe width; an active-breakpoint
+   label updates as you cross BS5 thresholds. The second row surfaces the
+   currently-selected component's responsive classes plus quick-toggle
+   show/hide buttons at the active breakpoint. */
+
+.gstrap-breakpoints {
+  grid-area: breakpoints;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px 6px;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.gstrap-breakpoints[hidden] { display: none; }
+
+.gstrap-bp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gstrap-bp-readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.gstrap-bp-width {
+  color: var(--text-1);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  min-width: 56px;
+  text-align: center;
+}
+.gstrap-bp-active {
+  color: var(--accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gstrap-bp-slider {
+  flex: 1;
+  min-width: 100px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: ew-resize;
+}
+
+.gstrap-bp-snaps {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.gstrap-bp-snap {
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 10px;
+  padding: 1px 6px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.gstrap-bp-snap:hover { background: var(--bg-3); color: var(--text-1); }
+.gstrap-bp-snap.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.gstrap-bp-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 10px;
+}
+.gstrap-bp-chips-label {
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+.gstrap-bp-chips-sep {
+  display: inline-block;
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.gstrap-bp-toggle {
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 10px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.gstrap-bp-toggle:hover { background: var(--bg-3); color: var(--text-1); border-color: var(--accent); }
+.gstrap-bp-chip {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 10px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-2);
+}

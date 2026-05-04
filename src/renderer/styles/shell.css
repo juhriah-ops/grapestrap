@@ -8,7 +8,7 @@
    `.lm_*` items at the page default — flipping the default wholesale changes
    how GL computes child widths. Only my own `.gstrap-*` chrome elements get
    border-box now; .lm_* and grapesjs/monaco internals keep the default. */
-.gstrap-toolbar, .gstrap-tabs, .gstrap-linkedfiles, .gstrap-main,
+.gstrap-toolbar, .gstrap-tabs, .gstrap-linkedfiles, .gstrap-breakpoints, .gstrap-main,
 .gstrap-insert, .gstrap-strip, .gstrap-status,
 .gstrap-shell, .gstrap-toasts, .gstrap-modals { box-sizing: border-box; }
 
@@ -25,6 +25,7 @@
     "toolbar"
     "tabs"
     "linked"
+    "breakpoints"
     "main"
     "insert"
     "strip"
@@ -33,6 +34,7 @@
     var(--toolbar-h)  /* toolbar */
     var(--tabs-h)     /* tabs */
     auto              /* linked-files (collapses to 0 when [hidden] via display:none) */
+    auto              /* breakpoints strip (collapses when [hidden]) */
     minmax(0, 1fr)    /* GL host */
     auto              /* insert (collapses when [hidden]) */
     auto              /* strip (collapses when [hidden]) */

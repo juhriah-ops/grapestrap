@@ -39,6 +39,7 @@ import { initGoldenLayout } from './layout/golden-layout-config.js'
 import { renderToolbar } from './panels/toolbar.js'
 import { renderTabs } from './panels/tabs.js'
 import { renderLinkedFilesBar } from './panels/linked-files/index.js'
+import { renderBreakpointsBar } from './panels/breakpoints/index.js'
 import { renderStatusBar } from './status-bar/status-bar.js'
 import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
@@ -68,6 +69,7 @@ async function boot() {
   renderToolbar(document.getElementById('gstrap-toolbar'))
   renderTabs(document.getElementById('gstrap-tabs'))
   renderLinkedFilesBar(document.getElementById('gstrap-linkedfiles'))
+  renderBreakpointsBar(document.getElementById('gstrap-breakpoints'))
   renderInsertPanel(document.getElementById('gstrap-insert'))
   renderPropertyStrip(document.getElementById('gstrap-strip'))
   renderStatusBar(document.getElementById('gstrap-status'))

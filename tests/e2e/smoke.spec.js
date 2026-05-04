@@ -2283,6 +2283,90 @@ test('Asset Manager: drag-drop multiple files writes them all to site/assets/', 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Breakpoint slider: scrubbing the slider resizes the canvas iframe + flips active BP', async () => {
+  // Reported on nola1: "another functionality need is the breakpoints slide
+  // gauge so you can edit what visible and layout at the breakpoints."
+  // Verifies:
+  //   1. Strip is visible once a project + page are open.
+  //   2. Setting the slider to 700 → canvas iframe inline width is 700px,
+  //      active-breakpoint readout reads "sm".
+  //   3. Snap button (e.g. 992) → iframe width updates + slider value
+  //      matches + active BP reads "lg".
+  //   4. With an element selected, the hide-at-this-BP toggle adds the
+  //      right d-<bp>-none class and evicts any existing display class
+  //      for that breakpoint.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-bp-'))
+  const projectPath = join(projectDir, 'bp.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Strip should be visible.
+  await appWindow.waitForFunction(
+    () => !document.getElementById('gstrap-breakpoints').hidden,
+    null, { timeout: 3_000 }
+  )
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-bp-slider]'),
+    null, { timeout: 3_000 }
+  )
+
+  // ── 1+2. Slide to 700 → 700px width + active BP "sm". ────────────────────
+  await appWindow.evaluate(() => {
+    const slider = document.querySelector('[data-bp-slider]')
+    slider.value = '700'
+    slider.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const at700 = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const frame = ed.Canvas.getFrameEl()
+    return {
+      frameWidth: frame.style.width,
+      activeBp: document.querySelector('.gstrap-bp-active')?.textContent.trim()
+    }
+  })
+  expect(at700.frameWidth).toBe('700px')
+  expect(at700.activeBp).toMatch(/sm/i)
+
+  // ── 3. Snap button 992 → lg. ─────────────────────────────────────────────
+  await appWindow.evaluate(() => document.querySelector('[data-bp-snap="992"]').click())
+  const at992 = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return {
+      frameWidth: ed.Canvas.getFrameEl().style.width,
+      activeBp: document.querySelector('.gstrap-bp-active')?.textContent.trim(),
+      snapActive: !!document.querySelector('[data-bp-snap="992"].is-active')
+    }
+  })
+  expect(at992.frameWidth).toBe('992px')
+  expect(at992.activeBp).toMatch(/lg/i)
+  expect(at992.snapActive).toBe(true)
+
+  // ── 4. Hide-at-current-BP toggle (lg) on the seed h1. ────────────────────
+  await selectFirstByTag(appWindow, 'h1')
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-bp-class="d-lg-none"]'),
+    null, { timeout: 3_000 }
+  )
+  // Pre-state: give the h1 a competing display class at the same breakpoint
+  // so we can confirm eviction.
+  await appWindow.evaluate(() => {
+    const sel = window.__gstrap.pluginRegistry.bound.editor.getSelected()
+    sel.setClass([...sel.getClasses(), 'd-lg-block'])
+  })
+  await appWindow.evaluate(() => document.querySelector('[data-bp-class="d-lg-none"]').click())
+
+  const finalClasses = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    return ed.getSelected().getClasses()
+  })
+  expect(finalClasses).toContain('d-lg-none')
+  expect(finalClasses).not.toContain('d-lg-block')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Style Manager: Columns sub-panel applies BS5 row splits via presets and per-col sizes', async () => {
   // Reported on nola1: "in dreamweaver you can adjust rows and columns by
   // 33 33 33 the movements are linked to bootstrap defaults." Verifies:
