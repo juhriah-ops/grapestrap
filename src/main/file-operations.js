@@ -38,7 +38,13 @@ export async function readFile(path) {
 export async function writeFile(path, data) {
   const abs = safePath(path)
   await fsp.mkdir(dirname(abs), { recursive: true })
-  await fsp.writeFile(abs, data, 'utf8')
+  // Buffer / Uint8Array → write raw bytes; string → utf8. The asset-buffer
+  // IPC path passes binary; everything else is HTML/CSS/JSON text.
+  if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
+    await fsp.writeFile(abs, data)
+  } else {
+    await fsp.writeFile(abs, data, 'utf8')
+  }
   return { path: relative(projectRoot, abs) }
 }
 

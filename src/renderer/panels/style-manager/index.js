@@ -76,6 +76,9 @@ export function renderStyleManager(target, getComponent) {
     // next-opened project doesn't inherit a hover-editing context.
     eventBus.on('project:closed', () => { pseudoState = 'normal'; paint() })
     eventBus.on('project:css-changed', () => rerenderOpen())
+    // Background sub-panel reads the project's image list — refresh on
+    // every asset change so newly-dropped images show up in the picker.
+    eventBus.on('assets:changed', () => rerenderOpen())
     wired = true
   }
   currentComponent = typeof getComponent === 'function' ? getComponent() : null

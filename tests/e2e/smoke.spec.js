@@ -2236,6 +2236,138 @@ test('Import folder: scans HTML + assets and opens as a project', async () => {
   await fsp.rm(targetDir, { recursive: true, force: true })
 })
 
+test('Asset Manager: drag-drop multiple files writes them all to site/assets/', async () => {
+  // Reported on nola1: "the photo upload only allows 1 photo in the
+  // toolbar." Multi-select WAS supported through the file dialog, but
+  // many Linux file pickers don't surface ctrl-click multi-select; this
+  // adds drag-drop support so OS file managers can drop a whole folder
+  // of images at once. Verifies:
+  //   1. Two PNG buffers written via the new file:write-asset-buffer IPC
+  //      land in site/assets/images/ on disk.
+  //   2. file:list-assets returns both names.
+  //   3. The renderer cache (window.__gstrap_assets) reflects them after
+  //      assets:changed.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-amd-'))
+  const projectPath = join(projectDir, 'amd.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  const png1x1 = Array.from(Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  ))
+
+  // Simulate two drops via the same IPC the drag-drop handler uses.
+  await appWindow.evaluate(async bytes => {
+    const u8 = new Uint8Array(bytes)
+    await window.grapestrap.file.writeAssetBuffer('images', 'first.png',  u8)
+    await window.grapestrap.file.writeAssetBuffer('images', 'second.png', u8)
+    window.__gstrap.eventBus.emit('assets:changed')
+  }, png1x1)
+
+  const firstExists  = await fsp.access(join(projectDir, 'site', 'assets', 'images', 'first.png')).then(() => true, () => false)
+  const secondExists = await fsp.access(join(projectDir, 'site', 'assets', 'images', 'second.png')).then(() => true, () => false)
+  expect(firstExists).toBe(true)
+  expect(secondExists).toBe(true)
+
+  const listed = await appWindow.evaluate(() => window.grapestrap.file.listAssets())
+  expect(listed.images).toEqual(expect.arrayContaining(['first.png', 'second.png']))
+
+  await appWindow.waitForFunction(
+    () => (window.__gstrap_assets?.images || []).includes('first.png'),
+    null, { timeout: 3_000 }
+  )
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Style Manager: Background image picker writes a CSS rule scoped by selector', async () => {
+  // Reported on nola1: "can we add photos to container backgrounds in
+  // the properties toolbar." Background image goes into project
+  // globalCSS scoped by the component's first non-BS class — same
+  // pattern as the pseudo-class editor, no inline styles. Verifies:
+  //   1. With a custom class on the selection + an image in assets,
+  //      clicking a tile in the picker writes a `.cls { background-image:
+  //      url(assets/images/foo.png); ... }` rule.
+  //   2. Clear removes the rule.
+  //   3. No-class element shows the "needs a class" hint instead of the
+  //      picker.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-bgi-'))
+  const projectPath = join(projectDir, 'bgi.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Drop a pixel into assets/images/ so the picker has something to show.
+  await fsp.mkdir(join(projectDir, 'site', 'assets', 'images'), { recursive: true })
+  await fsp.writeFile(join(projectDir, 'site', 'assets', 'images', 'hero.png'), Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  ))
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('assets:changed'))
+  await appWindow.waitForFunction(
+    () => (window.__gstrap_assets?.images || []).includes('hero.png'),
+    null, { timeout: 3_000 }
+  )
+
+  // Select the seed h1, give it a custom class so the picker works.
+  await selectFirstByTag(appWindow, 'h1')
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    sel.setClass([...(sel.getClasses() || []), 'hero-banner'])
+  })
+
+  // Open the Background sub-panel.
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-sm-section[data-sp="background"] [data-toggle="background"]').click()
+  })
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-bg-toggle-picker]'),
+    null, { timeout: 3_000 }
+  )
+
+  // Show the picker, then click the hero.png tile.
+  await appWindow.evaluate(() => document.querySelector('[data-bg-toggle-picker]').click())
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-bg-pick="assets/images/hero.png"]'),
+    null, { timeout: 3_000 }
+  )
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-bg-pick="assets/images/hero.png"]').click()
+  })
+
+  // Rule lands in globalCSS.
+  let css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+  expect(css).toMatch(/\.hero-banner\s*\{/)
+  expect(css).toMatch(/background-image:\s*url\("assets\/images\/hero\.png"\)/)
+  expect(css).toMatch(/background-size:\s*cover/)
+  expect(css).not.toMatch(/\.hero-banner:/)  // bare-state, no pseudo
+
+  // Clear removes the entire rule.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-bg-clear]')?.click()
+  })
+  css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+  expect(css).not.toMatch(/\.hero-banner\s*\{/)
+
+  // No-class case: setClass([]) → only BS classes left → picker stays out.
+  await appWindow.evaluate(() => {
+    const sel = window.__gstrap.pluginRegistry.bound.editor.getSelected()
+    sel.setClass(['fw-bold'])  // BS-utility-only
+    window.__gstrap.eventBus.emit('canvas:component-class-changed', sel)
+  })
+  const hasPickerForBsOnly = await appWindow.evaluate(() =>
+    !!document.querySelector('[data-bg-toggle-picker]')
+  )
+  expect(hasPickerForBsOnly).toBe(false)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Export: bundles BOTH minified and unminified Bootstrap CSS + JS', async () => {
   // Reported on nola1 2026-05-04: "why are we using just min and not the
   // main bootstrap? in dreamweaver it outputs both and the js."

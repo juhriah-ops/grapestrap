@@ -303,3 +303,110 @@
 }
 .gstrap-sm-cascade-prop { color: var(--text-1); }
 .gstrap-sm-cascade-val  { color: var(--text-2); }
+
+/* ── Background image picker ─────────────────────────────────────────────── */
+.gstrap-sm-bg-image {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gstrap-sm-bg-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+.gstrap-sm-bg-current img {
+  width: 32px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.gstrap-sm-bg-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gstrap-sm-bg-empty {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+  padding: 4px 6px;
+}
+.gstrap-sm-bg-actions {
+  display: flex;
+  gap: 4px;
+}
+.gstrap-sm-bg-picker {
+  margin-top: 4px;
+}
+.gstrap-sm-bg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.gstrap-sm-bg-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+}
+.gstrap-sm-bg-tile:hover { border-color: var(--accent); }
+.gstrap-sm-bg-tile.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.gstrap-sm-bg-tile img {
+  width: 100%;
+  height: 40px;
+  object-fit: cover;
+}
+.gstrap-sm-bg-tile-name {
+  font-size: 9px;
+  color: var(--text-3);
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.gstrap-sm-bg-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+.gstrap-sm-bg-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.gstrap-sm-bg-control > span {
+  flex-basis: 60px;
+  flex-shrink: 0;
+  color: var(--text-3);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+.gstrap-sm-bg-control select {
+  flex: 1;
+}

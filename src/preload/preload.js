@@ -53,7 +53,9 @@ const grapestrap = {
     exists:      (path)        => ipcRenderer.invoke('file:exists', path),
     importImage: ()            => ipcRenderer.invoke('file:import-image'),
     importAsset: (kind)        => ipcRenderer.invoke('file:import-asset', kind),
-    listAssets:  ()            => ipcRenderer.invoke('file:list-assets')
+    listAssets:  ()            => ipcRenderer.invoke('file:list-assets'),
+    writeAssetBuffer: (kind, filename, bytes) =>
+      ipcRenderer.invoke('file:write-asset-buffer', kind, filename, bytes)
   },
 
   // ─── Watcher events from main → renderer ───────────────────────────────────

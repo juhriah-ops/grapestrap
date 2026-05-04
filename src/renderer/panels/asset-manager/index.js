@@ -51,6 +51,30 @@ export function renderAssetManager(target) {
   paint()
   refreshList()
 
+  // Drag-and-drop multi-file upload: drop OS files onto any of the three
+  // section grids (or the host generally) and they're routed by extension.
+  // Reading is renderer-side via File.arrayBuffer + write goes through the
+  // file:write-asset-buffer IPC. Default browser drop behavior is to
+  // navigate to the file URL; preventDefault stops that.
+  host.addEventListener('dragover', evt => {
+    if (!hasFiles(evt.dataTransfer)) return
+    evt.preventDefault()
+    evt.dataTransfer.dropEffect = 'copy'
+    host.classList.add('is-drop-target')
+  })
+  host.addEventListener('dragleave', evt => {
+    // Only clear when leaving the host entirely, not when crossing into a child.
+    if (evt.target === host) host.classList.remove('is-drop-target')
+  })
+  host.addEventListener('drop', async evt => {
+    if (!hasFiles(evt.dataTransfer)) return
+    evt.preventDefault()
+    host.classList.remove('is-drop-target')
+    // The section the file was dropped on overrides extension-based routing.
+    const dropSection = evt.target.closest?.('[data-kind]')?.dataset?.kind || null
+    await handleDroppedFiles(evt.dataTransfer.files, dropSection)
+  })
+
   eventBus.on('project:opened',  () => refreshList())
   eventBus.on('project:closed',  () => { assetsByKind = { images: [], fonts: [], videos: [] }; paint() })
   eventBus.on('assets:changed',  () => refreshList())
@@ -65,6 +89,7 @@ export function renderAssetManager(target) {
 async function refreshList() {
   if (!projectState.current) {
     assetsByKind = { images: [], fonts: [], videos: [] }
+    publishCache()
     paint()
     return
   }
@@ -74,7 +99,17 @@ async function refreshList() {
   } catch {
     assetsByKind = { images: [], fonts: [], videos: [] }
   }
+  publishCache()
   paint()
+}
+
+// Publish to a window-level cache so other surfaces (Style Manager →
+// Background sub-panel's image picker) can read the asset list synchronously
+// during render. The Asset Manager remains the source of truth — anyone
+// reading from this cache should also subscribe to 'assets:changed' for
+// updates.
+function publishCache() {
+  window.__gstrap_assets = assetsByKind
 }
 
 function paint() {
@@ -152,6 +187,61 @@ async function onAddClicked(kind) {
   } catch (err) {
     eventBus.emit('toast', { type: 'error', message: `Asset import failed: ${err?.message || err}` })
   }
+}
+
+async function handleDroppedFiles(fileList, forceKind) {
+  if (!projectState.current) {
+    eventBus.emit('toast', { type: 'warning', message: 'Open or create a project first.' })
+    return
+  }
+  const files = Array.from(fileList || [])
+  if (!files.length) return
+
+  let okCount = 0
+  const skipped = []
+  for (const file of files) {
+    const kind = forceKind || guessKindByName(file.name)
+    if (!kind) { skipped.push(file.name); continue }
+    try {
+      const buf = await file.arrayBuffer()
+      // contextBridge serializes structured data; pass a Uint8Array so the
+      // main side can see the exact byte length without relying on Buffer
+      // detection.
+      await window.grapestrap.file.writeAssetBuffer(kind, file.name, new Uint8Array(buf))
+      okCount++
+    } catch (err) {
+      skipped.push(`${file.name} (${err?.message || err})`)
+    }
+  }
+
+  eventBus.emit('assets:changed')
+  if (okCount) {
+    eventBus.emit('toast', {
+      type: 'success',
+      message: `Added ${okCount} file${okCount === 1 ? '' : 's'}.`
+    })
+  }
+  if (skipped.length) {
+    eventBus.emit('toast', {
+      type: 'warning',
+      message: `Skipped ${skipped.length} file${skipped.length === 1 ? '' : 's'} (unrecognised type): ${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? '…' : ''}`
+    })
+  }
+}
+
+function hasFiles(dt) {
+  if (!dt) return false
+  if (dt.types && dt.types.includes && dt.types.includes('Files')) return true
+  // Some browsers expose only the items collection during dragover.
+  return dt.items && Array.from(dt.items).some(i => i.kind === 'file')
+}
+
+function guessKindByName(filename) {
+  const ext = (filename.split('.').pop() || '').toLowerCase()
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'avif', 'ico'].includes(ext)) return 'images'
+  if (['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(ext)) return 'fonts'
+  if (['mp4', 'webm', 'mov', 'm4v', 'ogg'].includes(ext)) return 'videos'
+  return null
 }
 
 async function onDeleteClicked(relPath) {

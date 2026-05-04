@@ -220,6 +220,19 @@ export function registerIpcHandlers({ pluginRegistry }) {
     return added
   })
 
+  // Write a binary buffer to site/assets/<kind>/<filename>. Used by the
+  // drag-drop path in the Asset Manager — the renderer reads the dropped
+  // File via arrayBuffer() and shoots the bytes through here.
+  ipcMain.handle('file:write-asset-buffer', async (_e, kind, filename, bytes) => {
+    if (!ASSET_KIND_FILTERS[kind]) throw new Error(`Unknown asset kind: ${kind}`)
+    const safeName = filename.replace(/[^\w.\-]+/g, '_')
+    const subdir = `site/assets/${kind}`
+    const target = `${subdir}/${safeName}`
+    // bytes arrives as Uint8Array from the contextBridge structured clone.
+    const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes)
+    return writeFile(target, buf)
+  })
+
   ipcMain.handle('file:list-assets', async () => {
     const out = { images: [], fonts: [], videos: [] }
     for (const kind of Object.keys(out)) {
