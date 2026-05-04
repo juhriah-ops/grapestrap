@@ -22,6 +22,16 @@ Working toward `v0.0.1-alpha`. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full ro
 - New Playwright spec `'Style Manager: Spacing/Display/Text panels write BS classes and round-trip'`: drives the right panel through Spacing → Display (with breakpoint switch) → Text and asserts both the component's class set AND the Properties chip list reflect every change. Also covers click-toggles-off, mutually-exclusive group eviction (writing `fw-semibold` evicts the seed h1's `fw-bold`), and chip-removal refreshing the Style Manager's "Active" highlights.
 - All 21 specs green in ~60 s.
 
+### Added (2026-05-03 — v0.0.2 Style Manager, chunk B)
+- Four remaining BS5-aware sub-panels: **Flex**, **Background**, **Border**, **Sizing**. The right Properties panel now exposes all seven sub-panels promised by Build Plan v4 §"Style Manager Replacement Specification".
+- `flex.js` is gated on the component having any `d-flex` / `d-inline-flex` / `d-<bp>-flex` variant. When none is present, the body shows a hint with a one-click "Set display: flex" shortcut so the user discovers the prerequisite without bouncing to the Display panel. Once enabled: direction, wrap, justify-content, align-items, align-content, gap.
+- `background.js`: theme color swatches (BS5.3 token palette + `bg-body-secondary` / `bg-body-tertiary` / `bg-transparent`), the eight `*-subtle` variants (mutually exclusive with the bare color), and a `bg-gradient` toggle.
+- `border.js`: per-side toggles (All / Top / End / Bottom / Start — `border` and `border-top` etc. are independent and can coexist by design), width 1–5, theme color swatch, radius (`rounded` / `rounded-0..5` / `rounded-circle` / `rounded-pill`), shadow (`shadow-none/sm/<bare>/lg`).
+- `sizing.js`: width and height rows (`25 / 50 / 75 / 100 / auto`, mutually exclusive within their group), plus independent toggles for `mw-100`, `mh-100`, `vw-100`, `vh-100`.
+- New `gstrap-sm-hint` style for the Flex empty-state — small inline card pattern reusable by future panels with prerequisites.
+- New Playwright spec `'Style Manager: Flex/Background/Border/Sizing panels write BS classes'`: drives all four panels end-to-end, including the Flex prerequisite hint flow, mutually-exclusive eviction across groups (subtle evicts solid bg-color; switching width 3→5; switching w-50→w-75 leaves `vh-100` alone), and the `border` + `border-top` coexistence rule.
+- All 22 specs green in ~65 s.
+
 ### Added (2026-05-02 — HTML pretty-printer)
 - New `src/renderer/editor/format-html.js` — small (~150 line, no deps) tokenizer-and-tree-rendering HTML formatter. Handles: block vs inline element distinction, single-line rendering of inline-only parents that fit ≤100 chars, void elements (`<br>`, `<img>`, `<hr>`, …) on their own lines in block context, verbatim pass-through of `<pre>`/`<script>`/`<style>`/`<textarea>`/`<code>` (whose interior whitespace is significant), HTML comments and doctypes preserved.
 - Wired into `editor/grapesjs-init.js`'s `getCanvasHtml()` so every consumer (project save, tab-swap capture, code-view sync, flat export) gets the same pretty-printed output. GrapesJS's raw `editor.getHtml()` is one long line — formatting once at the boundary keeps the disk + display + export in sync without touching call sites. New `getCanvasHtmlRaw()` is the explicit escape hatch (currently unused).

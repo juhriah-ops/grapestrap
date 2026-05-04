@@ -145,6 +145,26 @@
   background: var(--bg-3) !important;
 }
 
+/* Inline hint inside a sub-panel body — used by Flex when no d-flex class is
+   present. Lets the user see the panel exists and one-click into the
+   relevant prerequisite. */
+.gstrap-sm-hint {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.gstrap-sm-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--bg-1);
+  color: var(--text-1);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
 /* Color swatches. */
 .gstrap-sm-swatches {
   display: flex;

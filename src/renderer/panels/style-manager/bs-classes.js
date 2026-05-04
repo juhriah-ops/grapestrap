@@ -149,3 +149,146 @@ export function textSizePattern() {
 export function textColorPattern() {
   return /^text-(?:primary|secondary|success|danger|warning|info|light|dark|body|muted|white|black|body-emphasis)$/
 }
+
+// ── Flex (only meaningful when display includes d-flex) ─────────────────────
+export const FLEX_DIRECTION = [
+  { value: 'row',            label: 'Row'         },
+  { value: 'row-reverse',    label: 'Row rev'     },
+  { value: 'column',         label: 'Column'      },
+  { value: 'column-reverse', label: 'Column rev'  }
+]
+export const FLEX_WRAP = [
+  { value: 'wrap',         label: 'Wrap'     },
+  { value: 'nowrap',       label: 'Nowrap'   },
+  { value: 'wrap-reverse', label: 'Wrap rev' }
+]
+export const FLEX_JUSTIFY = [
+  { value: 'start',   label: 'Start'   },
+  { value: 'end',     label: 'End'     },
+  { value: 'center',  label: 'Center'  },
+  { value: 'between', label: 'Between' },
+  { value: 'around',  label: 'Around'  },
+  { value: 'evenly',  label: 'Evenly'  }
+]
+export const FLEX_ALIGN_ITEMS = [
+  { value: 'start',    label: 'Start'    },
+  { value: 'end',      label: 'End'      },
+  { value: 'center',   label: 'Center'   },
+  { value: 'baseline', label: 'Baseline' },
+  { value: 'stretch',  label: 'Stretch'  }
+]
+export const FLEX_ALIGN_CONTENT = [
+  { value: 'start',   label: 'Start'   },
+  { value: 'end',     label: 'End'     },
+  { value: 'center',  label: 'Center'  },
+  { value: 'between', label: 'Between' },
+  { value: 'around',  label: 'Around'  },
+  { value: 'stretch', label: 'Stretch' }
+]
+export const FLEX_GAP = ['0', '1', '2', '3', '4', '5']
+
+export function flexDirectionPattern() { return /^flex-(?:row|row-reverse|column|column-reverse)$/ }
+export function flexWrapPattern()      { return /^flex-(?:wrap|nowrap|wrap-reverse)$/ }
+export function justifyContentPattern(){ return /^justify-content-(?:start|end|center|between|around|evenly)$/ }
+export function alignItemsPattern()    { return /^align-items-(?:start|end|center|baseline|stretch)$/ }
+export function alignContentPattern()  { return /^align-content-(?:start|end|center|between|around|stretch)$/ }
+export function gapPattern()           { return /^gap-[0-5]$/ }
+
+// True if the component has any d-flex / d-inline-flex / d-<bp>-flex variant.
+export function flexEnabledPattern() {
+  return /^d-(?:(?:sm|md|lg|xl|xxl)-)?(?:inline-)?flex$/
+}
+
+// ── Background ──────────────────────────────────────────────────────────────
+export const BG_COLOR = [
+  { value: 'primary',     swatch: '#0d6efd' },
+  { value: 'secondary',   swatch: '#6c757d' },
+  { value: 'success',     swatch: '#198754' },
+  { value: 'danger',      swatch: '#dc3545' },
+  { value: 'warning',     swatch: '#ffc107' },
+  { value: 'info',        swatch: '#0dcaf0' },
+  { value: 'light',       swatch: '#f8f9fa' },
+  { value: 'dark',        swatch: '#212529' },
+  { value: 'body',        swatch: '#ffffff' },
+  { value: 'body-secondary', swatch: '#e9ecef' },
+  { value: 'body-tertiary',  swatch: '#f8f9fa' },
+  { value: 'white',       swatch: '#ffffff' },
+  { value: 'black',       swatch: '#000000' },
+  { value: 'transparent', swatch: 'transparent' }
+]
+// Subtle variants from BS 5.3.
+export const BG_SUBTLE = [
+  'primary-subtle', 'secondary-subtle', 'success-subtle',
+  'danger-subtle',  'warning-subtle',   'info-subtle',
+  'light-subtle',   'dark-subtle'
+]
+export function bgColorPattern() {
+  return /^bg-(?:primary|secondary|success|danger|warning|info|light|dark|body|body-secondary|body-tertiary|white|black|transparent|(?:primary|secondary|success|danger|warning|info|light|dark)-subtle)$/
+}
+export function bgGradientPattern() { return /^bg-gradient$/ }
+
+// ── Border ──────────────────────────────────────────────────────────────────
+export const BORDER_SIDES = [
+  { value: '',       label: 'All'    }, // bare `border`
+  { value: 'top',    label: 'Top'    },
+  { value: 'end',    label: 'End'    },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'start',  label: 'Start'  }
+]
+export const BORDER_WIDTHS = ['1', '2', '3', '4', '5']
+export const BORDER_COLOR = [
+  { value: 'primary',   swatch: '#0d6efd' },
+  { value: 'secondary', swatch: '#6c757d' },
+  { value: 'success',   swatch: '#198754' },
+  { value: 'danger',    swatch: '#dc3545' },
+  { value: 'warning',   swatch: '#ffc107' },
+  { value: 'info',      swatch: '#0dcaf0' },
+  { value: 'light',     swatch: '#f8f9fa' },
+  { value: 'dark',      swatch: '#212529' },
+  { value: 'white',     swatch: '#ffffff' },
+  { value: 'black',     swatch: '#000000' }
+]
+export const BORDER_RADIUS = [
+  { value: '',         label: 'On'      }, // bare `rounded`
+  { value: '0',        label: 'None'    },
+  { value: '1',        label: '1'       },
+  { value: '2',        label: '2'       },
+  { value: '3',        label: '3'       },
+  { value: '4',        label: '4'       },
+  { value: '5',        label: '5'       },
+  { value: 'circle',   label: 'Circle'  },
+  { value: 'pill',     label: 'Pill'    }
+]
+export const SHADOW = [
+  { value: 'none', label: 'None' },
+  { value: 'sm',   label: 'Sm'   },
+  { value: '',     label: 'On'   }, // bare `shadow`
+  { value: 'lg',   label: 'Lg'   }
+]
+
+// border, border-top, border-end, border-bottom, border-start, and the
+// `-0` removers.
+export function borderSidePattern() {
+  return /^border(?:-(?:top|end|bottom|start))?(?:-0)?$/
+}
+export function borderWidthPattern() { return /^border-[1-5]$/ }
+export function borderColorPattern() {
+  return /^border-(?:primary|secondary|success|danger|warning|info|light|dark|white|black)$/
+}
+// rounded, rounded-0..5, rounded-circle, rounded-pill (no per-corner in chunk B)
+export function borderRadiusPattern() {
+  return /^rounded(?:-(?:0|1|2|3|4|5|circle|pill))?$/
+}
+export function shadowPattern() {
+  return /^shadow(?:-(?:none|sm|lg))?$/
+}
+
+// ── Sizing ──────────────────────────────────────────────────────────────────
+export const SIZING_W = ['25', '50', '75', '100', 'auto']
+export const SIZING_H = ['25', '50', '75', '100', 'auto']
+export function widthPattern()    { return /^w-(?:25|50|75|100|auto)$/ }
+export function heightPattern()   { return /^h-(?:25|50|75|100|auto)$/ }
+export function maxWidthPattern() { return /^mw-100$/ }
+export function maxHeightPattern(){ return /^mh-100$/ }
+export function vwPattern()       { return /^vw-100$/ }
+export function vhPattern()       { return /^vh-100$/ }

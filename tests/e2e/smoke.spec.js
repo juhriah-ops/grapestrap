@@ -1301,3 +1301,111 @@ test('Style Manager: Spacing/Display/Text panels write BS classes and round-trip
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+test('Style Manager: Flex/Background/Border/Sizing panels write BS classes', async () => {
+  // v0.0.2 chunk B — the remaining four BS-aware sub-panels. Verifies:
+  //   1. Flex panel shows a "Set display: flex" hint when no d-flex is on
+  //      the component, and clicking the hint button writes d-flex AND
+  //      re-renders the panel with the actual flex controls.
+  //   2. Justify / align-items / gap selections write the right classes.
+  //   3. Background swatch + subtle + gradient toggle.
+  //   4. Border side toggles are independent (border + border-top can
+  //      coexist); width / radius / shadow are mutually exclusive within
+  //      their group.
+  //   5. Sizing: w-50 (mutually exclusive width group) + vh-100 toggle.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-smb-'))
+  const projectPath = join(projectDir, 'smb.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'main')
+
+  const readClasses = () => appWindow.evaluate(() =>
+    window.__gstrap.pluginRegistry.bound.editor.getSelected().getClasses()
+  )
+
+  const openSection = id => appWindow.evaluate(sid => {
+    const sec = document.querySelector(`.gstrap-sm-section[data-sp="${sid}"]`)
+    const body = sec.querySelector('.gstrap-sm-body')
+    if (body.hasAttribute('hidden')) sec.querySelector(`[data-toggle="${sid}"]`).click()
+  }, id)
+
+  const clickIn = (id, sel) => appWindow.evaluate(({ id, sel }) => {
+    const body = document.querySelector(`.gstrap-sm-section[data-sp="${id}"] .gstrap-sm-body`)
+    body.querySelector(sel).click()
+  }, { id, sel })
+
+  // ── 1. Flex panel: empty-state hint, then "Set display: flex" ─────────────
+  await openSection('flex')
+  const hintExists = await appWindow.evaluate(() =>
+    !!document.querySelector('.gstrap-sm-section[data-sp="flex"] [data-set-flex]')
+  )
+  expect(hintExists).toBe(true)
+  await clickIn('flex', '[data-set-flex]')
+  let cls = await readClasses()
+  expect(cls).toContain('d-flex')
+
+  // After setting d-flex, the panel should re-render with real flex controls.
+  await appWindow.waitForSelector('.gstrap-sm-section[data-sp="flex"] [data-just="center"]', { timeout: 3_000 })
+
+  // ── 2. Justify / align-items / gap ────────────────────────────────────────
+  await clickIn('flex', '[data-just="center"]')
+  await clickIn('flex', '[data-aitems="end"]')
+  await clickIn('flex', '[data-gap="3"]')
+  cls = await readClasses()
+  expect(cls).toEqual(expect.arrayContaining(['justify-content-center', 'align-items-end', 'gap-3']))
+
+  // ── 3. Background ─────────────────────────────────────────────────────────
+  await openSection('background')
+  await clickIn('background', '[data-color="success"]')
+  cls = await readClasses()
+  expect(cls).toContain('bg-success')
+
+  // Subtle should evict bg-success — same group.
+  await clickIn('background', '[data-subtle="primary-subtle"]')
+  cls = await readClasses()
+  expect(cls).toContain('bg-primary-subtle')
+  expect(cls).not.toContain('bg-success')
+
+  await clickIn('background', '[data-gradient]')
+  cls = await readClasses()
+  expect(cls).toContain('bg-gradient')
+
+  // ── 4. Border ─────────────────────────────────────────────────────────────
+  await openSection('border')
+  // All-sides "border" + per-side "border-top" coexist (BS allows this).
+  await clickIn('border', '[data-side=""]')
+  await clickIn('border', '[data-side="top"]')
+  cls = await readClasses()
+  expect(cls).toContain('border')
+  expect(cls).toContain('border-top')
+
+  await clickIn('border', '[data-width="3"]')
+  await clickIn('border', '[data-radius="2"]')
+  await clickIn('border', '[data-shadow="lg"]')
+  cls = await readClasses()
+  expect(cls).toEqual(expect.arrayContaining(['border-3', 'rounded-2', 'shadow-lg']))
+
+  // Width is mutually exclusive — switching to 5 should evict 3.
+  await clickIn('border', '[data-width="5"]')
+  cls = await readClasses()
+  expect(cls).toContain('border-5')
+  expect(cls).not.toContain('border-3')
+
+  // ── 5. Sizing ─────────────────────────────────────────────────────────────
+  await openSection('sizing')
+  await clickIn('sizing', '[data-w="50"]')
+  await clickIn('sizing', '[data-toggle="vh-100"]')
+  cls = await readClasses()
+  expect(cls).toEqual(expect.arrayContaining(['w-50', 'vh-100']))
+
+  // Switching width to 75 evicts w-50 but leaves vh-100 alone.
+  await clickIn('sizing', '[data-w="75"]')
+  cls = await readClasses()
+  expect(cls).toContain('w-75')
+  expect(cls).not.toContain('w-50')
+  expect(cls).toContain('vh-100')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})

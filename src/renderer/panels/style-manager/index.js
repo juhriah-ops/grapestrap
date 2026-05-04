@@ -22,11 +22,15 @@
 
 import { eventBus } from '../../state/event-bus.js'
 
-import * as spacing from './spacing.js'
-import * as display from './display.js'
-import * as text    from './text.js'
+import * as spacing    from './spacing.js'
+import * as display    from './display.js'
+import * as flex       from './flex.js'
+import * as text       from './text.js'
+import * as background from './background.js'
+import * as border     from './border.js'
+import * as sizing     from './sizing.js'
 
-const SUBPANELS = [spacing, display, text]
+const SUBPANELS = [spacing, display, flex, text, background, border, sizing]
 const DEFAULT_OPEN = new Set(['spacing'])
 
 let host = null
