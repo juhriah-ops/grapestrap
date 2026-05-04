@@ -8,11 +8,12 @@
 .gstrap-lib-host {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   background: var(--bg-2);
   color: var(--text-1);
   font-size: 12px;
-  overflow: hidden;
+  overflow: hidden;  /* Inner .gstrap-lib-list does the scrolling */
 }
 
 .gstrap-lib-toolbar {

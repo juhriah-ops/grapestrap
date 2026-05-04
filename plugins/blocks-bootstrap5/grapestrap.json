@@ -7,7 +7,7 @@
   "license": "MIT",
   "type": "block",
   "main": "index.js",
-  "grapestrapVersion": "^0.0.1",
+  "grapestrapVersion": ">=0.0.1 <0.1.0",
   "permissions": [],
   "credits": "Adapted from cwalabs/grapesjs-blocks-bootstrap5 (MIT). Will switch to fork @grapestrap/blocks-bootstrap5 once published."
 }

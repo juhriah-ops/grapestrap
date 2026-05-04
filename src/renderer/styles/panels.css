@@ -14,9 +14,16 @@
 }
 
 /* ── File manager ─────────────────────────────────────────────────────────── */
+/* Panel hosts position absolute inside their GL `.lm_content` parent (which
+   has `position: relative` from goldenlayout-base.css) so `height: 100%`
+   resolves to a definite pixel value — without this, GL gives the host its
+   parent's content height which collapses to whatever the children stack
+   to, and `overflow: auto` can't kick in. Reported on nola1 2026-05-04:
+   DOM tree + Properties panels couldn't scroll past the visible viewport. */
 .gstrap-fm-host {
-  height: 100%;
-  overflow: auto;
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
   background: var(--bg-2);
   font-size: 13px;
 }
@@ -53,8 +60,9 @@
 
 /* ── Properties / Custom CSS containers ───────────────────────────────────── */
 .gstrap-props-host {
-  height: 100%;
-  overflow: auto;
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
   background: var(--bg-2);
   font-size: 12px;
 }
