@@ -1,0 +1,174 @@
+/* GrapeStrap — Preferences dialog. v0.0.2 ships the Shortcuts pane in full;
+   General/Editor/Plugins are scaffolded stubs. Edit per-row capture state
+   tints the cell yellow to make the "press something" mode obvious. */
+
+.gstrap-prefs-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 11500;
+}
+.gstrap-prefs-card {
+  width: min(900px, 92vw);
+  height: min(640px, 86vh);
+  background: var(--bg-2);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+}
+.gstrap-prefs-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-3);
+}
+.gstrap-prefs-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+}
+.gstrap-prefs-close {
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 6px;
+}
+.gstrap-prefs-close:hover { color: var(--text-1); }
+
+.gstrap-prefs-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.gstrap-prefs-tabs {
+  display: flex;
+  flex-direction: column;
+  width: 160px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-1);
+  flex-shrink: 0;
+}
+.gstrap-prefs-tab {
+  background: transparent;
+  color: var(--text-2);
+  border: none;
+  border-left: 3px solid transparent;
+  text-align: left;
+  font-size: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.gstrap-prefs-tab:hover { background: var(--bg-3); color: var(--text-1); }
+.gstrap-prefs-tab.is-active {
+  background: var(--bg-3);
+  color: var(--text-1);
+  border-left-color: var(--accent);
+}
+
+.gstrap-prefs-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px;
+  min-width: 0;
+}
+
+.gstrap-prefs-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.gstrap-prefs-btn {
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.gstrap-prefs-btn:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+  border-color: var(--accent);
+}
+
+.gstrap-prefs-shortcuts {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.gstrap-prefs-shortcuts th {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+  font-weight: normal;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.gstrap-prefs-shortcuts td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.gstrap-prefs-shortcuts tr.is-overridden .gstrap-prefs-row-label {
+  color: var(--accent);
+}
+.gstrap-prefs-shortcuts tr.is-conflict {
+  background: rgba(220, 53, 69, 0.08);
+}
+
+.gstrap-prefs-combo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  display: inline-block;
+}
+.gstrap-prefs-combo-capturing {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: rgba(255, 193, 7, 0.18);
+  color: #ffda6a;
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  border-radius: 3px;
+  padding: 1px 6px;
+  display: inline-block;
+  font-style: italic;
+}
+.gstrap-prefs-conflict {
+  margin-left: 6px;
+  color: #f48771;
+  font-size: 10px;
+}
+.gstrap-prefs-row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.gstrap-prefs-row-actions .gstrap-prefs-btn { margin-left: 4px; }
+
+.gstrap-prefs-stub {
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.gstrap-prefs-stub code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  padding: 0 4px;
+  border-radius: 2px;
+}

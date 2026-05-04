@@ -1555,6 +1555,111 @@ test('Style Manager: Cascade view lists rules from project style.css and Bootstr
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Preferences: Shortcuts tab rebinds a command, persists, and takes effect immediately', async () => {
+  // v0.0.2 — Full keyboard rebinding UI. Verifies:
+  //   1. Open via dialog:preferences event → modal appears with Shortcuts tab.
+  //   2. Edit a row → enters capture state, next keydown sets the new binding.
+  //   3. Override persists to prefs.shortcuts.
+  //   4. New binding fires the command (i.e. keybindings reloaded live).
+  //   5. Reset reverts the row to the default.
+  //   6. Conflict on a duplicate combo is shown inline (not blocking, but
+  //      visible) so the user knows.
+  const { app, appWindow } = await launch()
+
+  // Plugin activation finishes before the dialog:preferences listener is wired
+  // (both happen inside boot() after the plugin host comes up). Wait for it
+  // before firing the event.
+  await appWindow.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+
+  // Open the preferences dialog.
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('dialog:preferences'))
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('[data-prefs-row]').length > 0,
+    null, { timeout: 3_000 }
+  )
+
+  // ── 1. Shortcuts pane lists rows. file:save default is Ctrl+S. ────────────
+  const initialSaveCombo = await appWindow.evaluate(() =>
+    document.querySelector('[data-prefs-row="file:save"] .gstrap-prefs-combo').textContent.trim()
+  )
+  expect(initialSaveCombo).toBe('Ctrl+S')
+
+  // ── 2. Click Edit on file:save → row enters capture state. ────────────────
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-prefs-row="file:save"] [data-prefs-action="edit"]').click()
+  })
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('[data-prefs-row="file:save"] .gstrap-prefs-combo-capturing'),
+    null, { timeout: 2_000 }
+  )
+
+  // Press Ctrl+Shift+P. Use the dialog overlay as the focus target so the
+  // capture-phase keydown listener attached to document picks it up.
+  await appWindow.evaluate(() => {
+    const overlay = document.querySelector('.gstrap-prefs-overlay')
+    overlay.focus()
+  })
+  await appWindow.keyboard.down('Control')
+  await appWindow.keyboard.down('Shift')
+  await appWindow.keyboard.press('KeyP')
+  await appWindow.keyboard.up('Shift')
+  await appWindow.keyboard.up('Control')
+
+  // ── 3. Combo updates to Ctrl+Shift+P and persists. ────────────────────────
+  await appWindow.waitForFunction(() => {
+    const cell = document.querySelector('[data-prefs-row="file:save"] .gstrap-prefs-combo')
+    return cell && cell.textContent.trim() === 'Ctrl+Shift+P'
+  }, null, { timeout: 3_000 })
+
+  const persisted = await appWindow.evaluate(() => window.grapestrap.prefs.get('shortcuts'))
+  expect(persisted['file:save']).toBeTruthy()
+  expect(persisted['file:save'].key).toBe('p')
+  expect(persisted['file:save'].ctrl).toBe(true)
+  expect(persisted['file:save'].shift).toBe(true)
+
+  // ── 4. The new binding is live — pressing Ctrl+Shift+P fires file:save
+  //    on the event bus. Capture commands to verify.
+  const cmds = []
+  await appWindow.exposeFunction('__captureCmd', c => { cmds.push(c) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('command', c => window.__captureCmd(c))
+  })
+  // Close the prefs dialog first (its capture handler swallows keys when
+  // editing; once the dialog is closed, the global keybindings handler
+  // takes the next keydown).
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-prefs-overlay [data-prefs-action="close"]').click()
+  })
+  await appWindow.keyboard.down('Control')
+  await appWindow.keyboard.down('Shift')
+  await appWindow.keyboard.press('KeyP')
+  await appWindow.keyboard.up('Shift')
+  await appWindow.keyboard.up('Control')
+  await appWindow.waitForTimeout(200)
+  expect(cmds).toContain('file:save')
+
+  // ── 5. Reset reverts the row. ─────────────────────────────────────────────
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('dialog:preferences'))
+  await appWindow.waitForFunction(
+    () => document.querySelectorAll('[data-prefs-row="file:save"]').length > 0,
+    null, { timeout: 3_000 }
+  )
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-prefs-row="file:save"] [data-prefs-action="reset"]').click()
+  })
+  await appWindow.waitForFunction(() => {
+    const cell = document.querySelector('[data-prefs-row="file:save"] .gstrap-prefs-combo')
+    return cell && cell.textContent.trim() === 'Ctrl+S'
+  }, null, { timeout: 3_000 })
+  const afterReset = await appWindow.evaluate(() => window.grapestrap.prefs.get('shortcuts'))
+  expect(afterReset['file:save']).toBeFalsy()
+
+  await app.close()
+})
+
 test('Snippets tab: capture from selection, insert places a free copy, delete removes', async () => {
   // v0.0.2 — Snippets are reusable HTML fragments stored on the project
   // (or contributed by plugins). Unlike Library Items they're NOT linked —

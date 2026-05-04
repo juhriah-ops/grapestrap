@@ -45,6 +45,7 @@ import { renderPropertyStrip } from './panels/properties-strip/index.js'
 import { wireMenuActions } from './shortcuts/menu-router.js'
 import { wireKeybindings } from './shortcuts/keybindings.js'
 import { wireToasts } from './dialogs/toasts.js'
+import { openPreferencesDialog } from './dialogs/preferences.js'
 import { showWelcomeIfFirstRun } from './dialogs/welcome.js'
 import { showContextMenu } from './dialogs/context-menu.js'
 import { buildComponentMenuItems } from './shortcuts/component-actions.js'
@@ -83,6 +84,7 @@ async function boot() {
   wireMenuActions()
   wireKeybindings()
   wireToasts()
+  eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
   // 5. Single context-menu open path. Both the canvas iframe handler (in
   //    grapesjs-init.js) and the DOM tree (in panels/dom-tree) emit

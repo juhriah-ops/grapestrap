@@ -23,48 +23,31 @@
  */
 
 import { eventBus } from '../state/event-bus.js'
+import { resolveBindings } from './default-bindings.js'
 import { log } from '../log.js'
 
-// One row per native-menu accelerator we want to honor from the keyboard.
-// Keys are case-insensitive on the right-hand side; modifier flags are exact.
-// Order matters — first match wins (so put more-specific shift+key before
-// the same key without shift).
-const BINDINGS = [
-  // File
-  { key: 's', ctrl: true, shift: true,  command: 'file:save-as' },
-  { key: 's', ctrl: true, shift: false, command: 'file:save' },
-  { key: 'n', ctrl: true, shift: true,  command: 'file:new-page' },
-  { key: 'n', ctrl: true, shift: false, command: 'file:new-project' },
-  { key: 'o', ctrl: true, shift: false, command: 'file:open-project' },
-  { key: 'e', ctrl: true, shift: false, command: 'file:export' },
-  { key: 'w', ctrl: true, shift: true,  command: 'edit:wrap-tag' },
-  { key: 'w', ctrl: true, shift: false, command: 'file:close-tab' },
+// Active bindings = defaults + user overrides from prefs.shortcuts. Mutable
+// so the rebinder dialog can swap in new bindings without a reload.
+let activeBindings = resolveBindings({})
 
-  // Edit
-  { key: 'z', ctrl: true, shift: true,  command: 'edit:redo' },
-  { key: 'z', ctrl: true, shift: false, command: 'edit:undo' },
-  { key: 'd', ctrl: true, shift: false, command: 'edit:duplicate' },
-  { key: 't', ctrl: true, shift: false, command: 'edit:quick-tag' },
+export function setBindingOverrides(overrides) {
+  activeBindings = resolveBindings(overrides || {})
+  eventBus.emit('shortcuts:reloaded', activeBindings)
+}
 
-  // View
-  { key: '1', ctrl: true, shift: false, command: 'view:mode-design' },
-  { key: '2', ctrl: true, shift: false, command: 'view:mode-code' },
-  { key: '3', ctrl: true, shift: false, command: 'view:mode-split' },
-  { key: 'b', ctrl: true, shift: false, command: 'view:toggle-file-manager' },
-  { key: 'j', ctrl: true, shift: false, command: 'view:toggle-properties' },
-  { key: 'i', ctrl: true, shift: false, command: 'view:toggle-insert' },
-  { key: 'o', ctrl: true, shift: true,  command: 'view:toggle-dom-tree' },
-
-  // Help
-  { key: '/', ctrl: true, shift: false, command: 'help:shortcuts' }
-]
+export function getActiveBindings() {
+  return activeBindings.slice()
+}
 
 function match(evt) {
   const k = (evt.key || '').toLowerCase()
-  for (const b of BINDINGS) {
+  // Order matters — search shift-first so e.g. Ctrl+Shift+S beats Ctrl+S.
+  // We rely on the default-bindings.js order for that.
+  for (const b of activeBindings) {
     if (b.key !== k) continue
-    if (!!b.ctrl !== !!(evt.ctrlKey || evt.metaKey)) continue
+    if (!!b.ctrl  !== !!(evt.ctrlKey || evt.metaKey)) continue
     if (!!b.shift !== !!evt.shiftKey) continue
+    if (!!b.alt   !== !!evt.altKey) continue
     return b
   }
   return null
@@ -110,7 +93,15 @@ function attachTo(doc) {
   doc.addEventListener('keydown', handle, true)
 }
 
-export function wireKeybindings() {
+export async function wireKeybindings() {
+  // Pull persisted overrides from the main-process prefs store. Failure to
+  // read prefs (e.g. fresh install where the file doesn't exist yet) is fine
+  // — defaults stand.
+  try {
+    const overrides = await window.grapestrap?.prefs?.get?.('shortcuts')
+    if (overrides && typeof overrides === 'object') setBindingOverrides(overrides)
+  } catch { /* defaults stand */ }
+
   attachTo(document)
 
   // GrapesJS canvas iframe — keydown events inside the iframe do NOT bubble
@@ -120,6 +111,10 @@ export function wireKeybindings() {
   eventBus.on('canvas:ready', editor => {
     bindCanvas(editor)
   })
+
+  // Preferences dialog edits broadcast on this channel — re-resolve the
+  // active set without restarting the app.
+  eventBus.on('shortcuts:user-changed', overrides => setBindingOverrides(overrides))
 }
 
 function bindCanvas(editor) {
