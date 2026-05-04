@@ -1,0 +1,56 @@
+/* GrapeStrap — Linked Files bar chips.
+
+   The bar host (.gstrap-linkedfiles) is styled by shell.css for grid + height.
+   Chip styling lives here so the file is co-located with the renderer module
+   that emits the chips. */
+
+.gstrap-lf-label {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.gstrap-lf-empty {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.gstrap-lf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 11px;
+  padding: 1px 8px 1px 4px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  flex-shrink: 0;
+}
+.gstrap-lf-chip:hover {
+  background: var(--bg-3);
+  border-color: var(--accent);
+}
+.gstrap-lf-chip-kind {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 2px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.gstrap-lf-css .gstrap-lf-chip-kind {
+  background: rgba(13, 110, 253, 0.25);
+  color: #6ea8fe;
+}
+.gstrap-lf-js  .gstrap-lf-chip-kind {
+  background: rgba(255, 193, 7, 0.25);
+  color: #ffda6a;
+}
+.gstrap-lf-chip-name {
+  white-space: nowrap;
+}

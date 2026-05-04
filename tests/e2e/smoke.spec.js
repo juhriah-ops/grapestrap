@@ -1555,6 +1555,95 @@ test('Style Manager: Cascade view lists rules from project style.css and Bootstr
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Linked Files bar: shows CSS/JS chips from page head, hides on library tab', async () => {
+  // v0.0.2 — Linked Files strip above the canvas. Verifies:
+  //   1. With a page open whose html includes <link rel=stylesheet> and
+  //      <script src=>, both chips appear with the right kind label.
+  //   2. Clicking a project-style chip emits 'linked-files:open-globalcss'.
+  //   3. Switching to a library tab hides the bar (libraries are bare
+  //      fragments without head links).
+  //   4. View toggle hides/shows the bar.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-lf-'))
+  const projectPath = join(projectDir, 'lf.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Mutate the index page to include a link + script.
+  await appWindow.evaluate(() => {
+    const { projectState } = window.__gstrap
+    const page = projectState.getPage('index')
+    page.html = `
+      <link rel="stylesheet" href="style.css">
+      <script src="js/main.js"></script>
+      <main class="container py-5"><h1>seeded</h1></main>
+    `
+    // Tickle the bar via canvas:content-changed (parsing is from page.html).
+    window.__gstrap.eventBus.emit('canvas:content-changed')
+  })
+
+  // ── 1. Chips appear ────────────────────────────────────────────────────────
+  await appWindow.waitForSelector('#gstrap-linkedfiles:not([hidden]) [data-lf-href="style.css"]', { timeout: 3_000 })
+  await appWindow.waitForSelector('#gstrap-linkedfiles [data-lf-href="js/main.js"]', { timeout: 1_000 })
+
+  const chipKinds = await appWindow.$$eval(
+    '#gstrap-linkedfiles .gstrap-lf-chip',
+    nodes => nodes.map(n => ({
+      href: n.dataset.lfHref,
+      kind: n.querySelector('.gstrap-lf-chip-kind')?.textContent
+    }))
+  )
+  expect(chipKinds).toEqual(expect.arrayContaining([
+    { href: 'style.css',  kind: 'css' },
+    { href: 'js/main.js', kind: 'js'  }
+  ]))
+
+  // ── 2. Click style.css chip → emits open-globalcss event ──────────────────
+  const events = []
+  await appWindow.exposeFunction('__captureLfEvent', e => { events.push(e) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('linked-files:open-globalcss', () => window.__captureLfEvent('opened'))
+  })
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-lf-href="style.css"]').click()
+  })
+  await appWindow.waitForTimeout(200)
+  expect(events).toContain('opened')
+
+  // ── 3. Switch to a library tab → bar hides ────────────────────────────────
+  await appWindow.evaluate(() => {
+    const { projectState, pageState } = window.__gstrap
+    projectState.current.libraryItems.push({
+      id: 'mybit', name: 'Bit',
+      html: '<p>library content</p>', file: 'library/mybit.html'
+    })
+    pageState.open('mybit', { kind: 'library', label: 'Bit' })
+  })
+  await appWindow.waitForFunction(() =>
+    document.getElementById('gstrap-linkedfiles').hidden === true,
+    null, { timeout: 3_000 }
+  )
+
+  // ── 4. Toggle event hides bar even when on a normal page ──────────────────
+  await appWindow.evaluate(() => {
+    window.__gstrap.pageState.focus('index')
+  })
+  await appWindow.waitForFunction(() =>
+    document.getElementById('gstrap-linkedfiles').hidden === false,
+    null, { timeout: 3_000 }
+  )
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('view:toggle-linked-files')
+  })
+  const hiddenAfterToggle = await appWindow.evaluate(() =>
+    document.getElementById('gstrap-linkedfiles').hidden
+  )
+  expect(hiddenAfterToggle).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Library Items: create from selection, insert, edit-tab propagates to pages', async () => {
   // v0.0.2 — Dreamweaver-style Library Items. End-to-end:
   //   1. Select an h1, click "+ From Selection" → a new library item appears
