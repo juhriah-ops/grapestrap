@@ -36,3 +36,13 @@
   background: var(--bg-2) !important;
   border: 1px solid var(--border) !important;
 }
+
+/* View → Toggle commands set body classes that CSS uses to hide GL-managed
+   panels. Golden Layout doesn't re-flow when a panel is `display: none`
+   (the splitter slot remains), so the user sees a small empty gap where
+   the panel used to be — true relayout-on-hide arrives in v0.0.3 with
+   the proper GL v2 item.hide()/show() integration. */
+body.is-hide-file-manager .lm_content.gstrap-fm-host  { display: none !important; }
+body.is-hide-properties   .lm_content.gstrap-props-host { display: none !important; }
+body.is-hide-dom-tree     .lm_content.gstrap-dom-host { display: none !important; }
+body.is-hide-custom-css   .lm_content.gstrap-cssp-host { display: none !important; }

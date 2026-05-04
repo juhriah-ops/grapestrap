@@ -40,6 +40,7 @@ import { renderToolbar } from './panels/toolbar.js'
 import { renderTabs } from './panels/tabs.js'
 import { renderLinkedFilesBar } from './panels/linked-files/index.js'
 import { renderBreakpointsBar } from './panels/breakpoints/index.js'
+import { wireViewToggles } from './panels/view-toggles.js'
 import { renderStatusBar } from './status-bar/status-bar.js'
 import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
@@ -86,6 +87,7 @@ async function boot() {
   wireMenuActions()
   wireKeybindings()
   wireToasts()
+  wireViewToggles()
   eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
   // 5. Single context-menu open path. Both the canvas iframe handler (in

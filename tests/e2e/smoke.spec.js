@@ -20,13 +20,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(__dirname, '..', '..')
 
 async function launch(extraEnv = {}) {
+  // Isolate XDG dirs per launch so prefs (esp. prefs.view set by toggle
+  // specs) don't leak between tests. Prior runs would persist
+  // propertiesPanelVisible:false to ~/.config/GrapeStrap and break every
+  // subsequent test that needed the Properties panel visible.
+  const xdgRoot = await fsp.mkdtemp(join(tmpdir(), 'gstrap-xdg-'))
   const app = await electron.launch({
     args: [repoRoot, '--no-sandbox'],
-    env: { ...process.env, ...extraEnv }
+    env: {
+      ...process.env,
+      XDG_CONFIG_HOME: join(xdgRoot, 'config'),
+      XDG_CACHE_HOME:  join(xdgRoot, 'cache'),
+      XDG_DATA_HOME:   join(xdgRoot, 'data'),
+      XDG_STATE_HOME:  join(xdgRoot, 'state'),
+      ...extraEnv
+    }
   })
   const appWindow = await app.firstWindow()
   await appWindow.waitForFunction(() => window.__gstrap?.eventBus, null, { timeout: 30_000 })
-  return { app, appWindow }
+  return { app, appWindow, xdgRoot }
 }
 
 test('M1 smoke: open → edit → save → reopen', async () => {
@@ -2278,6 +2290,78 @@ test('Asset Manager: drag-drop multiple files writes them all to site/assets/', 
     () => (window.__gstrap_assets?.images || []).includes('first.png'),
     null, { timeout: 3_000 }
   )
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('View toggles: menu/keybind events hide & show the right region', async () => {
+  // Reported on nola1: "I cant control what views are active. from the
+  // top tool bar menu is that supposed to be wired yet?"
+  // The view:toggle-* events were stubs. Verifies wireViewToggles now
+  // routes them — fixed strips toggle the [hidden] attribute, GL panels
+  // toggle a body class that hides their .lm_content via CSS.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-vt-'))
+  const projectPath = join(projectDir, 'vt.gstrap')
+
+  const { app, appWindow } = await launch()  // launch() isolates prefs per run
+  await openSeedProject(appWindow, projectPath)
+
+  const initial = await appWindow.evaluate(() => ({
+    insert: document.getElementById('gstrap-insert').hidden,
+    strip:  document.getElementById('gstrap-strip').hidden,
+    status: document.getElementById('gstrap-status').hidden,
+    fmHide:    document.body.classList.contains('is-hide-file-manager'),
+    propsHide: document.body.classList.contains('is-hide-properties')
+  }))
+  expect(initial.insert).toBe(false)
+  expect(initial.strip).toBe(false)
+  expect(initial.status).toBe(false)
+  expect(initial.fmHide).toBe(false)
+  expect(initial.propsHide).toBe(false)
+
+  // Fire all five toggles.
+  await appWindow.evaluate(() => {
+    const eb = window.__gstrap.eventBus
+    eb.emit('view:toggle-insert')
+    eb.emit('view:toggle-strip')
+    eb.emit('view:toggle-status')
+    eb.emit('view:toggle-file-manager')
+    eb.emit('view:toggle-properties')
+  })
+
+  const afterToggle = await appWindow.evaluate(() => ({
+    insert: document.getElementById('gstrap-insert').hidden,
+    strip:  document.getElementById('gstrap-strip').hidden,
+    status: document.getElementById('gstrap-status').hidden,
+    fmHide:    document.body.classList.contains('is-hide-file-manager'),
+    propsHide: document.body.classList.contains('is-hide-properties')
+  }))
+  expect(afterToggle.insert).toBe(true)
+  expect(afterToggle.strip).toBe(true)
+  expect(afterToggle.status).toBe(true)
+  expect(afterToggle.fmHide).toBe(true)
+  expect(afterToggle.propsHide).toBe(true)
+
+  // Toggle insert back on, verify only it flipped.
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-insert'))
+  const afterRestore = await appWindow.evaluate(() => ({
+    insert: document.getElementById('gstrap-insert').hidden,
+    strip:  document.getElementById('gstrap-strip').hidden
+  }))
+  expect(afterRestore.insert).toBe(false)
+  expect(afterRestore.strip).toBe(true)
+
+  // Persistence: prefs.view should reflect insert=true (re-shown) and
+  // strip=false. Persist IPC is async — poll until it settles.
+  let prefsView = {}
+  for (let i = 0; i < 20; i++) {
+    prefsView = await appWindow.evaluate(() => window.grapestrap.prefs.get('view'))
+    if (prefsView?.propertyStripVisible === false && prefsView?.insertPanelVisible === true) break
+    await new Promise(r => setTimeout(r, 100))
+  }
+  expect(prefsView.insertPanelVisible).toBe(true)
+  expect(prefsView.propertyStripVisible).toBe(false)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })

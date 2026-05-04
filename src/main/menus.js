@@ -77,6 +77,9 @@ export function buildMenu({ onAction }) {
       { label: 'Toggle Property Inspector',    accelerator: 'CmdOrCtrl+`',     click: send('view:toggle-strip') },
       { label: 'Toggle Insert Panel',          accelerator: 'CmdOrCtrl+I',     click: send('view:toggle-insert') },
       { label: 'Toggle Status Bar',                                           click: send('view:toggle-status') },
+      { label: 'Toggle Linked Files',                                         click: send('view:toggle-linked-files') },
+      { label: 'Toggle Breakpoint Slider',                                    click: send('view:toggle-breakpoints') },
+      { label: 'Toggle Custom CSS',                                           click: send('view:toggle-custom-css') },
       { type: 'separator' },
       {
         label: 'Responsive Preview',
