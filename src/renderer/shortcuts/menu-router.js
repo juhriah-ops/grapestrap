@@ -211,6 +211,8 @@ async function cmdSave() {
     projectState.dirtyTemplates.clear()
     projectState.dirtyLibrary.clear()
     projectState.globalCssDirty = false
+    projectState.dirtySnippets.clear()
+    projectState.manifestDirty = false
     eventBus.emit('project:saved', result)
     eventBus.emit('toast', { type: 'success', message: 'Saved.' })
   }
@@ -233,6 +235,8 @@ async function cmdRefresh() {
     projectState.dirtyTemplates.clear()
     projectState.dirtyLibrary.clear()
     projectState.globalCssDirty = false
+    projectState.dirtySnippets.clear()
+    projectState.manifestDirty = false
     eventBus.emit('project:saved', result)
   }
   // Re-sync everything that subscribes to these channels: globalCSS into

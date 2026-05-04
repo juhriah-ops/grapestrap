@@ -209,7 +209,15 @@ function resetAll() {
 
 async function persistOverrides() {
   try { await window.grapestrap?.prefs?.set?.('shortcuts', overrides) }
-  catch { /* prefs store unavailable; just keep in-memory state */ }
+  catch (err) {
+    // Audit-found gap: silent swallow meant the user could rebind shortcuts
+    // and lose the change on relaunch with no warning. Toast so the failure
+    // is visible — in-memory state still works for the session.
+    eventBus.emit('toast', {
+      type: 'error',
+      message: `Couldn't save shortcut prefs: ${err?.message || err}. Bindings work for this session only.`
+    })
+  }
   eventBus.emit('shortcuts:user-changed', overrides)
 }
 

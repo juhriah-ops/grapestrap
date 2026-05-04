@@ -282,7 +282,10 @@ function saveAndClose() {
   if (!workingMeta.favicon) delete projectState.current.manifest.metadata.favicon
 
   projectState.markPageDirty(page.name)
-  eventBus.emit('project:dirty-changed')
+  // The favicon lives on manifest.metadata, so a project-favicon-only edit
+  // isn't actually a page change. Mark manifest dirty so isDirty() reports
+  // the unsaved metadata even if no page-specific field changed.
+  projectState.markManifestDirty()
   eventBus.emit('toast', { type: 'success', message: 'Page properties updated. Save the project to persist.' })
   close()
 }

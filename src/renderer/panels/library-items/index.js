@@ -214,8 +214,8 @@ function cmdDelete(id) {
   }
   items.splice(i, 1)
   pageState.close(id)  // close the editor tab if open
+  projectState.markLibraryDirty(id)
   eventBus.emit('library:changed')
-  eventBus.emit('project:dirty-changed')
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

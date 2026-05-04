@@ -517,10 +517,17 @@ export async function exportProject(project, outputDir) {
     await fsp.writeFile(join(outputDir, 'css', 'style.css'), project.globalCSS, 'utf8')
   }
 
-  // Copy project assets folder (sourced from site/assets/)
-  try {
-    await fsp.cp(join(siteDir(project.projectDir), 'assets'), join(outputDir, 'assets'), { recursive: true })
-  } catch {}
+  // Copy project assets folder (sourced from site/assets/). Missing source
+  // dir is fine — a project with no assets at all just has nothing to copy.
+  // Other failures (perms, EIO, disk full) propagate so the user gets a
+  // clear error toast instead of shipping a broken site silently. Echoes
+  // the prior bootstrap-export bug — same pattern.
+  const assetsSrc = join(siteDir(project.projectDir), 'assets')
+  try { await fsp.access(assetsSrc) }
+  catch { /* no assets dir → nothing to copy, that's OK */ }
+  if (await fsp.access(assetsSrc).then(() => true, () => false)) {
+    await fsp.cp(assetsSrc, join(outputDir, 'assets'), { recursive: true })
+  }
 
   // Render each page (v0.0.1: pages standalone; v0.0.2+ resolves templates/library)
   for (const page of project.pages) {

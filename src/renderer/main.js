@@ -90,6 +90,26 @@ async function boot() {
   wireViewToggles()
   eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
+  // Help menu wiring — both items used to emit events nothing listened to.
+  // dialog:shortcuts opens Preferences (Shortcuts tab is the default view).
+  // dialog:about toasts version + repo link for v0.0.2; richer modal in v0.0.3.
+  eventBus.on('dialog:shortcuts', () => openPreferencesDialog())
+  eventBus.on('dialog:about', () => {
+    eventBus.emit('toast', {
+      type: 'info',
+      message: `GrapeStrap ${info.version} — Linux-native Bootstrap 5 editor. github.com/juhriah-ops/grapestrap`
+    })
+  })
+
+  // Linked-files chip → focus the Custom CSS panel. The toast in linked-files
+  // claimed the panel was opened but nothing actually surfaced it; this
+  // closes that loop by toggling the panel visible if it was hidden.
+  eventBus.on('linked-files:open-globalcss', () => {
+    if (document.body.classList.contains('is-hide-custom-css')) {
+      eventBus.emit('view:toggle-custom-css')
+    }
+  })
+
   // 5. Single context-menu open path. Both the canvas iframe handler (in
   //    grapesjs-init.js) and the DOM tree (in panels/dom-tree) emit
   //    `canvas:context-menu` with viewport coords + component — one listener

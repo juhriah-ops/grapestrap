@@ -20,7 +20,9 @@ class ProjectState {
     this.dirtyPages = new Set()
     this.dirtyTemplates = new Set()
     this.dirtyLibrary = new Set()
+    this.dirtySnippets = new Set()
     this.globalCssDirty = false
+    this.manifestDirty = false  // metadata changes (favicon, etc.)
   }
 
   set(project) {
@@ -28,7 +30,9 @@ class ProjectState {
     this.dirtyPages.clear()
     this.dirtyTemplates.clear()
     this.dirtyLibrary.clear()
+    this.dirtySnippets.clear()
     this.globalCssDirty = false
+    this.manifestDirty = false
     eventBus.emit('project:opened', project)
   }
 
@@ -38,7 +42,9 @@ class ProjectState {
     this.dirtyPages.clear()
     this.dirtyTemplates.clear()
     this.dirtyLibrary.clear()
+    this.dirtySnippets.clear()
     this.globalCssDirty = false
+    this.manifestDirty = false
     if (had) eventBus.emit('project:closed')
   }
 
@@ -48,14 +54,26 @@ class ProjectState {
   markTemplateClean(name) { this.dirtyTemplates.delete(name); eventBus.emit('project:dirty-changed', this.snapshot()) }
   markLibraryDirty(id)    { this.dirtyLibrary.add(id);     eventBus.emit('project:dirty-changed', this.snapshot()) }
   markLibraryClean(id)    { this.dirtyLibrary.delete(id);  eventBus.emit('project:dirty-changed', this.snapshot()) }
+  // Snippets: add/remove/rename all dirty the whole snippet collection. We
+  // track by id so the dirty-state view can show "3 snippets dirty" if/when
+  // the status bar needs that granularity. Audit-found gap: snippets/index.js
+  // and library-items/index.js cmdDelete were mutating the project without
+  // touching any dirty set, so isDirty() lied and a future close-warn would
+  // lose data.
+  markSnippetsDirty(id)   { this.dirtySnippets.add(id || '*'); eventBus.emit('project:dirty-changed', this.snapshot()) }
+  markSnippetsClean()     { this.dirtySnippets.clear();        eventBus.emit('project:dirty-changed', this.snapshot()) }
   markCssDirty()          { this.globalCssDirty = true;    eventBus.emit('project:dirty-changed', this.snapshot()) }
   markCssClean()          { this.globalCssDirty = false;   eventBus.emit('project:dirty-changed', this.snapshot()) }
+  markManifestDirty()     { this.manifestDirty = true;     eventBus.emit('project:dirty-changed', this.snapshot()) }
+  markManifestClean()     { this.manifestDirty = false;    eventBus.emit('project:dirty-changed', this.snapshot()) }
 
   isDirty() {
     return this.dirtyPages.size > 0 ||
            this.dirtyTemplates.size > 0 ||
            this.dirtyLibrary.size > 0 ||
-           this.globalCssDirty
+           this.dirtySnippets.size > 0 ||
+           this.globalCssDirty ||
+           this.manifestDirty
   }
 
   snapshot() {
@@ -63,7 +81,9 @@ class ProjectState {
       pages: [...this.dirtyPages],
       templates: [...this.dirtyTemplates],
       library: [...this.dirtyLibrary],
+      snippets: [...this.dirtySnippets],
       globalCss: this.globalCssDirty,
+      manifest: this.manifestDirty,
       any: this.isDirty()
     }
   }

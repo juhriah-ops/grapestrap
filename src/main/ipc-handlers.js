@@ -239,7 +239,15 @@ export function registerIpcHandlers({ pluginRegistry }) {
       try {
         const entries = await listDir(`site/assets/${kind}`)
         out[kind] = entries.filter(e => e.type === 'file').map(e => e.name)
-      } catch { /* dir doesn't exist yet */ }
+      } catch (err) {
+        // ENOENT: dir doesn't exist yet (fresh project, kind not used).
+        // Anything else (perm, EIO) — log and continue but don't stay
+        // silent. Audit-found: a real error here used to look identical
+        // to "empty asset folder."
+        if (err?.code !== 'ENOENT' && err?.code !== 'no project open') {
+          log.warn(`file:list-assets ${kind}:`, err?.message || err)
+        }
+      }
     }
     return out
   })

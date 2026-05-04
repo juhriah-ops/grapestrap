@@ -90,8 +90,8 @@ export async function addProjectSnippetFromSelection() {
   const snippet = { id, name, html: sel.toHTML() }
   if (!projectState.current.snippets) projectState.current.snippets = []
   projectState.current.snippets.push(snippet)
+  projectState.markSnippetsDirty(snippet.id)
   eventBus.emit('snippets:changed')
-  eventBus.emit('project:dirty-changed')
   return snippet
 }
 
@@ -101,8 +101,8 @@ export function deleteProjectSnippet(rawId) {
   const i = list.findIndex(s => s.id === rawId)
   if (i < 0) return
   list.splice(i, 1)
+  projectState.markSnippetsDirty(rawId)
   eventBus.emit('snippets:changed')
-  eventBus.emit('project:dirty-changed')
 }
 
 function snippetTileId(source, rawId) {

@@ -8,6 +8,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.3] — 2026-05-04 (patch)
+
+Twelve-commit batch covering features the user reported during real static-site testing on nola1, plus an audit pass that surfaced latent bugs in dirty-state tracking + silent error paths.
+
+### Added
+- **Asset Manager: drag-and-drop multi-file upload.** Drop OS files onto the panel (or a specific section) and every file is routed to the right kind via extension. Reads via `File.arrayBuffer()` + writes through new `file:write-asset-buffer` IPC; main-side `writeFile` now detects `Buffer` / `Uint8Array` and writes raw bytes. Visual: dashed-accent outline on dragover.
+- **Style Manager → Background image picker.** New "Image" row in the Background sub-panel: pick from `assets/images/` thumbnails, click → writes `<selector> { background-image: url(...); background-size: cover; background-position: center; background-repeat: no-repeat }` to project globalCSS. Same selector resolution as the pseudo-class editor (first non-BS class or id). Per-rule sub-controls (size / position / repeat) appear once an image is set. New `readBareRule()` helper for bare-state rule reads.
+- **Style Manager → Columns sub-panel.** Activates when the selected component has the `.row` class. Breakpoint strip (xs/sm/md/lg/xl/xxl), quick splits (12, 6/6, 4/4/4, 3×4, 8/4, 4/8, 3/9, 9/3, 5/7, 7/5, 2/8/2), per-column dropdown (fill/auto/1..12), `+ Add Column` and × remove. `applyGroup` + `colPattern(bp)` so per-breakpoint edits stack without clobbering each other.
+- **Breakpoint slider strip above canvas.** Width readout + active-BP label, native range slider (320..1920 px), snap buttons (375/576/768/992/1200/1400 + 100%). Drag = direct iframe inline-style width; iframe letterboxes inside the canvas pane (matches DW mobile preview). Second row: per-component `Hide at <bp>` / `Show at <bp>` toggles that auto-evict competing display classes for the active breakpoint.
+- **File → Page Properties dialog.** Three tabs: General (title / description), Favicon (project-wide picker over `assets/images/.{ico,png,svg,webp}`, plus per-page override), Meta (custom `<meta name=… content=…>` rows). `wrapPageHtml` export emits `<title>`, `<meta name=description>`, custom meta tags, `<link rel=icon>` (with type sniffed from extension), bootstrap CSS + project style.css, custom links, then `<script>` bundle + custom scripts.
+- **Custom CSS live preview.** Editor change emits `project:css-changed` (250ms debounced) so the canvas iframe `<style data-grapestrap-globalcss>` mirror reflects edits within ~quarter-second. No manual save required.
+- **Toolbar ↻ Refresh action.** Belt-and-suspenders save + canvas resync: flush active tab → save → clear all dirty flags → emit `project:css-changed` / `assets:changed` / `library:changed` / `editor.refresh()`. Use when external file changes need to be picked up.
+- **Wired all View → Toggle commands.** New `panels/view-toggles.js` centralises the toggle handlers. Fixed strips toggle `[hidden]`; GL-managed panels toggle a body class that hides the matching `.lm_item` via `:has()` + display:none. Persistence to `prefs.view`. Three new menu items so all toggles are discoverable: Linked Files / Breakpoint Slider / Custom CSS.
+- **Help → About + Help → Shortcuts now functional** (audit fix). About toasts version + repo link; Shortcuts opens the Preferences dialog (Shortcuts is its default tab). Both menu items used to emit events nothing listened to.
+
+### Changed
+- **Export bundles BOTH minified and un-minified Bootstrap.** Matches Dreamweaver: `bootstrap.css` + `.css.map` + `bootstrap.min.css` + `.css.map` + `bootstrap.bundle.js` + `.js.map` + `bootstrap.bundle.min.js` + `.js.map` (8 files). Wrapper HTML defaults to linking the un-minified for browser-devtools quality.
+- **Project state gains `dirtySnippets` set + `manifestDirty` flag** (audit fix). `markSnippetsDirty(id)` / `markManifestDirty()` wired in `snippets/index.js`, `library-items/cmdDelete`, and `page-properties`. Without these, `isDirty()` lied after a snippet add/delete or a project-favicon edit — future close-warn would have lost data.
+- **Tests isolate XDG dirs per launch.** `XDG_CONFIG_HOME / CACHE / DATA / STATE` set to a fresh tmpdir in `launch()` so prefs don't leak between tests. Required after view-toggle prefs from prior dev runs were silently hiding the Properties panel and breaking ~6 downstream specs.
+- **GL panel hide via `:has()` direct-child path.** First `:has()` attempt collapsed the entire column tree (every ancestor `.lm_item` matched the descendant selector). Constrain to the GL v2 path `> .lm_items > .lm_item_container > .lm_content.<host>` so only the leaf collapses.
+
+### Fixed
+- **Plugin compatibility regression after v0.0.2 version bump.** Plugin manifests declared `grapestrapVersion: "^0.0.1"` which under semver caret means `>=0.0.1 <0.0.2`. Widened to `>=0.0.1 <0.1.0` across all 5 bundled plugins. Without the fix, every plugin failed discovery and the renderer found zero plugins.
+- **DOM tree / Properties / Library / Project panel scrolling.** Hosts had `height: 100%; overflow: auto` but lost the specificity tie with GL's `.lm_content { position: relative; overflow: hidden }`. Switched to `position: absolute !important; inset: 0 !important; overflow-y: auto !important`.
+- **Importer dropping `<head>` `<link>`/`<script>`/`<style>`.** Imported pages rendered without their CSS. Now hoists every stylesheet/script/style from `<head>` into body content as first children — browsers still apply them. Lossy for true head-only metadata; full round-trip in v0.0.3.
+- **Importer dropping `/css/` and `/js/` subdirs.** Walk had no fallback for non-asset, non-pages subdirs. Added preservation under `site/<srcRel>/<name>`.
+- **Export silently swallowing bootstrap copy errors** + **assets folder copy errors** (audit fix). Replaced `try {…} catch {}` with proper error propagation. Missing source dir is tolerated (project with no assets); other failures throw a clear path-of-action error.
+- **`file:list-assets` IPC silent-fail on EIO/perms** (audit fix). ENOENT (no asset dir yet) still tolerated; other errors now log so a real failure isn't indistinguishable from "empty asset folder."
+- **Preferences shortcut-rebind silent-fail on prefs persist** (audit fix). Now toasts on persist failure instead of just keeping the in-memory value.
+- **Images break post-resize** (defensive). Re-sync `<base href>` + `<style data-grapestrap-globalcss>` into canvas iframe head on `canvas:content-changed` (rAF-coalesced) — covers the case where GrapesJS rebuilds the head on content reload.
+- **GL panel toggle leaving outline + box visible.** Was hiding `.lm_content` only; now hides the `.lm_item` wrapper via `:has()` so the splitter slot collapses with it.
+- **`linked-files:open-globalcss` now actually focuses the Custom CSS panel** (audit fix). Was emitting an event nothing listened to + a toast that lied about opening the panel.
+
 ## [v0.0.2-alpha.2] — 2026-05-04 (patch — breaking layout change)
 
 ### Changed (BREAKING)
