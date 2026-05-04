@@ -2236,6 +2236,54 @@ test('Import folder: scans HTML + assets and opens as a project', async () => {
   await fsp.rm(targetDir, { recursive: true, force: true })
 })
 
+test('Export: bundles BOTH minified and unminified Bootstrap CSS + JS', async () => {
+  // Reported on nola1 2026-05-04: "why are we using just min and not the
+  // main bootstrap? in dreamweaver it outputs both and the js."
+  // Verifies the export ships:
+  //   bootstrap.css + bootstrap.css.map + bootstrap.min.css + .map
+  //   bootstrap.bundle.js + .map + bootstrap.bundle.min.js + .map
+  // The wrapper HTML defaults to linking the un-minified versions
+  // (matches Dreamweaver default; cleaner browser-devtools experience).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-exp-'))
+  const projectPath = join(projectDir, 'exp.gstrap')
+  const outputDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-exp-out-'))
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Bypass the dialog by passing the output dir straight to the IPC.
+  await appWindow.evaluate(async out => {
+    const project = window.__gstrap.projectState.current
+    return await window.grapestrap.project.export(project, out)
+  }, outputDir)
+
+  const expected = [
+    'css/bootstrap.css',
+    'css/bootstrap.css.map',
+    'css/bootstrap.min.css',
+    'css/bootstrap.min.css.map',
+    'js/bootstrap.bundle.js',
+    'js/bootstrap.bundle.js.map',
+    'js/bootstrap.bundle.min.js',
+    'js/bootstrap.bundle.min.js.map'
+  ]
+  for (const rel of expected) {
+    const exists = await fsp.access(join(outputDir, rel)).then(() => true, () => false)
+    expect(exists, `missing: ${rel}`).toBe(true)
+  }
+
+  // Wrapper HTML links to the un-minified versions by default.
+  const indexHtml = await fsp.readFile(join(outputDir, 'index.html'), 'utf8')
+  expect(indexHtml).toMatch(/href="css\/bootstrap\.css"/)
+  expect(indexHtml).toMatch(/src="js\/bootstrap\.bundle\.js"/)
+  expect(indexHtml).not.toMatch(/href="css\/bootstrap\.min\.css"/)
+  expect(indexHtml).not.toMatch(/src="js\/bootstrap\.bundle\.min\.js"/)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+  await fsp.rm(outputDir,  { recursive: true, force: true })
+})
+
 test('Import folder: preserves head <link>/<script> + arbitrary subdirs (css/, js/)', async () => {
   // Reported on nola1 2026-05-04: imported pages rendered without their
   // CSS, and css/ + js/ subdirs in the source were silently dropped.

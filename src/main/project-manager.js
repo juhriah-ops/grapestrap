@@ -468,23 +468,45 @@ export async function exportProject(project, outputDir) {
   await fsp.mkdir(join(outputDir, 'js'),  { recursive: true })
   await fsp.mkdir(join(outputDir, 'assets'), { recursive: true })
 
-  // Bundle Bootstrap if enabled. Errors here used to be swallowed silently;
-  // when node_modules/bootstrap/dist/ wasn't reachable from app.getAppPath()
-  // (packaged builds, dev installs that skipped npm install), the export
-  // would produce empty css/ and js/ folders with no warning. Now we
-  // collect the errors and re-throw at the end so the renderer can toast.
+  // Bundle Bootstrap if enabled. Ship BOTH the readable and minified
+  // versions plus source maps — Dreamweaver does the same, and end users
+  // who want to read / debug the framework expect the un-minified file
+  // alongside. The wrapper HTML links to the un-minified by default
+  // (better browser-devtools experience); swap to .min for production by
+  // editing the <link>/<script> srcs or by exporting again with a
+  // future minified-link preference.
+  //
+  // Errors propagate (used to be silently swallowed): when
+  // node_modules/bootstrap/dist/ isn't reachable from app.getAppPath()
+  // (packaged builds, fresh clones that skipped npm install), the export
+  // throws a clear path-of-action error instead of producing empty
+  // css/ + js/ dirs.
   if (project.manifest.preferences?.exportBundleBootstrap !== false) {
-    const bsCss = resolve(app.getAppPath(), 'node_modules/bootstrap/dist/css/bootstrap.min.css')
-    const bsJs  = resolve(app.getAppPath(), 'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js')
+    const bsRoot = resolve(app.getAppPath(), 'node_modules/bootstrap/dist')
     const failures = []
-    try { await fsp.copyFile(bsCss, join(outputDir, 'css', 'bootstrap.min.css')) }
-    catch (err) { failures.push(`bootstrap.min.css: ${err?.code || err?.message || err}`) }
-    try { await fsp.copyFile(bsJs,  join(outputDir, 'js',  'bootstrap.bundle.min.js')) }
-    catch (err) { failures.push(`bootstrap.bundle.min.js: ${err?.code || err?.message || err}`) }
-    if (failures.length) {
+    const bsCssFiles = [
+      'bootstrap.css', 'bootstrap.css.map',
+      'bootstrap.min.css', 'bootstrap.min.css.map'
+    ]
+    const bsJsFiles = [
+      'bootstrap.bundle.js', 'bootstrap.bundle.js.map',
+      'bootstrap.bundle.min.js', 'bootstrap.bundle.min.js.map'
+    ]
+    for (const f of bsCssFiles) {
+      try { await fsp.copyFile(join(bsRoot, 'css', f), join(outputDir, 'css', f)) }
+      catch (err) { failures.push(`${f}: ${err?.code || err?.message || err}`) }
+    }
+    for (const f of bsJsFiles) {
+      try { await fsp.copyFile(join(bsRoot, 'js', f), join(outputDir, 'js', f)) }
+      catch (err) { failures.push(`${f}: ${err?.code || err?.message || err}`) }
+    }
+    // Source map failures are tolerable — they're a developer convenience.
+    // The CSS/JS files themselves are not.
+    const fatal = failures.filter(f => !/\.map:/.test(f))
+    if (fatal.length) {
       throw new Error(
-        `Could not bundle Bootstrap into the export — ${failures.join('; ')}. ` +
-        `Tried to read from ${dirname(bsCss)}. ` +
+        `Could not bundle Bootstrap into the export — ${fatal.join('; ')}. ` +
+        `Tried to read from ${bsRoot}. ` +
         `Run \`npm install\` in the GrapeStrap project root, or disable bundling in the project's preferences.exportBundleBootstrap.`
       )
     }
@@ -519,12 +541,12 @@ function wrapPageHtml(page, manifest) {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${escapeHtml(head.title || page.name)}</title>
   ${head.description ? `<meta name="description" content="${escapeHtml(head.description)}">` : ''}
-  <link rel="stylesheet" href="css/bootstrap.min.css">
+  <link rel="stylesheet" href="css/bootstrap.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 ${page.html || ''}
-  <script src="js/bootstrap.bundle.min.js"></script>
+  <script src="js/bootstrap.bundle.js"></script>
 </body>
 </html>
 `
