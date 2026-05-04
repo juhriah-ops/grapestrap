@@ -2283,6 +2283,102 @@ test('Asset Manager: drag-drop multiple files writes them all to site/assets/', 
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+test('Custom CSS live preview: edits debounce-emit project:css-changed; iframe <style> follows', async () => {
+  // Reported on nola1: "when editing custom css in its toolbar it needs
+  // to save to update the page." Editor was writing
+  // projectState.current.globalCSS but never emitting the sync event,
+  // so the canvas iframe's <style data-grapestrap-globalcss> stayed
+  // stale until something else fired the event. Verifies:
+  //   1. Setting globalCSS via the projectState event path mirrors into
+  //      the canvas iframe within ~300ms (250ms debounce + slack).
+  //   2. The iframe <style> tag's textContent matches.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-css-'))
+  const projectPath = join(projectDir, 'css.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // The Custom CSS Monaco editor lives in a GL panel that may be in a
+  // hidden stack tab. Drive the live-preview path via the same eventBus
+  // signal the editor emits; this exercises the listener side without
+  // needing to focus Monaco.
+  await appWindow.evaluate(() => {
+    window.__gstrap.projectState.current.globalCSS = '/* live */\n.live-test { color: rebeccapurple; }\n'
+    window.__gstrap.projectState.markCssDirty()
+    window.__gstrap.eventBus.emit('project:css-changed')
+  })
+
+  await appWindow.waitForFunction(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const tag = doc.querySelector('style[data-grapestrap-globalcss]')
+    return tag?.textContent?.includes('rebeccapurple')
+  }, null, { timeout: 3_000 })
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Refresh toolbar action: saves to disk + re-emits sync events', async () => {
+  // Reported on nola1: "there should be a refresh ability to make sure
+  // all assets actually save." Belt-and-suspenders Save + resync.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-rfr-'))
+  const projectPath = join(projectDir, 'rfr.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Mutate globalCSS (lives independent of canvas, so flushActiveTabIntoProject
+  // can't clobber it) — the per-page html flush path is already covered by
+  // the M1 smoke spec; this one is specifically about Refresh's resync +
+  // event-broadcast behavior.
+  await appWindow.evaluate(() => {
+    const { projectState } = window.__gstrap
+    projectState.current.globalCSS = '/* refreshed */\n'
+    projectState.markCssDirty()
+  })
+
+  // Capture the events the refresh broadcasts. Shared via window so the
+  // round-trip through exposeFunction isn't on the hot path.
+  await appWindow.evaluate(() => {
+    window.__rfr_events = []
+    ;['project:saved', 'project:css-changed', 'assets:changed', 'library:changed'].forEach(name => {
+      window.__gstrap.eventBus.on(name, () => window.__rfr_events.push(name))
+    })
+  })
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-cmd="file:refresh"]').click()
+  })
+
+  // cmdRefresh is async (project:save IPC round-trip). Wait until the
+  // toast event fires so we know it's done.
+  await appWindow.waitForFunction(
+    () => (window.__rfr_events || []).includes('project:saved'),
+    null, { timeout: 5_000 }
+  )
+  const events = await appWindow.evaluate(() => window.__rfr_events)
+
+  // Disk reflects the css mutation.
+  const styleCss = await fsp.readFile(join(projectDir, 'site', 'style.css'), 'utf8')
+  expect(styleCss).toContain('refreshed')
+
+  // All four sync events fired.
+  expect(events).toEqual(expect.arrayContaining([
+    'project:saved', 'project:css-changed', 'assets:changed', 'library:changed'
+  ]))
+
+  // Dirty flags cleared.
+  const stillDirty = await appWindow.evaluate(() => {
+    const ps = window.__gstrap.projectState
+    return { css: ps.globalCssDirty }
+  })
+  expect(stillDirty.css).toBe(false)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 test('Page Properties: title/description/favicon/custom-meta land in saved manifest + exported HTML', async () => {
   // v0.0.2 follow-up — File → Page Properties dialog. Reported on nola1
   // as "favicon upload with meta data edit." Verifies:

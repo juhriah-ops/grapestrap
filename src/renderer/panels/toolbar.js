@@ -15,6 +15,8 @@ export function renderToolbar(host) {
       <button class="gstrap-tb-btn" data-cmd="file:new-project">New</button>
       <button class="gstrap-tb-btn" data-cmd="file:open-project">Open</button>
       <button class="gstrap-tb-btn" data-cmd="file:save">Save</button>
+      <button class="gstrap-tb-btn" data-cmd="file:refresh"
+              title="Save everything to disk + re-sync canvas with all assets">↻</button>
     </div>
     <div class="gstrap-tb-sep"></div>
     <div class="gstrap-tb-group">

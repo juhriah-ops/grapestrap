@@ -29,10 +29,19 @@ export function renderCustomCss(host) {
   })
   registerForRelayout(cssEditor)
 
+  // Live preview: every edit updates projectState.current.globalCSS AND
+  // emits 'project:css-changed' (debounced). grapesjs-init listens on that
+  // and re-syncs the <style data-grapestrap-globalcss> tag inside the
+  // canvas iframe so the canvas reflects new CSS without a manual save.
+  // Reported on nola1 2026-05-04: edits in the Custom CSS toolbar didn't
+  // update the page until something else fired the sync event.
+  let livePreviewTimer = null
   cssEditor.onDidChangeModelContent(() => {
     if (!projectState.current) return
     projectState.current.globalCSS = cssEditor.getValue()
     projectState.markCssDirty()
+    clearTimeout(livePreviewTimer)
+    livePreviewTimer = setTimeout(() => eventBus.emit('project:css-changed'), 250)
   })
 
   eventBus.on('project:opened', () => {

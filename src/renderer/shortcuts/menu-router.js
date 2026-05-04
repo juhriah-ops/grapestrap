@@ -82,6 +82,7 @@ async function dispatchCommand(action) {
     case 'file:page-properties': return openPagePropertiesDialog()
     case 'file:save':          return cmdSave()
     case 'file:save-as':       return cmdSaveAs()
+    case 'file:refresh':       return cmdRefresh()
     case 'file:close-tab':     return cmdCloseTab()
     case 'file:export':        return cmdExport()
 
@@ -213,6 +214,39 @@ async function cmdSave() {
     eventBus.emit('project:saved', result)
     eventBus.emit('toast', { type: 'success', message: 'Saved.' })
   }
+}
+
+// Refresh: belt-and-suspenders save + canvas resync. Use this when you've
+// dragged files into assets/ from outside the app, edited Custom CSS in
+// the panel, or just want a single button that flushes everything to disk
+// AND forces every panel + the canvas iframe to re-read its source state.
+// Reported on nola1 2026-05-04 as "a refresh ability to make sure all
+// assets actually save."
+async function cmdRefresh() {
+  if (!projectState.current) {
+    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  }
+  flushActiveTabIntoProject()
+  const result = await window.grapestrap.project.save(projectState.current)
+  if (result) {
+    projectState.dirtyPages.clear()
+    projectState.dirtyTemplates.clear()
+    projectState.dirtyLibrary.clear()
+    projectState.globalCssDirty = false
+    eventBus.emit('project:saved', result)
+  }
+  // Re-sync everything that subscribes to these channels: globalCSS into
+  // canvas iframe, base href, asset list, library wrappers, breakpoint
+  // strip's responsive chips. Also call GrapesJS refresh() so rulers /
+  // selection overlays catch any mid-flight layout changes.
+  eventBus.emit('project:css-changed')
+  eventBus.emit('assets:changed')
+  eventBus.emit('library:changed')
+  try {
+    const ed = window.__gstrap?.pluginRegistry?.bound?.editor
+    ed?.refresh?.()
+  } catch { /* GrapesJS not ready */ }
+  eventBus.emit('toast', { type: 'success', message: 'Refreshed.' })
 }
 
 async function cmdSaveAs() {
