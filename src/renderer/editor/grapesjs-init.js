@@ -17,6 +17,7 @@
 import grapesjs from 'grapesjs'
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { eventBus } from '../state/event-bus.js'
+import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
 import { log } from '../log.js'
 
@@ -115,6 +116,7 @@ export function initGrapesJS(container) {
     const frameEl = editor.Canvas.getFrameEl()
     const doc = frameEl?.contentDocument
     if (!doc) return
+    syncGlobalCssIntoCanvas(doc)
     doc.addEventListener('contextmenu', evt => {
       evt.preventDefault()
       // Synthesise a click on the same target so GrapesJS selects what the
@@ -162,9 +164,35 @@ export function initGrapesJS(container) {
   // Bind editor to plugin registry so plugins can access it via api.editor
   pluginRegistry.setBound('editor', editor)
   eventBus.emit('canvas:ready', editor)
+
+  // Project globalCSS lives in projectState; mirror it into the canvas iframe
+  // as a <style> tag so live preview reflects pseudo-class rules typed in the
+  // Style Manager AND so the Cascade view can read them via document.styleSheets.
+  // canvas:frame:load sets the initial sync; project lifecycle keeps it fresh.
+  eventBus.on('project:opened',     () => syncGlobalCssIntoCanvas())
+  eventBus.on('project:closed',     () => syncGlobalCssIntoCanvas())
+  eventBus.on('project:css-changed',() => syncGlobalCssIntoCanvas())
+
   log.info('GrapesJS initialized')
 
   return editor
+}
+
+// Inject (or update) the project's globalCSS as a <style> tag inside the
+// canvas iframe. Tag is identified by `data-grapestrap-globalcss`; the
+// Cascade view sub-panel keys off the same attribute to label rules as
+// "project" origin.
+function syncGlobalCssIntoCanvas(docArg) {
+  const doc = docArg || editor?.Canvas?.getFrameEl()?.contentDocument
+  if (!doc) return
+  let tag = doc.querySelector('style[data-grapestrap-globalcss]')
+  if (!tag) {
+    tag = doc.createElement('style')
+    tag.setAttribute('data-grapestrap-globalcss', '')
+    tag.id = 'gstrap-global-css'
+    doc.head.appendChild(tag)
+  }
+  tag.textContent = projectState.current?.globalCSS || ''
 }
 
 export function getEditor() {

@@ -1409,3 +1409,197 @@ test('Style Manager: Flex/Background/Border/Sizing panels write BS classes', asy
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+test('Style Manager: pseudo-class state bar writes to project style.css and round-trips', async () => {
+  // v0.0.2 chunk C — pseudo-class state bar at the top of the Style Manager
+  // (normal | :hover | :focus | :active | :disabled). Verifies:
+  //   1. Picking a non-normal state on an element with a custom class scopes
+  //      a CSS rule into projectState.current.globalCSS keyed by `.cls:state`.
+  //   2. The pseudo sub-panel auto-opens and pre-fills with values read from
+  //      the existing rule (round-trip).
+  //   3. The "Clear" button removes the rule from globalCSS entirely.
+  //   4. Switching back to Normal restores normal class-edit mode.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-smc-'))
+  const projectPath = join(projectDir, 'smc.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // Give the h1 a custom class so the pseudo-bar has a selector to scope to.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    sel.setClass([...(sel.getClasses() || []), 'cta-link'])
+  })
+
+  // ── 1. Click :hover → bar shows :hover active, pseudo sub-panel auto-opens.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-pseudo-state="hover"]').click()
+  })
+  await appWindow.waitForSelector(
+    '[data-pseudo-state="hover"].is-active',
+    { timeout: 3_000 }
+  )
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="pseudo"] .gstrap-sm-body:not([hidden]) .gstrap-sm-pseudo-banner',
+    { timeout: 3_000 }
+  )
+
+  // ── 2. Type a background-color into the pseudo editor.
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="pseudo"] .gstrap-sm-body')
+    const input = body.querySelector('input[data-prop="background-color"][data-pair="text"]')
+    input.value = '#ff0066'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  // The rule should have been written to projectState.current.globalCSS.
+  let css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS)
+  expect(css).toMatch(/\.cta-link:hover\s*\{/)
+  expect(css).toMatch(/background-color:\s*#ff0066/)
+
+  // ── 3. Round-trip: switch to Normal, then back to :hover. Editor pre-fills
+  //    from the rule we just wrote.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-pseudo-state="normal"]').click()
+  })
+  await appWindow.waitForSelector('[data-pseudo-state="normal"].is-active', { timeout: 3_000 })
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-pseudo-state="hover"]').click()
+  })
+  await appWindow.waitForSelector('[data-pseudo-state="hover"].is-active', { timeout: 3_000 })
+
+  const persistedValue = await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="pseudo"] .gstrap-sm-body')
+    return body.querySelector('input[data-prop="background-color"][data-pair="text"]').value
+  })
+  expect(persistedValue).toBe('#ff0066')
+
+  // ── 4. The canvas iframe should now contain a <style data-grapestrap-globalcss>
+  //    tag mirroring globalCSS, so live preview reflects the rule.
+  const tagText = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    return doc.querySelector('style[data-grapestrap-globalcss]')?.textContent || ''
+  })
+  expect(tagText).toMatch(/\.cta-link:hover/)
+
+  // ── 5. Clear → rule is gone from globalCSS.
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="pseudo"] .gstrap-sm-body')
+    body.querySelector('[data-clear-rule]').click()
+  })
+  css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+  expect(css).not.toMatch(/\.cta-link:hover/)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Style Manager: Cascade view lists rules from project style.css and Bootstrap', async () => {
+  // v0.0.2 chunk C — Cascade sub-panel walks document.styleSheets in the
+  // canvas iframe and groups matching rules by origin (inline / project /
+  // bootstrap). Verifies:
+  //   1. With a project rule + at least one BS class on the element, the
+  //      panel renders both a "Project" group and a "Bootstrap" group.
+  //   2. The selectors shown match what's in globalCSS / BS for the element.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-smc2-'))
+  const projectPath = join(projectDir, 'smc2.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // Add a BS class (text-primary) AND a custom class so we get hits in both
+  // origins. Then write a project rule targeting the custom class.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    sel.setClass([...(sel.getClasses() || []), 'text-primary', 'my-heading'])
+    const { projectState, eventBus } = window.__gstrap
+    projectState.current.globalCSS =
+      (projectState.current.globalCSS || '') +
+      `\n.my-heading { letter-spacing: 0.5px; }\n`
+    projectState.markCssDirty()
+    eventBus.emit('project:css-changed')
+  })
+
+  // Open the Cascade accordion section.
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-sm-section[data-sp="cascade"] [data-toggle="cascade"]').click()
+  })
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="cascade"] .gstrap-sm-body:not([hidden]) .gstrap-sm-cascade-rule',
+    { timeout: 3_000 }
+  )
+
+  const groupKeys = await appWindow.$$eval(
+    '.gstrap-sm-section[data-sp="cascade"] .gstrap-sm-cascade-group',
+    nodes => nodes.map(n => n.dataset.cascadeGroup)
+  )
+  expect(groupKeys).toContain('project')
+  expect(groupKeys).toContain('bootstrap')
+
+  const cascadeText = await appWindow.evaluate(() =>
+    document.querySelector('.gstrap-sm-section[data-sp="cascade"] .gstrap-sm-body').textContent
+  )
+  expect(cascadeText).toContain('.my-heading')
+  expect(cascadeText).toContain('letter-spacing')
+  // BS5 has rules for .text-primary.
+  expect(cascadeText).toContain('.text-primary')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Style Manager: pseudo-state on element with no usable selector toasts and stays Normal', async () => {
+  // v0.0.2 chunk C — pickSelector returns null when an element has only
+  // BS-utility classes (or no classes). The bar should refuse to switch and
+  // emit a warning toast pointing the user at the missing selector.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-smc3-'))
+  const projectPath = join(projectDir, 'smc3.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Select the seed h1, then strip everything off it so the only classes left
+  // are BS utilities (or none). The seed h1 starts with `fw-bold display-5` —
+  // both BS utilities — so the selector fallback should fail.
+  await selectFirstByTag(appWindow, 'h1')
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    // Force a known-utility-only state. fw-bold is a BS utility and the only
+    // class left → pickSelector returns null. We deliberately include `fs-1`
+    // too so we're not relying on the seed's exact class set.
+    sel.setClass(['fw-bold', 'fs-1'])
+  })
+
+  const toasts = []
+  await appWindow.exposeFunction('__captureSmcToast', p => { toasts.push(p) })
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.on('toast', p => window.__captureSmcToast(p))
+  })
+
+  // Click :hover — should refuse + toast.
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-pseudo-state="hover"]').click()
+  })
+  await appWindow.waitForTimeout(300)
+
+  const isNormalActive = await appWindow.evaluate(() =>
+    !!document.querySelector('[data-pseudo-state="normal"].is-active')
+  )
+  expect(isNormalActive).toBe(true)
+
+  const warnings = toasts.filter(t =>
+    t?.type === 'warning' && /custom class|target selector/i.test(t.message || '')
+  )
+  expect(warnings.length).toBeGreaterThan(0)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})

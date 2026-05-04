@@ -191,3 +191,115 @@
   font-size: 14px;
   line-height: 18px;
 }
+
+/* ── Chunk C: Pseudo-class state bar + cascade view ──────────────────────── */
+
+.gstrap-sm-pseudo-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.gstrap-sm-pseudo-btn {
+  flex: 1;
+  background: transparent;
+  color: var(--text-2);
+  border: none;
+  border-right: 1px solid var(--border);
+  font-size: 11px;
+  padding: 5px 6px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-width: 50px;
+}
+.gstrap-sm-pseudo-btn:last-child { border-right: none; }
+.gstrap-sm-pseudo-btn:hover { background: var(--bg-3); color: var(--text-1); }
+.gstrap-sm-pseudo-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.gstrap-sm-pseudo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 8px;
+}
+.gstrap-sm-pseudo-banner code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--accent);
+}
+
+.gstrap-sm-pseudo-pair {
+  display: flex;
+  gap: 4px;
+}
+.gstrap-sm-pseudo-pair input[type="color"] {
+  width: 28px; height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-1);
+  cursor: pointer;
+  padding: 0;
+}
+.gstrap-sm-pseudo-pair input[type="text"],
+.gstrap-sm-pseudo-input {
+  flex: 1;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 3px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-width: 0;
+}
+.gstrap-sm-pseudo-input:focus,
+.gstrap-sm-pseudo-pair input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* Cascade view */
+.gstrap-sm-cascade-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+.gstrap-sm-cascade-group + .gstrap-sm-cascade-group {
+  border-top: 1px dashed var(--border);
+}
+.gstrap-sm-cascade-rule {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+.gstrap-sm-cascade-selector {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--accent);
+  margin-bottom: 2px;
+  word-break: break-all;
+}
+.gstrap-sm-cascade-decl {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.gstrap-sm-cascade-decl.is-overridden {
+  color: var(--text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-3);
+}
+.gstrap-sm-cascade-prop { color: var(--text-1); }
+.gstrap-sm-cascade-val  { color: var(--text-2); }
