@@ -8,6 +8,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.5] — 2026-05-04 (patch)
+
+Follow-up to alpha.4: the image-fix exposed a related stylesheet-loading bug.
+
+### Fixed
+- **Stylesheet stops loading when cycling devices in canvas-fullscreen.** Bootstrap CSS, Bootstrap JS, and the canvas-icons CSS were declared as `./bootstrap/...` relative paths in the canvas init. Once our project-scoped `<base href="file://<projectDir>/site/">` was injected (which now happens reliably on GL maximize after alpha.4), GrapesJS re-injecting those relative links during a device-change refresh resolved them against the project base — pointing at non-existent paths like `file://<projectDir>/site/bootstrap/css/bootstrap.min.css`. Fix: pre-resolve the three URLs against `window.location.href` at module load time so the `canvas.styles` / `canvas.scripts` config holds absolute file:// URLs that are immune to any later `<base>` manipulation.
+
+### Tests
+48 → 49 specs green. New spec exercises the maximize → device-cycle path and asserts the BS link still resolves to a renderer-relative absolute URL.
+
 ## [v0.0.2-alpha.4] — 2026-05-04 (patch)
 
 Three bugs reported by user during real-project testing on nola1.

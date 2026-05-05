@@ -21,16 +21,19 @@ import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
 import { log } from '../log.js'
 
-// Canvas iframe asset paths. Resolved relative to the renderer index.html
-// (file:///.../dist/renderer/index.html). Vite's `publicDir: 'assets'` copies
-// the *contents* of <repo>/assets/ to dist/renderer/ (NOT into a /assets/
-// subdir — that prefix is reserved for Vite's own bundled output like monaco
-// workers). So source path `assets/bootstrap/...` is served from
-// `dist/renderer/bootstrap/...`. Inter / JetBrains Mono webfonts deferred to
-// v0.0.2; canvas iframe falls back to system font stack until then.
-const BOOTSTRAP_CSS = './bootstrap/css/bootstrap.min.css'
-const BOOTSTRAP_JS  = './bootstrap/js/bootstrap.bundle.min.js'
-const ICONS_CSS     = './canvas-icons/css/bootstrap-icons.min.css'
+// Canvas iframe asset paths. MUST be absolute file:// URLs — not relative.
+// Once we inject our project-scoped `<base href="file://<projectDir>/site/">`
+// into the iframe, any relative `./bootstrap/...` href that gets re-injected
+// by GrapesJS (which can happen on device change / canvas reset) would
+// resolve against the project base and 404. Reported by user 2026-05-04 as
+// "cycle through using buttons full screen to mobile tablet etc., the style
+// sheet will break or stop loading." Resolving against window.location at
+// module load freezes the URLs to the renderer's dist directory regardless
+// of any later <base> manipulation.
+const RENDERER_BASE = new URL('./', window.location.href).href
+const BOOTSTRAP_CSS = new URL('./bootstrap/css/bootstrap.min.css',     RENDERER_BASE).href
+const BOOTSTRAP_JS  = new URL('./bootstrap/js/bootstrap.bundle.min.js', RENDERER_BASE).href
+const ICONS_CSS     = new URL('./canvas-icons/css/bootstrap-icons.min.css', RENDERER_BASE).href
 
 let editor = null
 

@@ -3355,3 +3355,74 @@ test('Canvas resync: switching projectDir re-injects <base> and re-fetches relat
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+test('Canvas styles: Bootstrap CSS links stay valid through base-href + device cycling', async () => {
+  // Reported by user 2026-05-04: "if you cycle through using buttons full
+  // screen to mobile tablet etc. the style sheet will break or stop
+  // loading." Root cause: BOOTSTRAP_CSS / ICONS_CSS / BOOTSTRAP_JS were
+  // declared as `./bootstrap/...` relative paths. Once our project-scoped
+  // `<base href="file://<projectDir>/site/">` is injected (which happens
+  // on any project load and on GL maximize), GrapesJS re-injecting those
+  // relative links during a device-change refresh resolved them against
+  // the PROJECT base — pointing at non-existent paths inside the project's
+  // site/ dir. Fixed by pre-resolving against window.location at module
+  // load so the canvas.styles config holds absolute file:// URLs that are
+  // immune to <base> manipulation.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-stylesurvive-'))
+  const projectPath = join(projectDir, 'stylesurvive.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Force the GL state-changed sync (this is what landed the <base href>
+  // earlier and what the maximize regression covered).
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('canvas:gl-state-changed')
+  })
+  await appWindow.waitForTimeout(50)
+
+  // Cycle through every device. Each switch is the same path the toolbar
+  // device buttons drive.
+  for (const dev of ['tablet', 'mobile', 'desktop', 'tablet', 'mobile']) {
+    await appWindow.evaluate(d => {
+      window.__gstrap.eventBus.emit('command', `view:device-${d}`)
+    }, dev)
+    await appWindow.waitForTimeout(60)
+  }
+
+  // Inspect every stylesheet link in the canvas iframe head.
+  const inspection = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const links = Array.from(doc.head.querySelectorAll('link[rel="stylesheet"]'))
+    const base  = doc.querySelector('base[data-grapestrap-base]')
+    return {
+      baseHref: base?.getAttribute('href') || null,
+      links: links.map(l => ({
+        attr: l.getAttribute('href'),
+        resolved: l.href // browser-resolved absolute URL
+      }))
+    }
+  })
+
+  // Sanity: <base> IS in place (otherwise the test isn't exercising the bug).
+  expect(inspection.baseHref).toMatch(/^file:\/\//)
+  expect(inspection.baseHref).toContain('/site/')
+
+  // Find the Bootstrap link.
+  const bs = inspection.links.find(l => /bootstrap.*\.css/i.test(l.attr || ''))
+  expect(bs).toBeTruthy()
+
+  // The attribute must be an absolute file:// URL (not relative).
+  expect(bs.attr).toMatch(/^file:\/\//)
+  // The resolved URL must NOT live under the project's site/ dir — that's
+  // the bug signature (BS resolved against <base>, 404'd, page renders
+  // unstyled).
+  expect(bs.resolved).not.toContain('/site/bootstrap/')
+  // Sanity: it should resolve to something inside dist/renderer where the
+  // bundled BS lives.
+  expect(bs.resolved).toMatch(/\/bootstrap\/css\/bootstrap\.min\.css$/)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
