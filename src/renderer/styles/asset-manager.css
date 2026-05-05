@@ -6,9 +6,9 @@
    `file://<projectDir>/assets/...` path so previews are live without an
    extra IPC round-trip per tile. */
 
+/* See panels.css "File manager" block for the height:100% rationale. */
 .gstrap-am-host {
-  position: absolute !important;
-  inset: 0 !important;
+  height: 100% !important;
   background: var(--bg-2);
   color: var(--text-1);
   font-size: 12px;

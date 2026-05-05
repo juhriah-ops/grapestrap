@@ -1,9 +1,11 @@
 /* GrapeStrap — DOM tree panel
    Indented rows, hover + selected state, monospace tags. */
 
+/* See panels.css "File manager" block for why height:100% + overflow-y:auto
+   instead of position:absolute + inset:0 (the latter escapes GL's containing
+   block since this class lives ON the .lm_content element). */
 .gstrap-dom-host {
-  position: absolute !important;
-  inset: 0 !important;
+  height: 100% !important;
   overflow-y: auto !important;
   background: var(--bg-2);
   color: var(--text-1);

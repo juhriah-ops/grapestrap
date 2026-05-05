@@ -8,6 +8,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.9] — 2026-05-05 (patch — panel positioning + view toggles)
+
+User report from nola1, with screenshots: "the properties is over the canvas... overlap and size of the properties squishing... the dom panel i cant remove the link/toggle in the top menu doesnt work... right toolbars are static/locked and not really adjustable." Two real bugs fixed; a third (splitter "snaps then locks" on real machine) is mitigated by a clearer hover affordance and being unblocked from the broken hit-testing the positioning bug created.
+
+### Fixed
+- **Panel hosts no longer escape GL's containing block.** `gstrap-fm-host`, `gstrap-props-host`, `gstrap-dom-host`, `gstrap-am-host`, and `gstrap-lib-host` had `position: absolute !important; inset: 0 !important;` applied directly to the `.lm_content` element (the panel-render fns receive `container.element`, which IS the `.lm_content`). The absolute positioning resolved against the wrong containing block — panels rendered at the header's Y (overlapping it) and 2px wider than their column. Swapped to `height: 100% !important; overflow-y: auto !important;` so GL keeps its own positioning. Scroll still works because GL gives `.lm_content` a definite pixel height.
+- **DOM Tree, Properties, and Custom CSS toggles now actually hide their panels.** The `View → Toggle DOM Tree` (Ctrl+Shift+O) menu fired the right event and flipped the right body class, but the CSS hide rule used `:has(> .lm_items > .lm_item_container > .lm_content.X)` — GL v2's actual subtree under `.lm_items` is `> div > .lm_content` with no `.lm_item_container` class, so the rule matched nothing and toggling appeared to do nothing. Properties and Custom CSS toggles had the same silent failure. New selectors target `.lm_item.lm_stack:has(.lm_content.X)`. DOM Tree's whole column also hides so the slot collapses visually (Properties + Custom CSS share a column, so just their inner stack hides).
+
+### Changed
+- **Splitters get a hover affordance.** The 5px splitter strip was visually quiet on the dark theme; user reported it as "locked, not adjustable." Adds a 120ms color transition and an `--accent`-colored hover/active state so the drag target is obvious.
+
+### Tests
+51 → 53 specs green. New regressions: `Panel layout: hosts align with their .lm_items section, not the header` (catches the absolute-positioning escape), and `View toggles actually hide GL panels (not just flip a body class)` (the prior toggle spec only checked the body class, not whether the panel actually disappeared — which is exactly how the broken `:has()` selector slipped through).
+
+### Known follow-ups
+- Splitter drag occasionally "snaps ~50px then sticks" and the app has crashed once on nola1 mid-drag. Headless tests confirm GL splitter math itself works (vertical splitter +80px, horizontal splitter -100px both moved exactly the requested distance). The on-machine symptom is likely tied to the now-fixed positioning interfering with hit-testing OR Monaco/canvas ResizeObservers firing during the drag-stop's queued `updateSize`. Re-test with this build before further investigation.
+- Welcome modal's overlay is the FIRST iframe-or-equivalent click target on a fresh launch with no project — confirmed via hit-test (`elementFromPoint(splitter center) === div.gstrap-modal-overlay`). Shouldn't affect users who've already dismissed it, but worth tightening to `pointer-events: none` on its container so it can't intercept layout-chrome events.
+
 ## [v0.0.2-alpha.8] — 2026-05-04 (patch — un-min defaults restored)
 
 User report: "why isn't it using bootstrap.css and using just the min.css?" alpha.6/.7 inadvertently switched the page wrapper + canvas runtime over to the minified versions. Restores the alpha.3 default (un-min) for browser-devtools quality, matching Dreamweaver's behavior.

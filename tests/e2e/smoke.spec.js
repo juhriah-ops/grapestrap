@@ -3547,3 +3547,118 @@ test('Project creation: Bootstrap + BSI + FA copied into site/assets/ at create 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+test('Panel layout: hosts align with their .lm_items section, not the header', async () => {
+  // Reported on nola1 2026-05-05 with screenshots: "the properties is over
+  // the canvas... overlap and size of the properties squishing." Root cause:
+  // panels.css and dom-tree.css applied `position: absolute !important; inset:
+  // 0 !important` directly to the .lm_content element (the panel host class
+  // is added TO container.element, which IS the .lm_content). That escaped
+  // GL's containing block — content rendered at the header's Y instead of
+  // below it, AND was 2px wider than its column. The fix swaps to
+  // `height: 100% !important; overflow-y: auto !important` so GL keeps its
+  // own positioning. Regression: each panel host's top-y must match its
+  // surrounding .lm_items section's top-y (not the .lm_stack's top-y, which
+  // sits behind the header).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-panelpos-'))
+  const projectPath = join(projectDir, 'panelpos.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Make every GL-managed panel visible so each host renders.
+  await appWindow.evaluate(() => {
+    document.body.classList.remove('is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-file-manager')
+  })
+  await appWindow.waitForTimeout(100)
+
+  const panels = await appWindow.evaluate(() => {
+    function info(cls) {
+      const el = document.querySelector('.' + cls)
+      if (!el) return { found: false }
+      const r = el.getBoundingClientRect()
+      let n = el.parentElement
+      while (n && !(n.classList?.contains('lm_items'))) n = n.parentElement
+      const itemsR = n ? n.getBoundingClientRect() : null
+      return {
+        found: true,
+        hostY: Math.round(r.y),
+        itemsY: itemsR ? Math.round(itemsR.y) : null
+      }
+    }
+    return {
+      fm:    info('gstrap-fm-host'),
+      dom:   info('gstrap-dom-host'),
+      props: info('gstrap-props-host'),
+      cssp:  info('gstrap-cssp-host')
+    }
+  })
+
+  for (const [name, p] of Object.entries(panels)) {
+    expect(p.found, `${name} host should exist`).toBe(true)
+    // hostY should equal itemsY (within 1px tolerance for HiDPI rounding).
+    // Pre-fix the gap was ~29px (the header's height) — way outside tolerance.
+    expect(Math.abs(p.hostY - p.itemsY), `${name} host Y (${p.hostY}) should align with .lm_items Y (${p.itemsY})`).toBeLessThanOrEqual(1)
+  }
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('View toggles actually hide GL panels (not just flip a body class)', async () => {
+  // Reported on nola1 2026-05-05: "the dom panel i cant remove the
+  // link/toggle in the top menu doesnt work." The toggle event was wired and
+  // the body class was set, but the CSS hide rule used a selector that
+  // matched nothing — `.lm_item:has(> .lm_items > .lm_item_container > ...)`.
+  // GL v2's actual structure under .lm_items is `> div > .lm_content` with
+  // no .lm_item_container class, so the rule failed silently. Existing
+  // 'View toggles' spec only checked the body class flipped; this spec
+  // checks the panel actually disappears.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-vthide-'))
+  const projectPath = join(projectDir, 'vthide.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  await appWindow.evaluate(() => {
+    document.body.classList.remove('is-hide-dom-tree','is-hide-properties','is-hide-custom-css')
+  })
+  await appWindow.waitForTimeout(100)
+
+  async function visible(host) {
+    return appWindow.evaluate((hostClass) => {
+      const stack = document.querySelector(`.lm_item.lm_stack:has(.${hostClass})`)
+      if (!stack) return false
+      return getComputedStyle(stack).display !== 'none'
+    }, host)
+  }
+
+  // All three start visible
+  expect(await visible('gstrap-dom-host')).toBe(true)
+  expect(await visible('gstrap-props-host')).toBe(true)
+  expect(await visible('gstrap-cssp-host')).toBe(true)
+
+  // Toggle DOM tree off — must visually disappear AND its column collapse
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-dom-tree'))
+  await appWindow.waitForTimeout(150)
+  expect(await visible('gstrap-dom-host')).toBe(false)
+  const domColHidden = await appWindow.evaluate(() => {
+    const col = document.querySelector('.lm_item.lm_column:has(.gstrap-dom-host)')
+    return col ? getComputedStyle(col).display === 'none' : false
+  })
+  expect(domColHidden).toBe(true)
+
+  // Toggle Properties off — Properties stack hides, Custom CSS stack stays
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-properties'))
+  await appWindow.waitForTimeout(150)
+  expect(await visible('gstrap-props-host')).toBe(false)
+  expect(await visible('gstrap-cssp-host')).toBe(true)
+
+  // Toggle DOM tree back on — visible again
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-dom-tree'))
+  await appWindow.waitForTimeout(150)
+  expect(await visible('gstrap-dom-host')).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})

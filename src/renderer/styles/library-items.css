@@ -5,11 +5,11 @@
    / delete. The "lib" tab badge in the canvas tab strip distinguishes a
    library editing context from a normal page tab. */
 
+/* See panels.css "File manager" block for the height:100% rationale. */
 .gstrap-lib-host {
   display: flex !important;
   flex-direction: column;
-  position: absolute !important;
-  inset: 0 !important;
+  height: 100% !important;
   background: var(--bg-2);
   color: var(--text-1);
   font-size: 12px;

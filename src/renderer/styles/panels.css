@@ -14,11 +14,17 @@
 }
 
 /* ── File manager ─────────────────────────────────────────────────────────── */
-/* Panel hosts position absolute inside their GL `.lm_content` parent (which
-   has `position: relative; overflow: hidden` from goldenlayout-base.css) so
-   `inset: 0` resolves to a definite pixel area and `overflow-y: auto` can
-   kick in. Reported on nola1 2026-05-04: DOM tree + Properties panels
-   couldn't scroll past the visible viewport.
+/* Panel host classes are applied DIRECTLY to GL's `.lm_content` element (the
+   panel factory receives `container.element` which IS the `.lm_content`).
+   That means we must NOT change its position/inset — `position: absolute;
+   inset: 0` here escaped GL's containing-block math and the host rendered at
+   the header's Y coord, 2px wider than its column (visible as Properties
+   "overlapping" the canvas on nola1, 2026-05-05).
+
+   Use `height: 100%` + `overflow-y: auto` instead. GL gives `.lm_content`
+   a definite pixel height via inline style, so `height: 100%` and
+   `overflow-y` resolve correctly without us touching positioning. Scroll
+   works because the parent has a definite height.
 
    `!important` matters: the renderer adds the host class TO the lm_content
    element, so GL's `.lm_content` rules and our class compete at equal
@@ -26,8 +32,7 @@
    serves the resulting CSS AFTER our link tags, so the GL rules win the
    tie unless we promote ours. */
 .gstrap-fm-host {
-  position: absolute !important;
-  inset: 0 !important;
+  height: 100% !important;
   overflow-y: auto !important;
   background: var(--bg-2);
   font-size: 13px;
@@ -64,9 +69,10 @@
 }
 
 /* ── Properties / Custom CSS containers ───────────────────────────────────── */
+/* See note above the file-manager block for why we use height:100% +
+   overflow-y:auto instead of position:absolute + inset:0 here. */
 .gstrap-props-host {
-  position: absolute !important;
-  inset: 0 !important;
+  height: 100% !important;
   overflow-y: auto !important;
   background: var(--bg-2);
   font-size: 12px;

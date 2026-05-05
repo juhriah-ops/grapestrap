@@ -30,6 +30,14 @@
 
 .lm_splitter {
   background: var(--border) !important;
+  transition: background 120ms ease;
+}
+/* Hover affordance — the bare 5px splitter is hard to spot on the dark theme.
+   Reported on nola1 2026-05-05: "right toolbars are static/locked, not really
+   adjustable." Drag worked but the strip was visually too quiet to target. */
+.lm_splitter:hover,
+.lm_splitter.lm_dragging {
+  background: var(--accent) !important;
 }
 
 .lm_content {
@@ -38,29 +46,31 @@
 }
 
 /* View → Toggle commands set body classes that hide GL-managed panels.
-   We target the `.lm_item` wrapper (via :has) so the entire splitter
-   slot collapses, not just the inner content. Reported on nola1
-   2026-05-04: "the tool bar outline and box dont go away" — without
-   :has, only the inner .lm_content went display:none and the dark
-   wrapper box remained. Chromium 105+ ships :has(); we're on a more
-   recent Electron.
+   Chromium 105+ ships :has(); we're on a more recent Electron, so we use
+   it to target the leaf `.lm_item.lm_stack` that wraps each panel.
 
-   Three patterns:
-   - Single-component columns (Properties, DOM Tree, Custom CSS,
-     Insert) → hide the whole .lm_item; an adjacent splitter is
-     orphaned but only as a 1-2px hairline.
-   - Stacked-component columns (file-manager + library + asset-manager
+   Two patterns:
+   - Stacked-component columns (file-manager / library / asset-manager
      share one stack in the left column) → hide just the matching tab
-     + content; the stack itself stays visible for the remaining
-     tabs. */
+     + content; the stack itself stays visible for the remaining tabs.
+   - Single-tab stacks (Properties, DOM Tree, Custom CSS) → hide the
+     `.lm_stack` wrapper. For DOM Tree (its own column) the parent
+     `.lm_column` is hidden too so the slot collapses visually. The
+     adjacent splitter remains as a 5px hairline — true splitter
+     removal lands in v0.0.3 once we wire GL `item.hide()`.
+
+   The previous selector targeted `> .lm_items > .lm_item_container > .lm_content`
+   but GL v2's actual subtree under `.lm_items` is just `> div > .lm_content`
+   (no `.lm_item_container` class), so the rule never matched and toggling
+   DOM / Properties / Custom CSS appeared to do nothing. Fixed 2026-05-05. */
 
 body.is-hide-file-manager .lm_tab[title="Project"]      { display: none !important; }
 body.is-hide-file-manager .lm_content.gstrap-fm-host    { display: none !important; }
 
-/* `:has()` without a direct-descendant path matches EVERY ancestor with the
-   descendant — that collapsed the whole column tree, not just the leaf
-   .lm_item. Constrain to the direct relationship GL v2 uses so only the
-   leaf item collapses, not its outer column. */
-body.is-hide-properties .lm_item:has(> .lm_items > .lm_item_container > .lm_content.gstrap-props-host) { display: none !important; }
-body.is-hide-dom-tree   .lm_item:has(> .lm_items > .lm_item_container > .lm_content.gstrap-dom-host)   { display: none !important; }
-body.is-hide-custom-css .lm_item:has(> .lm_items > .lm_item_container > .lm_content.gstrap-cssp-host)  { display: none !important; }
+body.is-hide-properties .lm_item.lm_stack:has(.lm_content.gstrap-props-host) { display: none !important; }
+body.is-hide-custom-css .lm_item.lm_stack:has(.lm_content.gstrap-cssp-host)  { display: none !important; }
+
+/* DOM Tree owns a whole column; hide the column too so its width
+   visually collapses (splitter to its right stays as a hairline). */
+body.is-hide-dom-tree   .lm_item.lm_stack:has(.lm_content.gstrap-dom-host)   { display: none !important; }
+body.is-hide-dom-tree   .lm_item.lm_column:has(.lm_content.gstrap-dom-host)  { display: none !important; }
