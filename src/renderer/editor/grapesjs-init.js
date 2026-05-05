@@ -21,19 +21,26 @@ import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
 import { log } from '../log.js'
 
-// Canvas iframe asset paths. MUST be absolute file:// URLs — not relative.
-// Once we inject our project-scoped `<base href="file://<projectDir>/site/">`
-// into the iframe, any relative `./bootstrap/...` href that gets re-injected
-// by GrapesJS (which can happen on device change / canvas reset) would
-// resolve against the project base and 404. Reported by user 2026-05-04 as
-// "cycle through using buttons full screen to mobile tablet etc., the style
-// sheet will break or stop loading." Resolving against window.location at
-// module load freezes the URLs to the renderer's dist directory regardless
-// of any later <base> manipulation.
-const RENDERER_BASE = new URL('./', window.location.href).href
-const BOOTSTRAP_CSS = new URL('./bootstrap/css/bootstrap.min.css',     RENDERER_BASE).href
-const BOOTSTRAP_JS  = new URL('./bootstrap/js/bootstrap.bundle.min.js', RENDERER_BASE).href
-const ICONS_CSS     = new URL('./canvas-icons/css/bootstrap-icons.min.css', RENDERER_BASE).href
+// Framework assets (Bootstrap, Bootstrap Icons, Font Awesome) are NOT loaded
+// from the renderer's dist directory anymore. They live inside each project
+// at `site/assets/{css,js,webfonts}/`, copied in at project creation time
+// (project-manager.js#copyFrameworkAssets). The canvas iframe loads them via
+// project-relative links resolved through `<base href="file://<projectDir>/
+// site/">` — the SAME paths that work when the project is rsync'd to a
+// server. So no renderer-base coupling, no breakage on device cycle / GL
+// maximize, and `<base>` is the single source of truth.
+//
+// The link injection happens in syncFrameworksIntoCanvas (below), called
+// AFTER syncBaseHrefIntoCanvas so the relative href resolves correctly the
+// first time it's parsed.
+const FRAMEWORK_CSS = [
+  { href: 'assets/css/bootstrap.min.css',       attr: 'data-grapestrap-bs' },
+  { href: 'assets/css/bootstrap-icons.min.css', attr: 'data-grapestrap-bsi' },
+  { href: 'assets/css/all.min.css',             attr: 'data-grapestrap-fa' }
+]
+const FRAMEWORK_JS = [
+  { src:  'assets/js/bootstrap.bundle.min.js',  attr: 'data-grapestrap-bsjs' }
+]
 
 let editor = null
 
@@ -59,8 +66,15 @@ export function initGrapesJS(container) {
     },
 
     canvas: {
-      styles:  [BOOTSTRAP_CSS, ICONS_CSS],
-      scripts: [BOOTSTRAP_JS]
+      // Empty — framework loading is owned by syncFrameworksIntoCanvas so it
+      // can resolve through the per-project <base href>. Letting GrapesJS
+      // inject canvas.styles itself raced with our base injection (relative
+      // paths resolved against the wrong root, BS 404'd on device cycle in
+      // a maximized canvas). The new flow is: <base> first, then framework
+      // links, then globalCSS — all firing on canvas:frame:load and on any
+      // GL state-changed re-parent.
+      styles:  [],
+      scripts: []
     },
 
     // Empty Style Manager — class-first panels replace it
@@ -119,8 +133,12 @@ export function initGrapesJS(container) {
     const frameEl = editor.Canvas.getFrameEl()
     const doc = frameEl?.contentDocument
     if (!doc) return
-    syncGlobalCssIntoCanvas(doc)
+    // Order matters: <base> first so subsequent relative links resolve
+    // against the project; framework links second so their fetch races
+    // ahead of body content; globalCSS last so it overrides framework CSS.
     syncBaseHrefIntoCanvas(doc)
+    syncFrameworksIntoCanvas(doc)
+    syncGlobalCssIntoCanvas(doc)
     doc.addEventListener('contextmenu', evt => {
       evt.preventDefault()
       // Synthesise a click on the same target so GrapesJS selects what the
@@ -173,8 +191,8 @@ export function initGrapesJS(container) {
   // as a <style> tag so live preview reflects pseudo-class rules typed in the
   // Style Manager AND so the Cascade view can read them via document.styleSheets.
   // canvas:frame:load sets the initial sync; project lifecycle keeps it fresh.
-  eventBus.on('project:opened',     () => { syncGlobalCssIntoCanvas(); syncBaseHrefIntoCanvas() })
-  eventBus.on('project:closed',     () => { syncGlobalCssIntoCanvas(); syncBaseHrefIntoCanvas() })
+  eventBus.on('project:opened',     () => { syncBaseHrefIntoCanvas(); syncFrameworksIntoCanvas(); syncGlobalCssIntoCanvas() })
+  eventBus.on('project:closed',     () => { syncBaseHrefIntoCanvas(); syncFrameworksIntoCanvas(); syncGlobalCssIntoCanvas() })
   eventBus.on('project:css-changed',() => syncGlobalCssIntoCanvas())
 
   // Defensive resync: GrapesJS sometimes rebuilds the iframe document on
@@ -190,8 +208,9 @@ export function initGrapesJS(container) {
     resyncPending = true
     requestAnimationFrame(() => {
       resyncPending = false
-      syncGlobalCssIntoCanvas()
       syncBaseHrefIntoCanvas()
+      syncFrameworksIntoCanvas()
+      syncGlobalCssIntoCanvas()
     })
   }
   eventBus.on('canvas:content-changed', queueResync)
@@ -273,6 +292,37 @@ function refetchRelativeImages(doc) {
     if (!src || ABS.test(src)) return
     img.setAttribute('src', src) // setAttribute alone re-runs the resource fetch
   })
+}
+
+// Inject Bootstrap / Bootstrap Icons / Font Awesome <link> + bundle <script>
+// into the canvas iframe head using project-relative paths. Resolved through
+// the project's <base href> so the SAME paths work in canvas preview AND
+// after server transfer. Idempotent: re-running updates href/src in place
+// instead of duplicating tags. No-op when no project is open.
+function syncFrameworksIntoCanvas(docArg) {
+  const doc = docArg || editor?.Canvas?.getFrameEl()?.contentDocument
+  if (!doc) return
+  if (!projectState.current?.projectDir) return
+  for (const { href, attr } of FRAMEWORK_CSS) {
+    let tag = doc.head.querySelector(`link[${attr}]`)
+    if (!tag) {
+      tag = doc.createElement('link')
+      tag.setAttribute('rel', 'stylesheet')
+      tag.setAttribute(attr, '')
+      doc.head.appendChild(tag)
+    }
+    if (tag.getAttribute('href') !== href) tag.setAttribute('href', href)
+  }
+  for (const { src, attr } of FRAMEWORK_JS) {
+    let tag = doc.head.querySelector(`script[${attr}]`)
+    if (!tag) {
+      tag = doc.createElement('script')
+      tag.setAttribute(attr, '')
+      tag.setAttribute('defer', '')
+      doc.head.appendChild(tag)
+    }
+    if (tag.getAttribute('src') !== src) tag.setAttribute('src', src)
+  }
 }
 
 export function getEditor() {

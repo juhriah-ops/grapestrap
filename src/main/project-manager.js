@@ -40,6 +40,92 @@ function siteDir(projectDir) {
 }
 
 /**
+ * Copy Bootstrap, Bootstrap Icons, and Font Awesome into the project's site/
+ * tree so the project is self-contained: previewable in the canvas via
+ * `<base href>` + relative links, AND deployable to a server with the same
+ * relative paths working unchanged. Idempotent — re-running on an existing
+ * project skips files that are already present.
+ *
+ * Layout:
+ *   site/assets/
+ *     css/
+ *       bootstrap.css           (un-min, devtools-friendly)
+ *       bootstrap.css.map
+ *       bootstrap.min.css
+ *       bootstrap.min.css.map
+ *       bootstrap-icons.min.css
+ *       all.min.css             (Font Awesome — bundles solid/regular/brands)
+ *       fonts/                  ← bootstrap-icons.css resolves here for its woff2
+ *         bootstrap-icons.woff
+ *         bootstrap-icons.woff2
+ *     js/
+ *       bootstrap.bundle.js     (+ .map + .min.js + .map)
+ *     webfonts/                 ← fontawesome all.min.css resolves ../webfonts/
+ *       fa-brands-400.woff2
+ *       fa-regular-400.woff2
+ *       fa-solid-900.woff2
+ *       fa-v4compatibility.woff2
+ */
+async function copyFrameworkAssets(siteRoot) {
+  const appRoot = app.getAppPath()
+  const bsRoot   = resolve(appRoot, 'node_modules/bootstrap/dist')
+  const bsiRoot  = resolve(appRoot, 'node_modules/bootstrap-icons/font')
+  const faRoot   = resolve(appRoot, 'node_modules/@fortawesome/fontawesome-free')
+
+  const cssDir       = join(siteRoot, 'assets', 'css')
+  const cssFontsDir  = join(cssDir, 'fonts')
+  const jsDir        = join(siteRoot, 'assets', 'js')
+  const webfontsDir  = join(siteRoot, 'assets', 'webfonts')
+  await fsp.mkdir(cssDir,      { recursive: true })
+  await fsp.mkdir(cssFontsDir, { recursive: true })
+  await fsp.mkdir(jsDir,       { recursive: true })
+  await fsp.mkdir(webfontsDir, { recursive: true })
+
+  // Files: [src absolute, dst absolute, fatal-if-missing?]
+  const tasks = [
+    // Bootstrap CSS — un-min + min + maps. Source maps are optional.
+    [join(bsRoot, 'css', 'bootstrap.css'),         join(cssDir, 'bootstrap.css'),         true],
+    [join(bsRoot, 'css', 'bootstrap.css.map'),     join(cssDir, 'bootstrap.css.map'),     false],
+    [join(bsRoot, 'css', 'bootstrap.min.css'),     join(cssDir, 'bootstrap.min.css'),     true],
+    [join(bsRoot, 'css', 'bootstrap.min.css.map'), join(cssDir, 'bootstrap.min.css.map'), false],
+    // Bootstrap JS bundle — same un-min + min + maps.
+    [join(bsRoot, 'js',  'bootstrap.bundle.js'),         join(jsDir, 'bootstrap.bundle.js'),         true],
+    [join(bsRoot, 'js',  'bootstrap.bundle.js.map'),     join(jsDir, 'bootstrap.bundle.js.map'),     false],
+    [join(bsRoot, 'js',  'bootstrap.bundle.min.js'),     join(jsDir, 'bootstrap.bundle.min.js'),     true],
+    [join(bsRoot, 'js',  'bootstrap.bundle.min.js.map'), join(jsDir, 'bootstrap.bundle.min.js.map'), false],
+    // Bootstrap Icons — CSS plus the woff/woff2 it sources via `fonts/`.
+    [join(bsiRoot, 'bootstrap-icons.min.css'),     join(cssDir,      'bootstrap-icons.min.css'), true],
+    [join(bsiRoot, 'fonts', 'bootstrap-icons.woff2'), join(cssFontsDir, 'bootstrap-icons.woff2'), true],
+    [join(bsiRoot, 'fonts', 'bootstrap-icons.woff'),  join(cssFontsDir, 'bootstrap-icons.woff'),  false],
+    // Font Awesome — single `all.min.css` bundle + its 4 webfonts.
+    [join(faRoot, 'css', 'all.min.css'),                       join(cssDir,      'all.min.css'), true],
+    [join(faRoot, 'webfonts', 'fa-solid-900.woff2'),           join(webfontsDir, 'fa-solid-900.woff2'),     true],
+    [join(faRoot, 'webfonts', 'fa-regular-400.woff2'),         join(webfontsDir, 'fa-regular-400.woff2'),   true],
+    [join(faRoot, 'webfonts', 'fa-brands-400.woff2'),          join(webfontsDir, 'fa-brands-400.woff2'),    true],
+    [join(faRoot, 'webfonts', 'fa-v4compatibility.woff2'),     join(webfontsDir, 'fa-v4compatibility.woff2'), false]
+  ]
+
+  const fatal = []
+  for (const [src, dst, isFatal] of tasks) {
+    // Idempotent: skip if dst already exists. `copyFile` with COPYFILE_EXCL
+    // would throw on re-run, which is what we want when this is invoked from
+    // loadProject (we don't want to clobber an asset the user might have
+    // hand-edited). Manual existence check for clearer error semantics.
+    try { await fsp.access(dst); continue } catch { /* dst missing, copy */ }
+    try { await fsp.copyFile(src, dst) }
+    catch (err) {
+      if (isFatal) fatal.push(`${src} → ${dst}: ${err?.code || err?.message || err}`)
+    }
+  }
+  if (fatal.length) {
+    throw new Error(
+      `Could not copy bundled framework assets — ${fatal.join('; ')}. ` +
+      `Run \`npm install\` in the GrapeStrap project root.`
+    )
+  }
+}
+
+/**
  * Import an existing static-site directory as a new GrapeStrap project.
  *
  * Copies the source tree into a new project directory (the parent of
@@ -72,6 +158,10 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
   await fsp.mkdir(join(site, 'assets', 'images'), { recursive: true })
   await fsp.mkdir(join(site, 'assets', 'fonts'),  { recursive: true })
   await fsp.mkdir(join(site, 'assets', 'videos'), { recursive: true })
+  // Bootstrap + BSI + FA copied AFTER the source-walk so that any same-named
+  // assets the user is importing take precedence (e.g. their own customised
+  // bootstrap.css). copyFrameworkAssets is idempotent — it skips files that
+  // already exist.
 
   const pages = []
   let globalCSSContent = ''
@@ -166,6 +256,11 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
     }
   }
   await walk('')
+
+  // Bundle BS + BSI + FA into the imported project's site/assets/ AFTER the
+  // source walk: any same-named asset the user is importing wins (the user
+  // may have hand-customised their own bootstrap.css). Idempotent.
+  await copyFrameworkAssets(site)
 
   if (pages.length === 0) {
     // Empty project gets a blank index so the canvas isn't a void.
@@ -272,6 +367,13 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
   await fsp.mkdir(join(site, 'assets', 'fonts'), { recursive: true })
   await fsp.mkdir(join(site, 'assets', 'videos'), { recursive: true })
 
+  // Copy Bootstrap + Bootstrap Icons + Font Awesome into the project's own
+  // assets/. The canvas iframe loads them via project-relative paths
+  // (`assets/css/bootstrap.min.css`) resolved through `<base href>`, so the
+  // exact same paths work when the project is rsync'd to a server. No
+  // dependency on the renderer's bundled copy.
+  await copyFrameworkAssets(site)
+
   const indexHtml = renderBlankIndex(name)
   await fsp.writeFile(join(site, 'pages', 'index.html'), indexHtml, 'utf8')
   await fsp.writeFile(join(site, 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
@@ -348,6 +450,21 @@ export async function loadProject(manifestPath) {
       // missing files. Let the per-page readFile below produce its own
       // ENOENT.
     }
+  }
+
+  // Backfill framework assets on load: projects created before this feature
+  // landed don't have `site/assets/css/bootstrap.min.css` etc., and the
+  // canvas now loads them via project-relative paths. copyFrameworkAssets
+  // is idempotent, so projects created with frameworks already in place
+  // get a no-op. Failures here are non-fatal: throwing would block the
+  // project from opening at all, which is worse than canvas rendering
+  // unstyled until the user hits Refresh / re-creates.
+  try { await copyFrameworkAssets(site) }
+  catch (err) {
+    // Surface but don't block: load-time toasts wire through to the
+    // renderer via the wrapper that calls loadProject; for now log to
+    // stderr so packaged builds report it.
+    console.warn('[grapestrap] could not backfill framework assets:', err?.message || err)
   }
 
   const pages = await Promise.all(
@@ -468,53 +585,19 @@ export async function exportProject(project, outputDir) {
   await fsp.mkdir(join(outputDir, 'js'),  { recursive: true })
   await fsp.mkdir(join(outputDir, 'assets'), { recursive: true })
 
-  // Bundle Bootstrap if enabled. Ship BOTH the readable and minified
-  // versions plus source maps — Dreamweaver does the same, and end users
-  // who want to read / debug the framework expect the un-minified file
-  // alongside. The wrapper HTML links to the un-minified by default
-  // (better browser-devtools experience); swap to .min for production by
-  // editing the <link>/<script> srcs or by exporting again with a
-  // future minified-link preference.
-  //
-  // Errors propagate (used to be silently swallowed): when
-  // node_modules/bootstrap/dist/ isn't reachable from app.getAppPath()
-  // (packaged builds, fresh clones that skipped npm install), the export
-  // throws a clear path-of-action error instead of producing empty
-  // css/ + js/ dirs.
-  if (project.manifest.preferences?.exportBundleBootstrap !== false) {
-    const bsRoot = resolve(app.getAppPath(), 'node_modules/bootstrap/dist')
-    const failures = []
-    const bsCssFiles = [
-      'bootstrap.css', 'bootstrap.css.map',
-      'bootstrap.min.css', 'bootstrap.min.css.map'
-    ]
-    const bsJsFiles = [
-      'bootstrap.bundle.js', 'bootstrap.bundle.js.map',
-      'bootstrap.bundle.min.js', 'bootstrap.bundle.min.js.map'
-    ]
-    for (const f of bsCssFiles) {
-      try { await fsp.copyFile(join(bsRoot, 'css', f), join(outputDir, 'css', f)) }
-      catch (err) { failures.push(`${f}: ${err?.code || err?.message || err}`) }
-    }
-    for (const f of bsJsFiles) {
-      try { await fsp.copyFile(join(bsRoot, 'js', f), join(outputDir, 'js', f)) }
-      catch (err) { failures.push(`${f}: ${err?.code || err?.message || err}`) }
-    }
-    // Source map failures are tolerable — they're a developer convenience.
-    // The CSS/JS files themselves are not.
-    const fatal = failures.filter(f => !/\.map:/.test(f))
-    if (fatal.length) {
-      throw new Error(
-        `Could not bundle Bootstrap into the export — ${fatal.join('; ')}. ` +
-        `Tried to read from ${bsRoot}. ` +
-        `Run \`npm install\` in the GrapeStrap project root, or disable bundling in the project's preferences.exportBundleBootstrap.`
-      )
-    }
-  }
+  // The framework bundle (Bootstrap + Bootstrap Icons + Font Awesome) lives
+  // inside the project's own site/assets/ — copied in at project creation /
+  // import / load. The fsp.cp(assetsSrc → outputDir/assets) below carries
+  // them across to the export verbatim, so no separate framework-bundle step
+  // here. The pre-alpha.6 path that copied node_modules/bootstrap/dist/* into
+  // outputDir/css and outputDir/js is gone; everything funnels through the
+  // project-relative assets/ tree so canvas preview === server deploy.
 
-  // Copy custom CSS
+  // Copy custom CSS — keeps living next to the framework so the export's
+  // one assets/ tree is self-sufficient.
   if (project.globalCSS) {
-    await fsp.writeFile(join(outputDir, 'css', 'style.css'), project.globalCSS, 'utf8')
+    await fsp.mkdir(join(outputDir, 'assets', 'css'), { recursive: true })
+    await fsp.writeFile(join(outputDir, 'assets', 'css', 'style.css'), project.globalCSS, 'utf8')
   }
 
   // Copy project assets folder (sourced from site/assets/). Missing source
@@ -576,13 +659,15 @@ function wrapPageHtml(page, manifest) {
   ${head.description ? `<meta name="description" content="${escapeHtml(head.description)}">` : ''}
   ${metaTags ? metaTags : ''}
   ${faviconLink}
-  <link rel="stylesheet" href="css/bootstrap.css">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="assets/css/bootstrap.min.css">
+  <link rel="stylesheet" href="assets/css/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="assets/css/all.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
   ${linkTags}
 </head>
 <body>
 ${page.html || ''}
-  <script src="js/bootstrap.bundle.js"></script>
+  <script src="assets/js/bootstrap.bundle.min.js" defer></script>
   ${scriptTags}
 </body>
 </html>

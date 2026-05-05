@@ -8,6 +8,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.6] — 2026-05-04 (patch — framework assets in-project)
+
+Architectural follow-up to alpha.4/.5. The previous fixes coerced framework loading to work *despite* the project-scoped `<base href>`. This release addresses the underlying mismatch: the canvas was loading Bootstrap from the renderer's bundled copy, while exported pages referenced their own `css/bootstrap.css` — two different sources of truth that diverged the moment the project was rsync'd to a server. Now they're one.
+
+### Changed (BREAKING-ish — only for new exports)
+- **Bootstrap, Bootstrap Icons, and Font Awesome live inside the project's own `site/assets/` tree from creation onward.** `project-manager.js#copyFrameworkAssets` writes them at `createProject` and `importDirectory`, and backfills them at `loadProject` (idempotent — old projects without the assets get them on next open). Layout:
+  ```
+  site/assets/
+    css/
+      bootstrap.css + .css.map + .min.css + .min.css.map
+      bootstrap-icons.min.css
+      all.min.css                  (FA bundle: solid + regular + brands)
+      fonts/bootstrap-icons.{woff,woff2}
+    js/
+      bootstrap.bundle.js + .map + .min.js + .map
+    webfonts/
+      fa-{solid,regular,brands,v4compatibility}-*.woff2
+  ```
+- **Canvas iframe loads the frameworks via project-relative paths** (`assets/css/bootstrap.min.css`, etc.) resolved through the project's `<base href>`. The pre-alpha.6 absolute-renderer-base URLs introduced in alpha.5 are gone — `<base>` is the single source of truth, and the same paths work in canvas preview AND on a deployed server unchanged.
+- **Export emits the new layout.** `wrapPageHtml` now references `assets/css/bootstrap.min.css`, `assets/css/bootstrap-icons.min.css`, `assets/css/all.min.css`, and `assets/js/bootstrap.bundle.min.js`. The previous behavior — duplicating `node_modules/bootstrap/dist/*` into `outputDir/css` and `outputDir/js` — is removed; the `assetsSrc → outputDir/assets` copy already carries everything across because it lives in the project tree. Also writes project `globalCSS` to `assets/css/style.css` (was `css/style.css`) so the export is one self-contained `assets/` tree.
+- **`canvas.styles` / `canvas.scripts` is now empty.** Framework loading is owned by `syncFrameworksIntoCanvas` which fires after `<base>` is in place, so relative paths resolve correctly the first time they're parsed.
+
+### Fixed
+- **Stylesheet stops loading when cycling devices in canvas-fullscreen** — root-cause fix supersedes alpha.5's absolute-URL workaround. Project-relative paths through `<base>` work correctly across maximize, device cycling, and any other GL state-changed re-parent.
+
+### Tests
+49 → 50 specs green. New spec exercises createProject and asserts every expected framework file lands in `site/assets/`. Updated specs: export now checks the `assets/` layout instead of `outputDir/css` + `outputDir/js`; the alpha.5 spec now asserts BS link is project-relative and resolves to a real file inside the project's site/.
+
 ## [v0.0.2-alpha.5] — 2026-05-04 (patch)
 
 Follow-up to alpha.4: the image-fix exposed a related stylesheet-loading bug.

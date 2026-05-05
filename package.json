@@ -1,6 +1,6 @@
 {
   "name": "grapestrap",
-  "version": "0.0.2-alpha.5",
+  "version": "0.0.2-alpha.6",
   "description": "Visual Bootstrap 5 editor for Linux. Dreamweaver alternative, MIT, no telemetry.",
   "main": "dist/main/main.js",
   "type": "module",

@@ -2951,14 +2951,14 @@ test('Style Manager: Background image picker writes a CSS rule scoped by selecto
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
-test('Export: bundles BOTH minified and unminified Bootstrap CSS + JS', async () => {
-  // Reported on nola1 2026-05-04: "why are we using just min and not the
-  // main bootstrap? in dreamweaver it outputs both and the js."
-  // Verifies the export ships:
-  //   bootstrap.css + bootstrap.css.map + bootstrap.min.css + .map
-  //   bootstrap.bundle.js + .map + bootstrap.bundle.min.js + .map
-  // The wrapper HTML defaults to linking the un-minified versions
-  // (matches Dreamweaver default; cleaner browser-devtools experience).
+test('Export: ships project-relative framework assets (BS + BSI + FA) under assets/', async () => {
+  // alpha.6: framework files live inside the project's site/assets/ from
+  // creation onward (project-manager.js#copyFrameworkAssets). Export now
+  // mirrors site/assets/ verbatim into outputDir/assets/, and the wrapper
+  // HTML references the same project-relative paths the canvas uses, so
+  // canvas preview === server deploy. The pre-alpha.6 path that copied
+  // node_modules/bootstrap/dist/* into outputDir/css and outputDir/js is
+  // gone.
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-exp-'))
   const projectPath = join(projectDir, 'exp.gstrap')
   const outputDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-exp-out-'))
@@ -2973,26 +2973,33 @@ test('Export: bundles BOTH minified and unminified Bootstrap CSS + JS', async ()
   }, outputDir)
 
   const expected = [
-    'css/bootstrap.css',
-    'css/bootstrap.css.map',
-    'css/bootstrap.min.css',
-    'css/bootstrap.min.css.map',
-    'js/bootstrap.bundle.js',
-    'js/bootstrap.bundle.js.map',
-    'js/bootstrap.bundle.min.js',
-    'js/bootstrap.bundle.min.js.map'
+    // Bootstrap (un-min + min + maps).
+    'assets/css/bootstrap.css',
+    'assets/css/bootstrap.css.map',
+    'assets/css/bootstrap.min.css',
+    'assets/css/bootstrap.min.css.map',
+    'assets/js/bootstrap.bundle.js',
+    'assets/js/bootstrap.bundle.js.map',
+    'assets/js/bootstrap.bundle.min.js',
+    'assets/js/bootstrap.bundle.min.js.map',
+    // Bootstrap Icons + the woff2 it sources via fonts/.
+    'assets/css/bootstrap-icons.min.css',
+    'assets/css/fonts/bootstrap-icons.woff2',
+    // Font Awesome — single bundle + at least one webfont.
+    'assets/css/all.min.css',
+    'assets/webfonts/fa-solid-900.woff2'
   ]
   for (const rel of expected) {
     const exists = await fsp.access(join(outputDir, rel)).then(() => true, () => false)
     expect(exists, `missing: ${rel}`).toBe(true)
   }
 
-  // Wrapper HTML links to the un-minified versions by default.
+  // Wrapper HTML links the project-relative paths.
   const indexHtml = await fsp.readFile(join(outputDir, 'index.html'), 'utf8')
-  expect(indexHtml).toMatch(/href="css\/bootstrap\.css"/)
-  expect(indexHtml).toMatch(/src="js\/bootstrap\.bundle\.js"/)
-  expect(indexHtml).not.toMatch(/href="css\/bootstrap\.min\.css"/)
-  expect(indexHtml).not.toMatch(/src="js\/bootstrap\.bundle\.min\.js"/)
+  expect(indexHtml).toMatch(/href="assets\/css\/bootstrap\.min\.css"/)
+  expect(indexHtml).toMatch(/href="assets\/css\/bootstrap-icons\.min\.css"/)
+  expect(indexHtml).toMatch(/href="assets\/css\/all\.min\.css"/)
+  expect(indexHtml).toMatch(/src="assets\/js\/bootstrap\.bundle\.min\.js"/)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
@@ -3357,17 +3364,14 @@ test('Canvas resync: switching projectDir re-injects <base> and re-fetches relat
 })
 
 test('Canvas styles: Bootstrap CSS links stay valid through base-href + device cycling', async () => {
-  // Reported by user 2026-05-04: "if you cycle through using buttons full
+  // alpha.5 reported by user: "if you cycle through using buttons full
   // screen to mobile tablet etc. the style sheet will break or stop
-  // loading." Root cause: BOOTSTRAP_CSS / ICONS_CSS / BOOTSTRAP_JS were
-  // declared as `./bootstrap/...` relative paths. Once our project-scoped
-  // `<base href="file://<projectDir>/site/">` is injected (which happens
-  // on any project load and on GL maximize), GrapesJS re-injecting those
-  // relative links during a device-change refresh resolved them against
-  // the PROJECT base — pointing at non-existent paths inside the project's
-  // site/ dir. Fixed by pre-resolving against window.location at module
-  // load so the canvas.styles config holds absolute file:// URLs that are
-  // immune to <base> manipulation.
+  // loading." alpha.6 final fix: framework files live inside the project's
+  // own site/assets/ tree. Canvas iframe loads them via project-relative
+  // links resolved through <base href> — same paths the deploy uses.
+  // This spec exercises maximize → device-cycle and asserts (a) BS link
+  // is project-relative, (b) it resolves to a real file inside site/assets,
+  // (c) the file actually exists on disk.
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-stylesurvive-'))
   const projectPath = join(projectDir, 'stylesurvive.gstrap')
 
@@ -3413,15 +3417,46 @@ test('Canvas styles: Bootstrap CSS links stay valid through base-href + device c
   const bs = inspection.links.find(l => /bootstrap.*\.css/i.test(l.attr || ''))
   expect(bs).toBeTruthy()
 
-  // The attribute must be an absolute file:// URL (not relative).
-  expect(bs.attr).toMatch(/^file:\/\//)
-  // The resolved URL must NOT live under the project's site/ dir — that's
-  // the bug signature (BS resolved against <base>, 404'd, page renders
-  // unstyled).
-  expect(bs.resolved).not.toContain('/site/bootstrap/')
-  // Sanity: it should resolve to something inside dist/renderer where the
-  // bundled BS lives.
-  expect(bs.resolved).toMatch(/\/bootstrap\/css\/bootstrap\.min\.css$/)
+  // alpha.6: the attribute is project-relative (resolves through <base>).
+  expect(bs.attr).toBe('assets/css/bootstrap.min.css')
+  // Resolved URL must land inside the project's site/assets/css/.
+  expect(bs.resolved).toContain('/site/assets/css/bootstrap.min.css')
+  // And the file must actually exist on disk — that's the difference vs.
+  // pre-alpha.6 where the link resolved to a non-existent path.
+  const onDisk = await fsp.access(join(projectDir, 'site', 'assets', 'css', 'bootstrap.min.css'))
+    .then(() => true, () => false)
+  expect(onDisk).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Project creation: Bootstrap + BSI + FA copied into site/assets/ at create time', async () => {
+  // alpha.6 architectural change: a freshly-created project ships with the
+  // framework assets in its OWN site/ tree so canvas preview === server
+  // deploy. Preview just rsync the site/ dir and the same relative paths
+  // resolve correctly under HTTP.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-fwbundle-'))
+  const projectPath = join(projectDir, 'fwbundle.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  const checks = [
+    'site/assets/css/bootstrap.css',
+    'site/assets/css/bootstrap.min.css',
+    'site/assets/css/bootstrap-icons.min.css',
+    'site/assets/css/all.min.css',           // Font Awesome bundle
+    'site/assets/css/fonts/bootstrap-icons.woff2',
+    'site/assets/js/bootstrap.bundle.min.js',
+    'site/assets/webfonts/fa-solid-900.woff2',
+    'site/assets/webfonts/fa-regular-400.woff2',
+    'site/assets/webfonts/fa-brands-400.woff2'
+  ]
+  for (const rel of checks) {
+    const exists = await fsp.access(join(projectDir, rel)).then(() => true, () => false)
+    expect(exists, `missing ${rel}`).toBe(true)
+  }
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
