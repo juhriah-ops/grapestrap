@@ -8,6 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.8] — 2026-05-04 (patch — un-min defaults restored)
+
+User report: "why isn't it using bootstrap.css and using just the min.css?" alpha.6/.7 inadvertently switched the page wrapper + canvas runtime over to the minified versions. Restores the alpha.3 default (un-min) for browser-devtools quality, matching Dreamweaver's behavior.
+
+### Changed
+- **Page wrapper + canvas runtime now link the un-minified Bootstrap, Bootstrap Icons, and Font Awesome by default** (`bootstrap.css`, `bootstrap-icons.css`, `all.css`, `bootstrap.bundle.js`). Better browser-devtools experience: readable rules, source maps work, F12 → "scroll to" lands at a sensible line. Both un-min + min still ship in `site/assets/` so a production deploy can swap to `.min` by editing the hrefs (or via a future export-minify preference).
+- **`copyFrameworkAssets` now also copies the un-minified Bootstrap Icons + Font Awesome bundles** (`bootstrap-icons.css`, `all.css`) — previously only the minified versions were copied.
+
+### Tests
+51/51 specs green. Updates: assertion strings flipped from `.min.css` / `.min.js` to the un-minified paths; the asset-existence checks now expect both un-min + min for every framework file.
+
 ## [v0.0.2-alpha.7] — 2026-05-04 (patch — pages saved as full HTML)
 
 Closes the gap left by alpha.6: framework files were in the project, but the page files on disk were body-only fragments. The Code-view editor showed the same body fragment, with no `<head>` references to confirm the framework was wired up. User report: ".html editor theres no reference in header meta. we need the html produced to have all src links etc."

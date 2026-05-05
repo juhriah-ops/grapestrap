@@ -34,12 +34,12 @@ import { log } from '../log.js'
 // AFTER syncBaseHrefIntoCanvas so the relative href resolves correctly the
 // first time it's parsed.
 const FRAMEWORK_CSS = [
-  { href: 'assets/css/bootstrap.min.css',       attr: 'data-grapestrap-bs' },
-  { href: 'assets/css/bootstrap-icons.min.css', attr: 'data-grapestrap-bsi' },
-  { href: 'assets/css/all.min.css',             attr: 'data-grapestrap-fa' }
+  { href: 'assets/css/bootstrap.css',       attr: 'data-grapestrap-bs' },
+  { href: 'assets/css/bootstrap-icons.css', attr: 'data-grapestrap-bsi' },
+  { href: 'assets/css/all.css',             attr: 'data-grapestrap-fa' }
 ]
 const FRAMEWORK_JS = [
-  { src:  'assets/js/bootstrap.bundle.min.js',  attr: 'data-grapestrap-bsjs' }
+  { src:  'assets/js/bootstrap.bundle.js',  attr: 'data-grapestrap-bsjs' }
 ]
 
 let editor = null

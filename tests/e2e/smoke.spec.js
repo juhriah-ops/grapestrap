@@ -2987,10 +2987,12 @@ test('Export: ships project-relative framework assets (BS + BSI + FA) under asse
     'assets/js/bootstrap.bundle.js.map',
     'assets/js/bootstrap.bundle.min.js',
     'assets/js/bootstrap.bundle.min.js.map',
-    // Bootstrap Icons + the woff2 it sources via fonts/.
+    // Bootstrap Icons (un-min + min) + the woff2 it sources via fonts/.
+    'assets/css/bootstrap-icons.css',
     'assets/css/bootstrap-icons.min.css',
     'assets/css/fonts/bootstrap-icons.woff2',
-    // Font Awesome — single bundle + at least one webfont.
+    // Font Awesome — un-min + min bundles + at least one webfont.
+    'assets/css/all.css',
     'assets/css/all.min.css',
     'assets/webfonts/fa-solid-900.woff2'
   ]
@@ -2999,12 +3001,15 @@ test('Export: ships project-relative framework assets (BS + BSI + FA) under asse
     expect(exists, `missing: ${rel}`).toBe(true)
   }
 
-  // Wrapper HTML links the project-relative paths.
+  // Wrapper HTML links the un-minified versions by default — better
+  // browser-devtools experience, matches Dreamweaver.
   const indexHtml = await fsp.readFile(join(outputDir, 'index.html'), 'utf8')
-  expect(indexHtml).toMatch(/href="assets\/css\/bootstrap\.min\.css"/)
-  expect(indexHtml).toMatch(/href="assets\/css\/bootstrap-icons\.min\.css"/)
-  expect(indexHtml).toMatch(/href="assets\/css\/all\.min\.css"/)
-  expect(indexHtml).toMatch(/src="assets\/js\/bootstrap\.bundle\.min\.js"/)
+  expect(indexHtml).toMatch(/href="assets\/css\/bootstrap\.css"/)
+  expect(indexHtml).toMatch(/href="assets\/css\/bootstrap-icons\.css"/)
+  expect(indexHtml).toMatch(/href="assets\/css\/all\.css"/)
+  expect(indexHtml).toMatch(/src="assets\/js\/bootstrap\.bundle\.js"/)
+  expect(indexHtml).not.toMatch(/href="assets\/css\/bootstrap\.min\.css"/)
+  expect(indexHtml).not.toMatch(/src="assets\/js\/bootstrap\.bundle\.min\.js"/)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
@@ -3418,17 +3423,18 @@ test('Canvas styles: Bootstrap CSS links stay valid through base-href + device c
   expect(inspection.baseHref).toMatch(/^file:\/\//)
   expect(inspection.baseHref).toContain('/site/')
 
-  // Find the Bootstrap link.
-  const bs = inspection.links.find(l => /bootstrap.*\.css/i.test(l.attr || ''))
+  // Find the Bootstrap link. alpha.7: defaults to un-minified (devtools-
+  // friendly). Excludes bootstrap-icons.css since the regex would match it.
+  const bs = inspection.links.find(l => /(^|\/)bootstrap\.css$/i.test(l.attr || ''))
   expect(bs).toBeTruthy()
 
-  // alpha.6: the attribute is project-relative (resolves through <base>).
-  expect(bs.attr).toBe('assets/css/bootstrap.min.css')
+  // The attribute is project-relative (resolves through <base>).
+  expect(bs.attr).toBe('assets/css/bootstrap.css')
   // Resolved URL must land inside the project's site/assets/css/.
-  expect(bs.resolved).toContain('/site/assets/css/bootstrap.min.css')
+  expect(bs.resolved).toContain('/site/assets/css/bootstrap.css')
   // And the file must actually exist on disk — that's the difference vs.
   // pre-alpha.6 where the link resolved to a non-existent path.
-  const onDisk = await fsp.access(join(projectDir, 'site', 'assets', 'css', 'bootstrap.min.css'))
+  const onDisk = await fsp.access(join(projectDir, 'site', 'assets', 'css', 'bootstrap.css'))
     .then(() => true, () => false)
   expect(onDisk).toBe(true)
 
@@ -3464,12 +3470,13 @@ test('Pages on disk: saved as full HTML with framework links in <head>', async (
   expect(onDisk).toMatch(/<meta charset="utf-8">/i)
   expect(onDisk).toMatch(/<meta name="viewport"/i)
   expect(onDisk).toMatch(/<title>/i)
-  // Framework links — present and pointing at the project-relative paths.
-  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/bootstrap\.min\.css"[^>]*>/i)
-  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/bootstrap-icons\.min\.css"[^>]*>/i)
-  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/all\.min\.css"[^>]*>/i)
+  // Framework links — present and pointing at un-minified project-relative
+  // paths (devtools-friendly default).
+  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/bootstrap\.css"[^>]*>/i)
+  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/bootstrap-icons\.css"[^>]*>/i)
+  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/all\.css"[^>]*>/i)
   expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/style\.css"[^>]*>/i)
-  expect(onDisk).toMatch(/<script[^>]*src="assets\/js\/bootstrap\.bundle\.min\.js"[^>]*defer[^>]*>/i)
+  expect(onDisk).toMatch(/<script[^>]*src="assets\/js\/bootstrap\.bundle\.js"[^>]*defer[^>]*>/i)
   // Body still contains the seed content.
   expect(onDisk).toMatch(/<main\b/i)
 
@@ -3515,12 +3522,18 @@ test('Project creation: Bootstrap + BSI + FA copied into site/assets/ at create 
   const { app, appWindow } = await launch()
   await openSeedProject(appWindow, projectPath)
 
+  // Both un-min + min ship for every framework (alpha.7) — un-min is the
+  // default link target, .min is there so a deploy can swap to the
+  // production version without re-running copy.
   const checks = [
     'site/assets/css/bootstrap.css',
     'site/assets/css/bootstrap.min.css',
+    'site/assets/css/bootstrap-icons.css',
     'site/assets/css/bootstrap-icons.min.css',
-    'site/assets/css/all.min.css',           // Font Awesome bundle
+    'site/assets/css/all.css',
+    'site/assets/css/all.min.css',
     'site/assets/css/fonts/bootstrap-icons.woff2',
+    'site/assets/js/bootstrap.bundle.js',
     'site/assets/js/bootstrap.bundle.min.js',
     'site/assets/webfonts/fa-solid-900.woff2',
     'site/assets/webfonts/fa-regular-400.woff2',

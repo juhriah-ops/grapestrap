@@ -17,17 +17,21 @@
  * scope — so it imports cleanly from main/, renderer/, and tests.
  */
 
-// Framework links emitted into every page's head. These match the project's
-// own site/assets/ tree (copied in at project creation by project-manager.js#
-// copyFrameworkAssets) so the same paths work in canvas preview AND on a
-// deployed server. Don't edit one without the other.
+// Framework links emitted into every page's head. Default to the un-minified
+// versions: matches Dreamweaver, gives a real browser-devtools experience
+// (readable rules, source maps work, F12 → "scroll to" lands at a sensible
+// line). Both un-min + min ship in site/assets/ so a production deploy can
+// swap to .min by editing these hrefs (or via a future export-minify
+// preference). These paths match the project's own site/assets/ tree
+// (copied in at project creation by project-manager.js#copyFrameworkAssets)
+// so the same paths work in canvas preview AND on a deployed server.
 export const FRAMEWORK_LINKS = [
-  { rel: 'stylesheet', href: 'assets/css/bootstrap.min.css',       gstrap: 'bs'  },
-  { rel: 'stylesheet', href: 'assets/css/bootstrap-icons.min.css', gstrap: 'bsi' },
-  { rel: 'stylesheet', href: 'assets/css/all.min.css',             gstrap: 'fa'  }
+  { rel: 'stylesheet', href: 'assets/css/bootstrap.css',       gstrap: 'bs'  },
+  { rel: 'stylesheet', href: 'assets/css/bootstrap-icons.css', gstrap: 'bsi' },
+  { rel: 'stylesheet', href: 'assets/css/all.css',             gstrap: 'fa'  }
 ]
 export const FRAMEWORK_SCRIPTS = [
-  { src: 'assets/js/bootstrap.bundle.min.js', defer: true, gstrap: 'bsjs' }
+  { src: 'assets/js/bootstrap.bundle.js', defer: true, gstrap: 'bsjs' }
 ]
 export const PROJECT_STYLESHEET = { rel: 'stylesheet', href: 'assets/css/style.css', gstrap: 'project-css' }
 

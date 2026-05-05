@@ -94,11 +94,15 @@ async function copyFrameworkAssets(siteRoot) {
     [join(bsRoot, 'js',  'bootstrap.bundle.js.map'),     join(jsDir, 'bootstrap.bundle.js.map'),     false],
     [join(bsRoot, 'js',  'bootstrap.bundle.min.js'),     join(jsDir, 'bootstrap.bundle.min.js'),     true],
     [join(bsRoot, 'js',  'bootstrap.bundle.min.js.map'), join(jsDir, 'bootstrap.bundle.min.js.map'), false],
-    // Bootstrap Icons — CSS plus the woff/woff2 it sources via `fonts/`.
+    // Bootstrap Icons — both un-min + min CSS, plus the woff/woff2 the CSS
+    // sources via `fonts/`. Default page wrapper links the un-min (better
+    // devtools experience); deploy-time minify can swap to .min.
+    [join(bsiRoot, 'bootstrap-icons.css'),         join(cssDir,      'bootstrap-icons.css'),     true],
     [join(bsiRoot, 'bootstrap-icons.min.css'),     join(cssDir,      'bootstrap-icons.min.css'), true],
     [join(bsiRoot, 'fonts', 'bootstrap-icons.woff2'), join(cssFontsDir, 'bootstrap-icons.woff2'), true],
     [join(bsiRoot, 'fonts', 'bootstrap-icons.woff'),  join(cssFontsDir, 'bootstrap-icons.woff'),  false],
-    // Font Awesome — single `all.min.css` bundle + its 4 webfonts.
+    // Font Awesome — both un-min + min `all.css` bundles + 4 webfonts.
+    [join(faRoot, 'css', 'all.css'),                           join(cssDir,      'all.css'),     true],
     [join(faRoot, 'css', 'all.min.css'),                       join(cssDir,      'all.min.css'), true],
     [join(faRoot, 'webfonts', 'fa-solid-900.woff2'),           join(webfontsDir, 'fa-solid-900.woff2'),     true],
     [join(faRoot, 'webfonts', 'fa-regular-400.woff2'),         join(webfontsDir, 'fa-regular-400.woff2'),   true],
