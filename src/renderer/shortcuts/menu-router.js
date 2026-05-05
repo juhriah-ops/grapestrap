@@ -15,6 +15,7 @@ import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
 import { resetLayout } from '../layout/golden-layout-config.js'
 import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
+import { rebuildCanvasFromCode } from '../editor/canvas-sync.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
 import { showTextPrompt } from '../dialogs/text-prompt.js'
 import { duplicateComponent, deleteComponent } from './component-actions.js'
@@ -30,6 +31,13 @@ function flushActiveTabIntoProject() {
   if (!projectState.current) return
   const tab = pageState.active()
   if (!tab) return
+  // If the user is editing in Code view (or split view, where code may have
+  // last focus), the canvas component tree is stale — Monaco edits don't
+  // propagate to GrapesJS until view-mode switch back to design. Rebuild now
+  // so getCanvasHtml() returns what the user actually sees in Code.
+  if (tab.viewMode === 'code' || tab.viewMode === 'split') {
+    rebuildCanvasFromCode()
+  }
   const captured = getCanvasHtml()
   if (tab.kind === 'library') {
     const item = projectState.current.libraryItems?.find(it => it.id === tab.pageName)

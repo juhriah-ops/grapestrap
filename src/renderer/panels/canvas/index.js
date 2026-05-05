@@ -50,8 +50,12 @@ export function renderCanvas(host) {
   // and don't race.
   installCanvasResizeWatcher(host)
 
-  eventBus.on('viewmode:changed', ({ tab, mode }) => {
-    applyViewMode(host, mode, tab.viewMode)
+  eventBus.on('viewmode:changed', ({ tab, mode, prev }) => {
+    // `prev` is the mode the tab was in before this change. Reading
+    // `tab.viewMode` here would always equal `mode` because pageState mutates
+    // the tab before emitting — that's how the code→design rebuild was
+    // silently never running.
+    applyViewMode(host, mode, prev ?? tab.viewMode)
   })
 
   eventBus.on('tab:focused', tab => swapToTab(tab))

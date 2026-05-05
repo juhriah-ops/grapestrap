@@ -75,8 +75,13 @@ class PageStateManager {
   setViewMode(pageName, mode) {
     const tab = this.tabs.find(t => t.pageName === pageName)
     if (!tab) return
+    const prev = tab.viewMode
+    if (prev === mode) return
     tab.viewMode = mode
-    eventBus.emit('viewmode:changed', { tab, mode })
+    // Emit prev separately — the panel listener needs the OLD mode to drive
+    // canvas-sync's code→design rebuild, and reading `tab.viewMode` at
+    // listener-fire time only gets the new value (since we just set it).
+    eventBus.emit('viewmode:changed', { tab, mode, prev })
   }
 
   setDevice(pageName, device) {

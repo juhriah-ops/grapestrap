@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.4] — 2026-05-04 (patch)
+
+Three bugs reported by user during real-project testing on nola1.
+
+### Fixed
+- **Code-view save dropped Monaco edits.** Two compounding causes: (1) `flushActiveTabIntoProject` always read `getCanvasHtml()`, so Monaco text typed in Code view was never the source of truth on save; (2) `pageState.setViewMode` mutated `tab.viewMode` BEFORE emitting `viewmode:changed`, so the canvas-panel listener received `prev === next` and never called `rebuildCanvasFromCode` on a code → design switch. Fix: emit `prev` separately in the event payload, and rebuild canvas-from-code at flush time when the active tab is in code or split view. Save now persists Monaco edits without requiring a switch back to design first.
+- **Insert-panel drag pasted block id as text instead of inserting the component.** Two causes: (1) dragstart was setting `text/plain` on the dataTransfer, which is what the browser's default drop action paste-targets when our handler doesn't claim the event; (2) the custom MIME `application/x-grapestrap-block` doesn't reliably cross the parent-doc → iframe boundary in Electron. Fix: stop setting `text/plain`, stash the in-flight block id on `window.__gstrapDragBlockId` (same-origin file:// makes it readable from the iframe via `window.parent`), and have the iframe drop handler fall back to the global when the dataTransfer types are missing the custom MIME. Drop also `stopPropagation()` so a contentEditable target can't steal the event after we claim it.
+- **Images disappear when canvas panel is maximized to fullscreen.** GL re-parents the canvas DOM on stack maximize/restore, which reloads the iframe in Electron. Our `canvas:frame:load` handler re-injects `<base href>` + `<style data-grapestrap-globalcss>` on each load, but image src resolution had already raced ahead — when `<base>` finally landed, the relative `assets/images/...` paths had already failed against `about:blank`. Fix: when `syncBaseHrefIntoCanvas` creates the `<base>` tag or changes its `href`, walk every `<img>` with a relative src and reassign `src` to force a re-fetch under the now-correct base. Also wired GL's `stateChanged` event to a `canvas:gl-state-changed` resync signal so the path covers maximize/restore independent of whether GrapesJS sees a frame:load.
+
+### Tests
+45 → 48 specs green. New regression specs cover all three fixes (code-view save, insert-panel drag, base-href image refetch).
+
 ## [v0.0.2-alpha.3] — 2026-05-04 (patch)
 
 Twelve-commit batch covering features the user reported during real static-site testing on nola1, plus an audit pass that surfaced latent bugs in dirty-state tracking + silent error paths.

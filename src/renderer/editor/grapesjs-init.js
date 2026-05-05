@@ -182,7 +182,7 @@ export function initGrapesJS(container) {
   // rAF-coalesced so the per-component-add storm during setComponents
   // collapses into one sync per frame.
   let resyncPending = false
-  eventBus.on('canvas:content-changed', () => {
+  const queueResync = () => {
     if (resyncPending) return
     resyncPending = true
     requestAnimationFrame(() => {
@@ -190,7 +190,13 @@ export function initGrapesJS(container) {
       syncGlobalCssIntoCanvas()
       syncBaseHrefIntoCanvas()
     })
-  })
+  }
+  eventBus.on('canvas:content-changed', queueResync)
+  // GL maximize / restore re-parents the canvas DOM and rebuilds its iframe.
+  // canvas:frame:load already covers the case where GrapesJS sees a fresh
+  // iframe load, but in some Electron paths the re-parent doesn't trigger a
+  // frame:load — so explicitly resync on the GL state-changed signal too.
+  eventBus.on('canvas:gl-state-changed', queueResync)
 
   log.info('GrapesJS initialized')
 
@@ -230,7 +236,8 @@ function syncBaseHrefIntoCanvas(docArg) {
     if (tag) tag.remove()
     return
   }
-  if (!tag) {
+  const created = !tag
+  if (created) {
     tag = doc.createElement('base')
     tag.setAttribute('data-grapestrap-base', '')
     // <base> must be the first head element to apply to subsequent resources;
@@ -241,7 +248,28 @@ function syncBaseHrefIntoCanvas(docArg) {
   // Trailing slash matters — without it, relative paths resolve as if from
   // the parent directory of site/.
   const siteDir = projectDir.replace(/\/?$/, '/') + 'site/'
-  tag.setAttribute('href', `file://${siteDir}`)
+  const nextHref = `file://${siteDir}`
+  const prevHref = tag.getAttribute('href')
+  tag.setAttribute('href', nextHref)
+  // If the <base> was missing or its href changed, every relative-src image
+  // in the doc was resolved against the WRONG base when the browser first
+  // tried to load it. Reassigning src forces a refetch with the now-correct
+  // base. Without this, GL maximize / re-parent on the canvas panel reloads
+  // the iframe, base injects after body content, images stay broken.
+  // Reported by user 2026-05-04: "images disappear when you expand the
+  // canvas window to fullscreen."
+  if (created || prevHref !== nextHref) {
+    refetchRelativeImages(doc)
+  }
+}
+
+function refetchRelativeImages(doc) {
+  const ABS = /^(?:[a-z]+:|\/\/|data:|blob:)/i
+  doc.querySelectorAll('img[src]').forEach(img => {
+    const src = img.getAttribute('src')
+    if (!src || ABS.test(src)) return
+    img.setAttribute('src', src) // setAttribute alone re-runs the resource fetch
+  })
 }
 
 export function getEditor() {

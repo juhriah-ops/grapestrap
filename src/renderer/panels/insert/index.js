@@ -93,14 +93,23 @@ export function renderInsertPanel(host) {
     }
   })
 
-  // Drag-from-tile: wire the block id onto the dataTransfer. The matching
-  // drop-target on the canvas iframe is bound below via wireCanvasDropTarget.
+  // Drag-from-tile: stash the block id on a window-global AND on the
+  // dataTransfer custom MIME. Custom MIME types (`application/x-*`) don't
+  // reliably survive the parent-doc → iframe boundary in Electron — only
+  // text/plain and Files do — so without the global the iframe drop handler
+  // would see no usable dataTransfer and fall through to the browser default,
+  // which (if dropped on a contentEditable area) pastes the block id as
+  // literal text. NEVER set text/plain: that's what gets pasted on default
+  // drop behavior. Reported by user 2026-05-04.
   host.addEventListener('dragstart', evt => {
     const tile = evt.target.closest('[data-block-id]')
     if (!tile) return
+    window.__gstrapDragBlockId = tile.dataset.blockId
     evt.dataTransfer?.setData(DROP_MIME, tile.dataset.blockId)
-    evt.dataTransfer?.setData('text/plain', tile.dataset.blockId)
     if (evt.dataTransfer) evt.dataTransfer.effectAllowed = 'copy'
+  })
+  host.addEventListener('dragend', () => {
+    window.__gstrapDragBlockId = null
   })
 
   refreshContent(host)
@@ -354,9 +363,26 @@ function hasGstrapBlockData(evt) {
   // but .types is accessible. Spread to a real array — DataTransfer.types
   // is a FrozenArray<DOMString> in modern browsers (works) but historically
   // a DOMStringList (no array indexing).
+  //
+  // The window-global fallback covers the Electron parent-doc → iframe case
+  // where the custom MIME is stripped at the boundary. Same window object is
+  // visible from the canvas iframe via window.parent (same-origin file://).
   const dt = evt.dataTransfer
-  if (!dt) return false
-  return Array.from(dt.types || []).includes(DROP_MIME)
+  if (dt && Array.from(dt.types || []).includes(DROP_MIME)) return true
+  return Boolean(activeWindowDragBlockId())
+}
+
+function activeWindowDragBlockId() {
+  // The iframe inherits same-origin from its parent renderer; reach across
+  // for the global the Insert panel sets on dragstart.
+  try {
+    return window.parent?.__gstrapDragBlockId
+        || window.top?.__gstrapDragBlockId
+        || window.__gstrapDragBlockId
+        || null
+  } catch {
+    return null
+  }
 }
 
 function handleDragEnter(evt) {
@@ -384,8 +410,12 @@ function handleDragLeave(doc, evt) {
 function handleDrop(editor, evt) {
   if (!hasGstrapBlockData(evt)) return
   evt.preventDefault()
+  // Also stop propagation so a contentEditable element under the cursor
+  // doesn't get a chance to act on the drop after we've claimed it.
+  evt.stopPropagation()
   setDropPreview(null)
-  const blockId = evt.dataTransfer.getData(DROP_MIME)
+  const blockId = evt.dataTransfer?.getData(DROP_MIME) || activeWindowDragBlockId()
+  if (window.parent) window.parent.__gstrapDragBlockId = null
   if (!blockId) return
   const anchor = componentForElement(editor, evt.target)
   performInsert(editor, blockId, anchor)

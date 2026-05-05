@@ -17,6 +17,7 @@
 
 import { GoldenLayout } from 'golden-layout'
 
+import { eventBus } from '../state/event-bus.js'
 import { renderFileManager } from '../panels/file-manager/index.js'
 import { renderDomTree }     from '../panels/dom-tree/index.js'
 import { renderCanvas }      from '../panels/canvas/index.js'
@@ -93,6 +94,22 @@ export function initGoldenLayout(host) {
   layout.registerComponentFactoryFunction('custom-css',     container => renderCustomCss(container.element))
 
   layout.loadLayout(DEFAULT_CONFIG)
+
+  // GL re-parents panel DOM on maximize/restore. For the canvas iframe that
+  // means the document gets rebuilt — base href + globalCSS injection need
+  // to fire again, otherwise relative `assets/...` images render broken.
+  // Coalesce stateChanged signals (GL fires several per maximize) into one
+  // rAF then ping the canvas iframe to resync. Reported as "images disappear
+  // when you expand the canvas window to fullscreen."
+  let pendingResync = false
+  layout.on('stateChanged', () => {
+    if (pendingResync) return
+    pendingResync = true
+    requestAnimationFrame(() => {
+      pendingResync = false
+      eventBus.emit('canvas:gl-state-changed')
+    })
+  })
 
   // Re-measure after the browser has laid out the CSS grid. Without this,
   // GoldenLayout reads 0×0 from the host on first paint (chrome regions

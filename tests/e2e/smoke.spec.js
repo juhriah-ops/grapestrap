@@ -3154,3 +3154,204 @@ test('Style Manager: pseudo-state on element with no usable selector toasts and 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+test('Code view save: Monaco edits persist to disk without switching back to design', async () => {
+  // Reported by user 2026-05-04: "the save state — it doesn't save edits to
+  // the code directly." Root causes:
+  //   (1) flushActiveTabIntoProject always read getCanvasHtml(), so Monaco
+  //       text typed in Code view was never the source of truth on save.
+  //   (2) pageState.setViewMode mutated tab.viewMode BEFORE emitting, so the
+  //       canvas-panel listener received prev === next and never called
+  //       rebuildCanvasFromCode on a code → design switch.
+  // Both paths fixed: this spec exercises path (1) — save while still in code
+  // view — which is the path that actually loses data without a switch.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-codesave-'))
+  const projectPath = join(projectDir, 'codesave.gstrap')
+  const SENTINEL = '<p data-testid="code-save-sentinel">code-only-edit</p>'
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Switch to code view via the same command path the toolbar uses.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'view:mode-code')
+  })
+  // Wait for the code pane to be the visible one.
+  await appWindow.waitForFunction(() => {
+    const code   = document.querySelector('.gstrap-canvas-code')
+    const design = document.querySelector('.gstrap-canvas-design')
+    return code && !code.hasAttribute('hidden') && design.hasAttribute('hidden')
+  }, null, { timeout: 5_000 })
+
+  // Wait for Monaco to be populated by the design→code sync (debounced 300ms).
+  await appWindow.waitForFunction(() => {
+    const m = window.__gstrap?.pluginRegistry?.bound?.monaco
+    const editors = m?.editor?.getEditors?.() || []
+    return editors.some(e => (e.getValue() || '').trim().length > 0)
+  }, null, { timeout: 5_000 })
+
+  // Type the sentinel into the HTML monaco editor (the first one whose model
+  // language is 'html'). Use setValue so the edit is unambiguous.
+  await appWindow.evaluate(html => {
+    const m = window.__gstrap.pluginRegistry.bound.monaco
+    const htmlEditor = m.editor.getEditors().find(e =>
+      e.getModel?.()?.getLanguageId?.() === 'html'
+    )
+    htmlEditor.setValue(html)
+  }, SENTINEL)
+
+  // Save WITHOUT switching back to design. The fix should rebuild the canvas
+  // from Monaco before flushing into projectState.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'file:save')
+  })
+  // Give the save IPC time to settle.
+  await appWindow.waitForTimeout(500)
+
+  // Read the page html off disk — the sentinel must be there.
+  const onDisk = await fsp.readFile(join(projectDir, 'site', 'pages', 'index.html'), 'utf8')
+  expect(onDisk).toContain('code-save-sentinel')
+  expect(onDisk).toContain('code-only-edit')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Insert panel drag: dropping a block on the canvas inserts a component (not a text paste)', async () => {
+  // Reported by user 2026-05-04: dragging a tile from the bottom Insert
+  // panel and dropping on the canvas pastes the block id as plain text
+  // instead of inserting the component. Two causes fixed:
+  //   (1) dragstart was setting `text/plain` on the dataTransfer, which is
+  //       what the browser's default drop action paste-targets.
+  //   (2) the custom MIME `application/x-grapestrap-block` doesn't reliably
+  //       cross the parent-doc → iframe boundary in Electron, so the iframe
+  //       drop handler saw nothing usable. Now also stashed on a window
+  //       global the iframe can read via window.parent.
+  // Drag events can't be synthesised reliably across an Electron iframe
+  // boundary in Playwright; this spec drives the same code paths
+  // programmatically (dragstart sets the global, drop handler reads it +
+  // inserts via performInsert).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-dragdrop-'))
+  const projectPath = join(projectDir, 'dragdrop.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Pick a block id that's actually registered (any of the bundled plugin
+  // blocks will do — the test just needs the drop path to fire, not specific
+  // content).
+  const blockId = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const blocks = ed.BlockManager.getAll()
+    return blocks?.at?.(0)?.get?.('id') || blocks?.[0]?.id || null
+  })
+  expect(blockId).toBeTruthy()
+
+  // Snapshot canvas component count before drop.
+  const beforeCount = await appWindow.evaluate(() =>
+    window.__gstrap.pluginRegistry.bound.editor.getWrapper().components().length
+  )
+
+  // Simulate the dragstart → drop flow. Dragstart is fired on the bottom
+  // Insert tile, which sets window.__gstrapDragBlockId. Drop is fired on the
+  // canvas iframe contentDocument's body.
+  const result = await appWindow.evaluate(blockId => {
+    window.__gstrapDragBlockId = blockId
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    // Drop event with no usable dataTransfer — exercises the iframe-boundary
+    // case where the custom MIME got stripped.
+    const dt = new DataTransfer()
+    const dropEvt = new DragEvent('drop', {
+      bubbles: true, cancelable: true, dataTransfer: dt,
+      clientX: 100, clientY: 100
+    })
+    // Target the body so we land on the page wrapper.
+    doc.body.dispatchEvent(dropEvt)
+    // Read the canvas html to confirm the block content rendered (not the
+    // block id pasted as text).
+    return {
+      html: ed.getHtml() || '',
+      count: ed.getWrapper().components().length,
+      bodyText: doc.body.textContent || ''
+    }
+  }, blockId)
+
+  // The component count should have grown by at least 1 (the inserted block).
+  expect(result.count).toBeGreaterThan(beforeCount)
+  // And the literal block id must NOT appear as a stray text node in body
+  // — that's the bug signature.
+  expect(result.bodyText).not.toContain(blockId)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Canvas resync: switching projectDir re-injects <base> and re-fetches relative images', async () => {
+  // Reported by user 2026-05-04: "images disappear when you expand the
+  // canvas window to fullscreen." GL maximize re-parents the canvas DOM
+  // and reloads its iframe; the <base href> + globalCSS injection was
+  // racing with image loads, so by the time <base> landed the relative
+  // src had already failed-resolved against about:blank. Fix: when
+  // syncBaseHrefIntoCanvas changes the href, walk every <img> with a
+  // relative src and reassign the attribute to force a re-fetch.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-baseimg-'))
+  const projectPath = join(projectDir, 'baseimg.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Inject an <img> directly into the iframe body (bypassing GrapesJS, which
+  // would replace a failed-load src with a data:svg placeholder). Attach a
+  // MutationObserver to count src-attribute writes — that's the signal that
+  // the refetch hook fired.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const img = doc.createElement('img')
+    img.setAttribute('data-testid', 'probe-img')
+    img.setAttribute('src', 'assets/images/probe.png')
+    doc.body.appendChild(img)
+    // Reset the counter AFTER appending so the initial setAttribute doesn't
+    // count.
+    window.__probeSrcWrites = 0
+    const mo = new MutationObserver(records => {
+      for (const r of records) {
+        if (r.attributeName === 'src') window.__probeSrcWrites++
+      }
+    })
+    mo.observe(img, { attributes: true })
+  })
+
+  // Mutate projectDir so the next sync sees a different href, then ping
+  // the resync hook. This is the same code path GL maximize hits.
+  await appWindow.evaluate(() => {
+    const { projectState, eventBus } = window.__gstrap
+    projectState.current.projectDir = projectState.current.projectDir + '-shifted'
+    eventBus.emit('canvas:gl-state-changed')
+  })
+  // Resync is rAF-coalesced; one frame is enough.
+  await appWindow.waitForTimeout(100)
+
+  const after = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const base = doc.querySelector('base[data-grapestrap-base]')
+    const img  = doc.querySelector('[data-testid="probe-img"]')
+    return {
+      baseHref:  base?.getAttribute('href'),
+      imgSrc:    img?.getAttribute('src'),
+      srcWrites: window.__probeSrcWrites
+    }
+  })
+
+  expect(after.baseHref || '').toContain('-shifted/site/')
+  // The relative src must be preserved literally (NOT rewritten to absolute).
+  expect(after.imgSrc).toBe('assets/images/probe.png')
+  // The fix's signature: setAttribute('src', src) ran at least once after
+  // the base change, forcing the browser to re-fetch under the new base.
+  expect(after.srcWrites).toBeGreaterThan(0)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
