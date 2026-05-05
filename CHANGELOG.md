@@ -8,6 +8,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.7] — 2026-05-04 (patch — pages saved as full HTML)
+
+Closes the gap left by alpha.6: framework files were in the project, but the page files on disk were body-only fragments. The Code-view editor showed the same body fragment, with no `<head>` references to confirm the framework was wired up. User report: ".html editor theres no reference in header meta. we need the html produced to have all src links etc."
+
+### Changed (BREAKING-ish — applies to existing projects on next save)
+- **Pages on disk are now full HTML documents.** Each `site/pages/*.html` file is a real standalone webpage: `<!doctype html>`, `<head>` with charset / viewport / title / description / favicon / framework links (`assets/css/bootstrap.min.css`, `assets/css/bootstrap-icons.min.css`, `assets/css/all.min.css`, `assets/css/style.css`), `<body>` with the canvas-edited content, end-of-body framework script (`assets/js/bootstrap.bundle.min.js`). Open the file in any text editor and it's a complete page; rsync the `site/` dir to a server and every link resolves.
+- **The Code-view editor in-app shows the same composed full HTML.** User sees the head metadata directly. Edits to the head section (title, description, custom meta, custom links, custom scripts) are parsed back out of Monaco's value on view-mode-switch / save and merged into `manifest.pages[].head`, so Page Properties stays in sync. The body is what GrapesJS still owns.
+- **Project's custom CSS now lives at `assets/css/style.css`** (was `style.css` at the site root). Manifest field `globalCSS` updated accordingly. Old projects with `globalCSS: 'style.css'` get a fallback read at the legacy path so their CSS isn't silently lost.
+- **Export now uses the same composer.** `wrapPageHtml` is gone — both save and export go through `composeFullPageHtml(body, page, manifest)` so the bytes on disk after Save and the bytes in `outputDir/<page>.html` are identical for a clean project. No more divergence between "what's on disk" and "what gets exported."
+
+### Added
+- **`src/shared/page-html.js`** — shared compose / extract module imported from both main (`project-manager.js`) and renderer (`canvas-sync.js`). Exports `composeFullPageHtml(body, page, manifest)`, `extractPageFromFullHtml(fullHtml)`, `isFullHtmlDocument(s)`. GrapeStrap-managed tags get `data-grpstr-*` attributes for round-trip parsing; user-added meta/links/scripts are preserved through the manifest.
+- **Round-trip test**: spec creates a project, saves, closes, re-opens — confirms the body extracted from disk matches the seed and the head fields land back in `manifest.head`.
+
+### Tests
+50 → 51 specs green. Updates: Project layout / Refresh / Page Properties specs adjusted for the `assets/css/style.css` location and the `data-grpstr-*` attributes on managed tags. New `Pages on disk: saved as full HTML with framework links in <head>` regression spec.
+
 ## [v0.0.2-alpha.6] — 2026-05-04 (patch — framework assets in-project)
 
 Architectural follow-up to alpha.4/.5. The previous fixes coerced framework loading to work *despite* the project-scoped `<base href>`. This release addresses the underlying mismatch: the canvas was loading Bootstrap from the renderer's bundled copy, while exported pages referenced their own `css/bootstrap.css` — two different sources of truth that diverged the moment the project was rsync'd to a server. Now they're one.

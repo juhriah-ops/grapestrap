@@ -2068,7 +2068,9 @@ test('Project layout: .gstrap at root + site/ subdir for deployable web content'
 
   const siteExists      = await fsp.access(join(projectDir, 'site')).then(() => true, () => false)
   const indexInSite     = await fsp.access(join(projectDir, 'site', 'pages', 'index.html')).then(() => true, () => false)
-  const stylecssInSite  = await fsp.access(join(projectDir, 'site', 'style.css')).then(() => true, () => false)
+  // alpha.7+: project's custom CSS lives at assets/css/style.css alongside
+  // the framework — one assets/ tree both in canvas and on the deploy.
+  const stylecssInSite  = await fsp.access(join(projectDir, 'site', 'assets', 'css', 'style.css')).then(() => true, () => false)
   const assetsImagesDir = await fsp.access(join(projectDir, 'site', 'assets', 'images')).then(() => true, () => false)
   const manifestAtRoot  = await fsp.access(projectPath).then(() => true, () => false)
   const oldPagesAtRoot  = await fsp.access(join(projectDir, 'pages')).then(() => true, () => false)
@@ -2527,8 +2529,9 @@ test('Refresh toolbar action: saves to disk + re-emits sync events', async () =>
   )
   const events = await appWindow.evaluate(() => window.__rfr_events)
 
-  // Disk reflects the css mutation.
-  const styleCss = await fsp.readFile(join(projectDir, 'site', 'style.css'), 'utf8')
+  // Disk reflects the css mutation. Lives at assets/css/style.css alongside
+  // the framework so the canvas + deploy share one assets/ tree.
+  const styleCss = await fsp.readFile(join(projectDir, 'site', 'assets', 'css', 'style.css'), 'utf8')
   expect(styleCss).toContain('refreshed')
 
   // All four sync events fired.
@@ -2666,9 +2669,11 @@ test('Page Properties: title/description/favicon/custom-meta land in saved manif
 
   const indexHtml = await fsp.readFile(join(outputDir, 'index.html'), 'utf8')
   expect(indexHtml).toMatch(/<title>Hello World<\/title>/)
-  expect(indexHtml).toMatch(/<meta name="description" content="A demo page\.">/)
-  expect(indexHtml).toMatch(/<meta name="keywords" content="bootstrap, demo">/)
-  expect(indexHtml).toMatch(/<link rel="icon" href="assets\/images\/favicon\.png" type="image\/png">/)
+  // Extra attrs are tolerated — composeFullPageHtml marks managed tags with
+  // data-grpstr-* attributes for round-trip parsing.
+  expect(indexHtml).toMatch(/<meta name="description" content="A demo page\."[^>]*>/)
+  expect(indexHtml).toMatch(/<meta name="keywords" content="bootstrap, demo"[^>]*>/)
+  expect(indexHtml).toMatch(/<link rel="icon" href="assets\/images\/favicon\.png" type="image\/png"[^>]*>/)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
@@ -3428,6 +3433,74 @@ test('Canvas styles: Bootstrap CSS links stay valid through base-href + device c
   expect(onDisk).toBe(true)
 
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Pages on disk: saved as full HTML with framework links in <head>', async () => {
+  // Reported by user 2026-05-04: ".html editor theres no reference in
+  // header meta." alpha.7 architectural change: pages are saved as full
+  // HTML documents on disk so each file is a real standalone webpage with
+  // <head> containing the framework + project-css links + the manifest's
+  // per-page meta. The Code-view editor in-app shows the same composed
+  // doc, and edits to the head section round-trip back into the manifest's
+  // page.head fields.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-fulldoc-'))
+  const projectPath = join(projectDir, 'fulldoc.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Save to flush whatever the canvas currently shows back to disk.
+  await appWindow.evaluate(() => {
+    window.__gstrap.eventBus.emit('command', 'file:save')
+  })
+  await appWindow.waitForTimeout(400)
+
+  // The on-disk file must be a full HTML document with the framework links.
+  const onDisk = await fsp.readFile(join(projectDir, 'site', 'pages', 'index.html'), 'utf8')
+  expect(onDisk).toMatch(/<!doctype html>/i)
+  expect(onDisk).toMatch(/<html\b/i)
+  expect(onDisk).toMatch(/<head>/i)
+  expect(onDisk).toMatch(/<meta charset="utf-8">/i)
+  expect(onDisk).toMatch(/<meta name="viewport"/i)
+  expect(onDisk).toMatch(/<title>/i)
+  // Framework links — present and pointing at the project-relative paths.
+  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/bootstrap\.min\.css"[^>]*>/i)
+  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/bootstrap-icons\.min\.css"[^>]*>/i)
+  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/all\.min\.css"[^>]*>/i)
+  expect(onDisk).toMatch(/<link[^>]*href="assets\/css\/style\.css"[^>]*>/i)
+  expect(onDisk).toMatch(/<script[^>]*src="assets\/js\/bootstrap\.bundle\.min\.js"[^>]*defer[^>]*>/i)
+  // Body still contains the seed content.
+  expect(onDisk).toMatch(/<main\b/i)
+
+  // Round-trip: re-open the project (next-launch simulation) and the
+  // canvas page.html should still hold ONLY the body, with head fields
+  // back in manifest.head — the full-doc -> body extraction must be
+  // lossless on the parts the user edits.
+  await app.close()
+
+  const { app: app2, appWindow: w2 } = await launch()
+  await w2.waitForFunction(
+    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
+    null, { timeout: 15_000 }
+  )
+  const reload = await w2.evaluate(async path => {
+    const project = await window.grapestrap.project.open(path)
+    return {
+      bodyHasMain:    /<main\b/i.test(project.pages[0].html),
+      bodyHasDoctype: /<!doctype/i.test(project.pages[0].html),
+      bodyHasHead:    /<head\b/i.test(project.pages[0].html),
+      headTitle:      project.pages[0].head?.title || ''
+    }
+  }, projectPath)
+
+  expect(reload.bodyHasMain).toBe(true)        // body content preserved
+  expect(reload.bodyHasDoctype).toBe(false)    // body-only in memory
+  expect(reload.bodyHasHead).toBe(false)       // body-only in memory
+  // Title round-tripped from disk through the parser.
+  expect(reload.headTitle.length).toBeGreaterThan(0)
+
+  await app2.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 

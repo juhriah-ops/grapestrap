@@ -18,6 +18,7 @@
 import { promises as fsp } from 'node:fs'
 import { dirname, join, basename, extname, resolve } from 'node:path'
 import { app } from 'electron'
+import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument } from '../shared/page-html.js'
 
 const MANIFEST_VERSION = '1.0'
 const FORMAT_TAG = 'grapestrap-project'
@@ -203,14 +204,21 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
         const raw = await fsp.readFile(srcEntry, 'utf8')
         const { body, title, description } = extractBody(raw)
         const targetFile = `pages/${unique}.html`
-        await fsp.writeFile(join(site, targetFile), body, 'utf8')
-        pages.push({
+        const importedPage = {
           name: unique,
           file: targetFile,
           templateName: null,
           regions: {},
           head: { title: title || unique, description: description || '', customMeta: [], customLinks: [], customScripts: [] }
-        })
+        }
+        // Write as full HTML so each imported page lands on disk as a real
+        // standalone document with framework links in its head.
+        await fsp.writeFile(
+          join(site, targetFile),
+          composeFullPageHtml(body, importedPage, { metadata: { name } }),
+          'utf8'
+        )
+        pages.push(importedPage)
         continue
       }
 
@@ -265,15 +273,20 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
   if (pages.length === 0) {
     // Empty project gets a blank index so the canvas isn't a void.
     const idx = renderBlankIndex(name)
-    await fsp.writeFile(join(site, 'pages', 'index.html'), idx, 'utf8')
     pages.push({
       name: 'index', file: 'pages/index.html', templateName: null, regions: {},
       head: { title: name, description: '', customMeta: [], customLinks: [], customScripts: [] }
     })
+    await fsp.writeFile(
+      join(site, 'pages', 'index.html'),
+      composeFullPageHtml(idx, pages[0], { metadata: { name } }),
+      'utf8'
+    )
   }
 
   if (!globalCSSContent) globalCSSContent = '/* Project-global custom CSS */\n'
-  await fsp.writeFile(join(site, 'style.css'), globalCSSContent, 'utf8')
+  await fsp.mkdir(join(site, 'assets', 'css'), { recursive: true })
+  await fsp.writeFile(join(site, 'assets', 'css', 'style.css'), globalCSSContent, 'utf8')
 
   const now = new Date().toISOString()
   const manifest = {
@@ -291,7 +304,7 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
     templates: [],
     libraryItems: [],
     snippets: [],
-    globalCSS: 'style.css',
+    globalCSS: 'assets/css/style.css',
     palette: [],
     assets: [],
     vendorDeps: [],
@@ -375,8 +388,10 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
   await copyFrameworkAssets(site)
 
   const indexHtml = renderBlankIndex(name)
-  await fsp.writeFile(join(site, 'pages', 'index.html'), indexHtml, 'utf8')
-  await fsp.writeFile(join(site, 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
+  // Project's own custom stylesheet — referenced via assets/css/style.css from
+  // the wrapped page so the same path works in canvas + on a server.
+  await fsp.mkdir(join(site, 'assets', 'css'), { recursive: true })
+  await fsp.writeFile(join(site, 'assets', 'css', 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
 
   const now = new Date().toISOString()
   const manifest = {
@@ -412,6 +427,19 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
       exportIncludeComments: false
     }
   }
+
+  // Write the index page as full HTML so the file is a real standalone
+  // document with framework links in <head>. The canvas extracts the body
+  // for editing; manifest.head provides title/description/etc.
+  await fsp.writeFile(
+    join(site, 'pages', 'index.html'),
+    composeFullPageHtml(indexHtml, manifest.pages[0], manifest),
+    'utf8'
+  )
+
+  // Update globalCSS pointer to the new in-assets location so loadProject
+  // reads from there. (The legacy site/style.css path is dead now.)
+  manifest.globalCSS = 'assets/css/style.css'
 
   await fsp.writeFile(targetPath, JSON.stringify(manifest, null, 2), 'utf8')
   return { manifest, projectPath: targetPath }
@@ -469,8 +497,27 @@ export async function loadProject(manifestPath) {
 
   const pages = await Promise.all(
     manifest.pages.map(async page => {
-      const html = await fsp.readFile(join(site, page.file), 'utf8')
-      return { ...page, html }
+      const raw = await fsp.readFile(join(site, page.file), 'utf8')
+      // alpha.7+: pages on disk are full HTML documents. Pull out the body
+      // for the canvas + the head fields back into the manifest. Legacy
+      // body-only pages pass through unchanged (extract returns the input
+      // as body when no <body> tag is found).
+      if (isFullHtmlDocument(raw)) {
+        const { body, head } = extractPageFromFullHtml(raw)
+        const merged = {
+          ...(page.head || {}),
+          ...head,
+          // Preserve manifest-only metadata (favicon, customScripts) when
+          // the parsed value is the empty default — extract returns empty
+          // strings for missing fields, which we don't want to clobber
+          // intentional manifest content.
+          title:        head.title       || page.head?.title       || '',
+          description:  head.description || page.head?.description || '',
+          favicon:      head.favicon     || page.head?.favicon     || ''
+        }
+        return { ...page, html: body, head: merged }
+      }
+      return { ...page, html: raw }
     })
   )
   const templates = await Promise.all(
@@ -488,7 +535,16 @@ export async function loadProject(manifestPath) {
   let globalCSS = ''
   if (manifest.globalCSS) {
     try { globalCSS = await fsp.readFile(join(site, manifest.globalCSS), 'utf8') }
-    catch { /* missing style.css is OK */ }
+    catch {
+      // Pre-alpha.7 projects pointed at site/style.css; alpha.7+ keeps it
+      // at site/assets/css/style.css. Try the legacy path as a fallback so
+      // older projects don't lose their custom CSS.
+      const legacyAlt = manifest.globalCSS === 'assets/css/style.css' ? 'style.css' : null
+      if (legacyAlt) {
+        try { globalCSS = await fsp.readFile(join(site, legacyAlt), 'utf8') }
+        catch { /* genuinely missing */ }
+      }
+    }
   }
 
   return {
@@ -512,11 +568,20 @@ export async function saveProject(project) {
   const site = siteDir(projectDir)
   const now = new Date().toISOString()
 
-  // Write each page's html to its file inside site/. Manifest paths stay
-  // relative-to-site; the site/ prefix is a property of the disk layout.
+  // Pages are saved as full HTML documents — wrapping the body the canvas
+  // is editing with `<head>` populated from the manifest's per-page head
+  // fields + the framework links. This makes each file on disk a real
+  // standalone page (transferable to any server, viewable in any text
+  // editor) and gives the Code view the full picture instead of just the
+  // body fragment.
+  //
+  // Templates + library items stay body-only — they're fragments by design,
+  // composed into pages via region replacement (templates) or wrapping div
+  // (library items). Wrapping them as full HTML would be misleading.
   for (const page of pages) {
     const file = page.file || `pages/${page.name}.html`
-    await writeAtomic(join(site, file), page.html ?? '')
+    const fullHtml = composeFullPageHtml(page.html ?? '', page, manifest)
+    await writeAtomic(join(site, file), fullHtml)
   }
   for (const tpl of templates) {
     const file = tpl.file || `templates/${tpl.name}.html`
@@ -527,6 +592,7 @@ export async function saveProject(project) {
     await writeAtomic(join(site, file), item.html ?? '')
   }
   if (manifest.globalCSS && globalCSS !== undefined) {
+    await fsp.mkdir(dirname(join(site, manifest.globalCSS)), { recursive: true })
     await writeAtomic(join(site, manifest.globalCSS), globalCSS)
   }
 
@@ -612,9 +678,15 @@ export async function exportProject(project, outputDir) {
     await fsp.cp(assetsSrc, join(outputDir, 'assets'), { recursive: true })
   }
 
-  // Render each page (v0.0.1: pages standalone; v0.0.2+ resolves templates/library)
+  // Render each page as a full HTML document. Same composer the save loop
+  // uses, so the canvas-edited body lands wrapped with the project's head
+  // metadata + framework links. The resulting file has the exact same
+  // contents as `<projectDir>/site/pages/<name>.html` — export at this
+  // stage is essentially "copy site/ verbatim, but compose the body that's
+  // currently in memory rather than reading from disk" so the user can
+  // export from a dirty editor without having to save first.
   for (const page of project.pages) {
-    const html = wrapPageHtml(page, project.manifest)
+    const html = composeFullPageHtml(page.html ?? '', page, project.manifest)
     const filename = `${page.name}.html`
     await fsp.writeFile(join(outputDir, filename), html, 'utf8')
   }
@@ -622,66 +694,9 @@ export async function exportProject(project, outputDir) {
   return { outputDir, pageCount: project.pages.length }
 }
 
-function wrapPageHtml(page, manifest) {
-  const head = page.head || {}
-  const meta = manifest.metadata || {}
-  // Favicon precedence: per-page override > project-wide default. Path is
-  // relative to the project's site/ root, so it ships at the same location
-  // it sits on disk (export flat-mirrors site/, with css/ and js/ added at
-  // the root for the bundled Bootstrap).
-  const favicon = head.favicon || meta.favicon || ''
-  const customMeta    = Array.isArray(head.customMeta)    ? head.customMeta    : []
-  const customLinks   = Array.isArray(head.customLinks)   ? head.customLinks   : []
-  const customScripts = Array.isArray(head.customScripts) ? head.customScripts : []
-
-  const faviconLink = favicon
-    ? `<link rel="icon" href="${escapeHtml(favicon)}"${faviconType(favicon)}>`
-    : ''
-  const metaTags = customMeta
-    .filter(m => m && m.name && m.content)
-    .map(m => `<meta name="${escapeHtml(m.name)}" content="${escapeHtml(m.content)}">`)
-    .join('\n  ')
-  const linkTags = customLinks
-    .filter(l => l && l.href)
-    .map(l => `<link${l.rel ? ` rel="${escapeHtml(l.rel)}"` : ''} href="${escapeHtml(l.href)}"${l.type ? ` type="${escapeHtml(l.type)}"` : ''}>`)
-    .join('\n  ')
-  const scriptTags = customScripts
-    .filter(s => s && s.src)
-    .map(s => `<script src="${escapeHtml(s.src)}"${s.defer ? ' defer' : ''}${s.async ? ' async' : ''}></script>`)
-    .join('\n  ')
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${escapeHtml(head.title || page.name)}</title>
-  ${head.description ? `<meta name="description" content="${escapeHtml(head.description)}">` : ''}
-  ${metaTags ? metaTags : ''}
-  ${faviconLink}
-  <link rel="stylesheet" href="assets/css/bootstrap.min.css">
-  <link rel="stylesheet" href="assets/css/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="assets/css/all.min.css">
-  <link rel="stylesheet" href="assets/css/style.css">
-  ${linkTags}
-</head>
-<body>
-${page.html || ''}
-  <script src="assets/js/bootstrap.bundle.min.js" defer></script>
-  ${scriptTags}
-</body>
-</html>
-`
-}
-
-function faviconType(path) {
-  const ext = (path.split('.').pop() || '').toLowerCase()
-  if (ext === 'png')  return ' type="image/png"'
-  if (ext === 'svg')  return ' type="image/svg+xml"'
-  if (ext === 'ico')  return ' type="image/x-icon"'
-  if (ext === 'webp') return ' type="image/webp"'
-  return ''
-}
+// `wrapPageHtml` + `faviconType` were superseded by composeFullPageHtml in
+// shared/page-html.js so the save path, export path, and Code-view display
+// path all produce byte-identical HTML. Removed alpha.7.
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])

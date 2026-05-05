@@ -116,10 +116,11 @@ function basename(href) {
   catch { return href }
 }
 function matchesPath(href, target) {
-  // "style.css" matches "./style.css", "/style.css", "css/style.css" gets a soft match.
-  const a = String(href).replace(/^\.?\/?/, '').replace(/^css\//, '')
-  const b = String(target).replace(/^\.?\/?/, '').replace(/^css\//, '')
-  return a === b
+  // "style.css" matches "./style.css", "/style.css", "css/style.css", and
+  // (alpha.7+) "assets/css/style.css" — the project's stylesheet may be
+  // referenced via any of those forms across legacy + current layouts.
+  const norm = s => String(s).replace(/^\.?\/?/, '').replace(/^assets\/css\//, '').replace(/^css\//, '')
+  return norm(href) === norm(target)
 }
 
 function escAttr(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;') }

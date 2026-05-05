@@ -22,6 +22,9 @@
 import { eventBus } from '../state/event-bus.js'
 import { getEditor } from './grapesjs-init.js'
 import { formatHtml } from './format-html.js'
+import { projectState } from '../state/project-state.js'
+import { pageState } from '../state/page-state.js'
+import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument } from '../../shared/page-html.js'
 import { log } from '../log.js'
 
 let codeEditor = null
@@ -82,10 +85,19 @@ function queueCanvasToCode() {
 function syncCanvasToCode() {
   const editor = getEditor()
   if (!editor || !codeEditor) return
-  // Pretty-print before pushing to Monaco — readability is the whole point of
-  // the Code view, and HTML round-trips through GrapesJS losslessly when
-  // whitespace-significant tags (handled by formatHtml) are preserved.
-  const html = formatHtml(editor.getHtml())
+  // For page tabs we compose the FULL HTML document (head + body + framework
+  // links) so the Code view is a faithful mirror of what's saved on disk —
+  // user sees the BS / FA / icons references directly. Library-item tabs
+  // stay body-only since they're fragments by design (composed into pages
+  // via wrapper div, never standalone). Pretty-print on the way out so the
+  // Code view stays readable.
+  const tab = pageState.active()
+  const body = formatHtml(editor.getHtml())
+  let html = body
+  if (tab?.kind !== 'library' && projectState.current) {
+    const page = projectState.current.pages?.find(p => p.name === tab?.pageName)
+    if (page) html = composeFullPageHtml(body, page, projectState.current.manifest || {})
+  }
   const css = editor.getCss()
   suppressCodeToCanvas = true
   if (codeEditor.getValue() !== html) codeEditor.setValue(html)
@@ -106,14 +118,33 @@ export function rebuildCanvasFromCode() {
   const editor = getEditor()
   if (!editor || !codeEditor) return
 
-  const html = codeEditor.getValue()
+  const raw = codeEditor.getValue()
   const css = cssEditor ? cssEditor.getValue() : ''
+
+  // For pages, the Code view holds the full HTML doc (alpha.7+). Extract the
+  // body for setComponents and the head fields back into the manifest so
+  // Page Properties + the next compose stay in sync with what the user
+  // typed. Library tabs stay body-only.
+  let bodyForCanvas = raw
+  const tab = pageState.active()
+  if (tab?.kind !== 'library' && isFullHtmlDocument(raw)) {
+    const { body, head } = extractPageFromFullHtml(raw)
+    bodyForCanvas = body
+    if (projectState.current) {
+      const page = projectState.current.pages?.find(p => p.name === tab?.pageName)
+      if (page) {
+        page.head = { ...(page.head || {}), ...head }
+        projectState.markPageDirty?.(page.name)
+        eventBus.emit('page:head-changed', { page })
+      }
+    }
+  }
 
   suppressCanvasToCode = true
   try {
-    editor.setComponents(html)
+    editor.setComponents(bodyForCanvas)
     editor.setStyle(css)
-    eventBus.emit('sync:code-to-canvas', { html, css })
+    eventBus.emit('sync:code-to-canvas', { html: bodyForCanvas, css })
     log.debug('rebuilt canvas from code')
   } finally {
     // Re-enable after one tick so GrapesJS update events from setComponents
