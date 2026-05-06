@@ -6,65 +6,80 @@ Paste this into a fresh Claude session. Self-contained — assumes no memory of 
 
 ## Context
 
-You are picking up a GrapeStrap debug session. The user runs the app on nola1 (Linux workstation) and reports bugs from real-project testing. Recent work pushed 5 patch releases (alpha.4 → alpha.8) all driven by user reports — three discrete bugs, then an architectural pivot, then closing the visibility gap, then restoring an earlier default.
+You are picking up a GrapeStrap debug session. The user runs the app on nola1 (Linux workstation `jsmith@192.168.0.192`) and reports bugs from real-project testing. The most recent stretch shipped four patch releases — alpha.9 → alpha.12 — driven by a single evening of nola1 reports about the right-side panel column.
 
 State at session start:
 
 - Repo: `/home/numb1/projects/grapestrap`
-- Branch: `main` — clean working tree
-- HEAD: `7a7f744` (or later)
-- Tags: `v0.0.1-alpha`, `v0.0.2-alpha`, `v0.0.2-alpha.1` … `v0.0.2-alpha.8`
-- Specs: 51/51 green via `xvfb-run -a npx playwright test`
+- Branch: `main`, clean tree
+- HEAD: `ba90aab` (or later)
+- Tags: `v0.0.1-alpha`, `v0.0.2-alpha` … `v0.0.2-alpha.12`
+- Specs: 53/53 green via `xvfb-run -a npx playwright test`
 - Origin: `github.com/juhriah-ops/grapestrap`
-- Workstation: nola1 (`jsmith@192.168.0.192`) has a synced copy at `~/projects/grapestrap`. No git or rsync there — push via tar pipe (see ship recipe).
+- nola1: synced via tar pipe (no git/rsync there). Verify with `cat .git/refs/heads/main`.
 
-Read the auto-memory entry at `~/.claude/projects/-home-numb1/memory/session_2026_05_04_grapestrap_alpha4_8.md` for the full architecture context. The build plan is at `GRAPESTRAP_BUILD_PLAN_v4.md` in the repo.
+Read the auto-memory entry at `~/.claude/projects/-home-numb1/memory/session_2026_05_05_grapestrap_alpha9_12.md` for the full architecture context. The build plan is at `GRAPESTRAP_BUILD_PLAN_v4.md` in the repo.
 
-## What landed in alpha.4 → alpha.8
+## What landed alpha.9 → alpha.12 (in priority of "things you'll touch when debugging")
 
-### alpha.4 — three user-reported regressions
-- Code-view save dropped Monaco edits. Two fixes: `pageState.setViewMode` now emits `prev` separately (was mutating before emit, so listeners read `prev === next`); `flushActiveTabIntoProject` now rebuilds canvas from code first when in code/split view.
-- Insert-panel drag pasted block id as plain text. Two fixes: stop setting `text/plain` on dataTransfer (browser default-drop pastes it); stash block id on `window.__gstrapDragBlockId` since Electron strips custom MIME types crossing the iframe boundary; iframe drop handler reads via `window.parent` as fallback. Drop also `stopPropagation()` so contentEditable can't steal it.
-- Images vanished on canvas-fullscreen (GL maximize). GL re-parents the iframe → reload → `<base>` lands AFTER images start fetching. Fix: reassign every relative `<img>` src after `<base>` updates. Also wired GL `stateChanged` → `canvas:gl-state-changed` → resync.
+### Layout (alpha.12 — current shape)
 
-### alpha.5 — stylesheet broke when cycling devices in fullscreen
-Workaround: BOOTSTRAP_CSS / ICONS_CSS / BOOTSTRAP_JS resolved to absolute renderer-base URLs at module load time. (Superseded by alpha.6.)
+The shell is one row of three children, all stacks:
 
-### alpha.6 — architectural pivot: framework assets in-project
-Bootstrap + Bootstrap Icons + Font Awesome live inside each project's `site/assets/` from creation. `project-manager.js#copyFrameworkAssets(siteRoot)` writes them at create / import / load (idempotent backfill on load). Canvas loads via project-relative paths through `<base href>` — same paths in canvas + on a deployed server. `canvas.styles` / `canvas.scripts` is empty; `syncFrameworksIntoCanvas` injects after `<base>` lands.
-
-Layout:
 ```
-site/assets/
-  css/  bootstrap.{css,min.css,...maps}, bootstrap-icons.{css,min.css},
-        all.{css,min.css}, fonts/bootstrap-icons.{woff,woff2}, style.css
-  js/   bootstrap.bundle.{js,min.js,...maps}
-  webfonts/  fa-{solid,regular,brands,v4compatibility}-*.woff2
+LEFT STACK (18%)              CENTER (56%)              RIGHT STACK (26%)
+Project | Library | Asset     Canvas / Code / Split     DOM | Properties | Custom CSS
 ```
 
-### alpha.7 — pages saved as full HTML
-Each `site/pages/*.html` is now `<!doctype html>...</html>` with `<head>` (charset, viewport, title, description, favicon, framework links, project style.css) and `<body>` with the canvas-edited content + end-of-body `bootstrap.bundle.js`. Code editor shows the same composed full HTML; edits to head section round-trip back into manifest's `page.head` fields. Shared module `src/shared/page-html.js` exports `composeFullPageHtml` and `extractPageFromFullHtml`. GrapeStrap-managed tags get `data-grpstr-*` attributes for round-trip parsing.
+Properties is the default-active right tab. View → Toggle X for each of DOM / Properties / Custom CSS hides just that tab + content (body class hides `.lm_tab[title="X"]` + `.lm_content.gstrap-X-host`). If ALL THREE end up hidden, the whole right stack collapses via the alpha.10 size-redistribute trick so the canvas reclaims its 26%; toggling any one back on restores the stack.
 
-### alpha.8 — un-min framework defaults
-Restored alpha.3 default (`bootstrap.css` not `.min.css`) for browser-devtools quality. Both un-min + min ship.
+### Panel hide/show — `src/renderer/layout/panel-visibility.js`
+
+This module is the canonical "make GL re-layout when programmatic state changes" path. It snapshots the parent's children sizes, sets the target's `size = 0`, redistributes the freed share proportionally to visible siblings, then calls `requestFullRelayout()`. Restore is symmetric.
+
+GL's own `item.hide()` does NOT work for our case: it flips `display:none` inside `beginSizeInvalidation` / `endSizeInvalidation`, but `setSize → calculateAbsoluteSizes` iterates ALL contentItems regardless of visibility and assigns each its `size`-percent share. Hidden items still get their slice. We have to zero `size` ourselves.
+
+The orphaned splitter next to a hidden item is hidden via `.is-gstrap-hidden + .lm_splitter, .lm_splitter:has(+ .is-gstrap-hidden) { display: none }`.
+
+### Why panels need `requestFullRelayout()` not just `layout.updateSize()`
+
+Monaco runs with `automaticLayout: false` (intentional — see `monaco-init.js` comment: per-instance ROs raced with the host RO). It only re-lays-out when `relayoutAllMonaco()` pokes it. `layout.updateSize()` resizes GL boxes but doesn't poke Monaco; the editor freezes at old pixel dimensions until something else fires.
+
+`requestFullRelayout()` is exported from `src/renderer/layout/golden-layout-config.js` and runs the same chain the host RO runs: `layout.updateSize()` + `relayoutAllMonaco()` + GrapesJS `refresh()`. **Use it after any programmatic GL change.** Don't call `layout.updateSize()` standalone.
+
+### Panel hosts — DON'T position-absolute the .lm_content
+
+`gstrap-fm-host`, `gstrap-props-host`, `gstrap-dom-host`, `gstrap-am-host`, `gstrap-lib-host` classes are added directly to `.lm_content` (panel render fns receive `container.element` which IS `.lm_content`). If you give them `position: absolute; inset: 0`, they escape GL's containing block — content renders at the header's Y, 2px wider than the column. Use `height: 100%; overflow-y: auto` instead. GL gives `.lm_content` a definite pixel height, so `height: 100%` resolves correctly and scroll works.
+
+### Linux menu-bar lock (alpha.11)
+
+Electron + GTK CSD on Linux can drop the application menu bar during rapid resize cycles. `createMainWindow` in `src/main/main.js` now does `setAutoHideMenuBar(false)` + `setMenuBarVisibility(true)` and re-asserts on `resize` / `maximize` / `unmaximize` / `leave-full-screen`. Don't remove these defenses.
+
+## Open follow-ups (priority order)
+
+1. **Properties↔Custom CSS source-of-truth sync** — User report (2026-05-05): "if I select a background image in the properties tool bar it doesnt save to the css but the css will have a backgroundimage saved as well its not clear which window overides which. same thing with background position, attachment etc." Properties writes to a separate CSS scope from `globalCSS`; the Custom CSS view shows `globalCSS` only. The two can show conflicting state for the same selector with no precedence indicator. Pick a model: Properties writes into `globalCSS` (Custom CSS reflects live), OR keep them separate but show precedence in UI. Tracked in alpha.12 CHANGELOG known-follow-ups. Likely first task this session.
+
+2. **Splitter snap-then-lock + crash mid-drag** — alpha.9 known issue. User reported "snaps ~50px then sticks" plus one crash with `[ERROR:atom_cache.cc(229)] Add chromium/from-privileged to kAtomsToCache`. Headless splitter math is exact (vertical +80 / horizontal -100 px). Likely tied to canvas/Monaco RO firing during drag-stop's queued `updateSize`. Re-test on alpha.12 first — the layout consolidation removed the noisy splitter that was the worst offender. Might be a non-issue now.
+
+3. **v0.0.3 backlog (NOT for this debug session unless user asks)**: Theme panel for BS5 design tokens; drag-from-asset-tile onto canvas; full `<head>` round-trip on import; drag-to-resize columns.
 
 ## Your task: continue the debug
 
 The user is testing on nola1 and may report more bugs. Your job:
 
-1. **Baseline first.** `xvfb-run -a npx playwright test` should report 51/51 green. If specs fail, that's your starting bug (and likely a real regression, not a flake — the suite has been clean across all 5 patch ships today).
-   - **Tmpfs gotcha**: each spec mkdtemps a project + copies ~50MB of frameworks. Cumulative across 51 specs can fill `/tmp` (3.9GB tmpfs on the sandbox) mid-run, surfacing as "32 passed" + "No space left on device". Run `find /tmp -maxdepth 1 -type d -name "gstrap-*" -mmin +5 -exec rm -rf {} +` before the suite if needed.
+1. **Baseline first.** `xvfb-run -a npx playwright test` should report 53/53 green. If specs fail, that's your starting bug (and likely a real regression — the suite has been clean across all four patch ships in the last session).
+   - **Tmpfs gotcha**: each spec mkdtemps a project + copies ~50MB of frameworks. Cumulative across 53 specs can fill `/tmp` (3.9GB on the sandbox) mid-run, surfacing as "32 passed" + "No space left on device". Run `find /tmp -maxdepth 1 -type d -name "gstrap-*" -mmin +5 -exec rm -rf {} +` before the suite if needed.
 
-2. **Listen carefully.** User reports are short and high-context. Ask before acting on ambiguity. Reproduce the issue mentally before patching. Look at the code to find the root cause, don't just paper over the symptom.
+2. **Listen carefully.** User reports are short and high-context. Take them at face value the first time — don't ask the same question rephrased. Reproduce the issue mentally before patching. Look at the code to find the root cause; don't just paper over the symptom.
 
-3. **Spec every fix.** New regression spec for any non-trivial bug. The 51-spec baseline should grow with each patch, not stay flat.
+3. **Spec every fix.** New regression spec for any non-trivial bug. The 53-spec baseline should grow with each patch, not stay flat.
 
-4. **Stay within v0.0.2-alpha.x scope.** Bug fixes only. v0.0.3 features (Theme panel, GL `item.hide()` integration, drag-from-asset-tile, full `<head>` round-trip on import, drag-resize columns) are NOT for this session unless the user explicitly redirects.
+4. **Stay within v0.0.2-alpha.x scope.** Bug fixes + the open follow-ups above. v0.0.3 features are NOT for this session unless the user explicitly redirects.
 
 ## Constraints
 
-- 51 specs MUST stay green. Bump the count, don't drop it.
-- Don't break the v0.0.2-alpha.2 layout or the v0.0.2-alpha.6 framework-in-project layout.
+- 53 specs MUST stay green. Bump the count, don't drop it.
+- Don't break the v0.0.2-alpha.6 framework-in-project layout, the v0.0.2-alpha.7 full-HTML page format, or the v0.0.2-alpha.12 right-stack consolidation.
 - Push to nola1 + origin after each meaningful commit (see ship recipe).
 - The user values short responses, no narrating internal deliberation. Status updates only at key moments.
 
@@ -73,7 +88,7 @@ The user is testing on nola1 and may report more bugs. Your job:
 ```bash
 cd /home/numb1/projects/grapestrap
 npm run build 2>&1 | tail -3
-xvfb-run -a npx playwright test 2>&1 | tail -5      # expect 51 (or more) passed
+xvfb-run -a npx playwright test 2>&1 | tail -5      # expect 53 (or more) passed
 # ...edit CHANGELOG.md "Unreleased" → new version section
 # ...bump package.json version
 git add -A && git commit -m "v0.0.2-alpha.X: <message>" -m "..." \
@@ -81,28 +96,26 @@ git add -A && git commit -m "v0.0.2-alpha.X: <message>" -m "..." \
 git tag -a v0.0.2-alpha.X -m "..."
 git push origin main
 git push origin v0.0.2-alpha.X
-# Push to nola1 (no git/rsync there):
-tar c --exclude=node_modules --exclude=test-results --exclude=playwright-report --exclude=.git . \
+# Push to nola1 (no git/rsync there). Clean stale dist bundles first
+# or you'll accumulate ~18 hashed CSS files per build:
+ssh -o StrictHostKeyChecking=no jsmith@192.168.0.192 \
+  'cd /home/jsmith/projects/grapestrap && rm -rf dist test-results playwright-report .git'
+tar c --exclude=node_modules --exclude=test-results --exclude=playwright-report . \
   | ssh jsmith@192.168.0.192 "cd /home/jsmith/projects/grapestrap && tar x"
-ssh jsmith@192.168.0.192 "cd /home/jsmith/projects/grapestrap && grep version package.json"
+ssh jsmith@192.168.0.192 \
+  'cd /home/jsmith/projects/grapestrap && grep version package.json | head -1'
 ```
 
-## Known v0.0.3 backlog (NOT for this debug session)
-
-- Theme panel for BS5 design tokens
-- GL v2 `item.hide()/show()` integration so panel toggles fully relayout
-- Drag-from-asset-tile onto canvas
-- Full `<head>` round-trip on import (importer still hoists `<head>` content into body — alpha.7 fixed save/load round-trip but importer is separate)
-- Drag-to-resize columns
-
-If the user reports something from this list as broken, surface it; don't attempt a build unless they redirect.
+Note: nola1 has no `git` CLI installed. Verify state with `cat .git/refs/heads/main` and `cat .git/refs/tags/v0.0.2-alpha.X` over SSH.
 
 ## Useful greps
 
-- Framework path constants: `src/shared/page-html.js` (FRAMEWORK_LINKS, FRAMEWORK_SCRIPTS), `src/renderer/editor/grapesjs-init.js` (FRAMEWORK_CSS, FRAMEWORK_JS)
-- Asset copy: `src/main/project-manager.js` (`copyFrameworkAssets`)
-- Save/load page wrap: `src/main/project-manager.js` (`saveProject`, `loadProject`, uses `composeFullPageHtml` / `extractPageFromFullHtml`)
-- Code editor sync: `src/renderer/editor/canvas-sync.js` (`syncCanvasToCode`, `rebuildCanvasFromCode`)
-- Canvas iframe head injection: `src/renderer/editor/grapesjs-init.js` (`syncBaseHrefIntoCanvas`, `syncFrameworksIntoCanvas`, `syncGlobalCssIntoCanvas`)
-- Insert-panel drag: `src/renderer/panels/insert/index.js`
-- GL maximize hook: `src/renderer/layout/golden-layout-config.js` (look for `stateChanged`)
+- Layout config + `requestFullRelayout()`: `src/renderer/layout/golden-layout-config.js`
+- Panel hide/show + size redistribute: `src/renderer/layout/panel-visibility.js`
+- Toggle wiring + body classes: `src/renderer/panels/view-toggles.js`
+- CSS hide rules + splitter hairline: `src/renderer/styles/golden-layout-overrides.css`
+- Panel host CSS (the do-not-absolute rule): `src/renderer/styles/panels.css` + `dom-tree.css` + `asset-manager.css` + `library-items.css`
+- Linux menu-bar lock: `src/main/main.js` (`createMainWindow`)
+- Custom CSS panel + globalCSS write: `src/renderer/panels/custom-css/index.js`
+- Properties panel (the source-of-truth-sync work): `src/renderer/panels/properties-side/index.js` + `src/renderer/panels/style-manager/`
+- Monaco RO + relayout: `src/renderer/editor/monaco-init.js`
