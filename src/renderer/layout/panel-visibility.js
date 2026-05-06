@@ -25,7 +25,7 @@
  * still gets its slice. Same gap. We have to zero the `size` ourselves.
  */
 
-import { getLayout } from './golden-layout-config.js'
+import { getLayout, requestFullRelayout } from './golden-layout-config.js'
 
 // Per-target snapshot. Keyed by ContentItem so multiple distinct panels can
 // each track their own restore data without collision.
@@ -118,7 +118,14 @@ function hideItem(target) {
     target.element.classList.add('is-gstrap-hidden')
   }
 
-  getLayout()?.updateSize()
+  // Drive the full relayout chain (GL setSize + every Monaco editor.layout()
+  // + GrapesJS refresh). Just calling layout.updateSize() resizes the GL
+  // boxes but Monaco editors run with automaticLayout: false — they only
+  // resize when our relayoutAllMonaco() pokes them. Without this, hiding
+  // Properties grew the Custom CSS slot but Monaco kept its old pixel
+  // dimensions, so the editor looked frozen ("custom css ... doesnt resize"
+  // — nola1 2026-05-05).
+  requestFullRelayout()
   return true
 }
 
@@ -134,7 +141,14 @@ function showItem(target) {
     target.element.classList.remove('is-gstrap-hidden')
   }
 
-  getLayout()?.updateSize()
+  // Drive the full relayout chain (GL setSize + every Monaco editor.layout()
+  // + GrapesJS refresh). Just calling layout.updateSize() resizes the GL
+  // boxes but Monaco editors run with automaticLayout: false — they only
+  // resize when our relayoutAllMonaco() pokes them. Without this, hiding
+  // Properties grew the Custom CSS slot but Monaco kept its old pixel
+  // dimensions, so the editor looked frozen ("custom css ... doesnt resize"
+  // — nola1 2026-05-05).
+  requestFullRelayout()
   return true
 }
 

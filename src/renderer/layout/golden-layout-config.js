@@ -189,6 +189,15 @@ function relayoutEverything() {
   try { getEditor()?.refresh?.() } catch (_) { /* GrapesJS not initialized yet */ }
 }
 
+// Public hook so other modules (panel-visibility) can drive the same
+// relayout chain without duplicating the Monaco/GrapesJS pokes. The host RO
+// already calls relayoutEverything when the window resizes — this lets a
+// programmatic GL change (hide/show a panel via size redistribution) reach
+// Monaco / GrapesJS the same way.
+export function requestFullRelayout() {
+  relayoutEverything()
+}
+
 export function getLayout() {
   return layout
 }

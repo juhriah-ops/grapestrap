@@ -8,6 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.11] — 2026-05-05 (patch — Custom CSS lag + Linux menu)
+
+Two more user reports from nola1 same evening:
+
+### Fixed
+- **Custom CSS panel didn't reflow after Properties toggled off / window resize.** alpha.10 made `panel-visibility.js` redistribute GL sizes correctly, but Monaco runs with `automaticLayout: false` and only resizes when our `relayoutAllMonaco()` pokes it. The hide/show path called `layout.updateSize()` (which sized the GL boxes) but never the Monaco-poke step, so the Custom CSS editor froze at its old pixel dimensions until something else triggered a full relayout. New `requestFullRelayout()` is exported from `golden-layout-config.js`; `panel-visibility.js` now calls it after `hideItem` / `showItem` so the same chain runs that the host ResizeObserver already runs on window resize.
+- **Main menu bar disappeared after several window resizes** on Linux. Electron + GTK CSD on some Linux DEs can drop the `Menu.setApplicationMenu` strip during rapid resize cycles (the GTK header bar gets re-decorated and the menu strip is silently lost). `createMainWindow` now explicitly `setAutoHideMenuBar(false)` + `setMenuBarVisibility(true)` at create time, and re-asserts visibility on every `resize` / `maximize` / `unmaximize` / `leave-full-screen` event — cheap no-ops when the menu is already there, defensive when the GTK chrome state flips.
+
+### Tests
+53/53 green. The hide/show spec already witnesses the canvas/Custom-CSS sibling growth from alpha.10; the Monaco-relayout fix is on the same code path so it rides on that spec. Menu-bar visibility is hard to spec headlessly (no system menu under xvfb-electron) — manually verified on nola1 by user retest.
+
 ## [v0.0.2-alpha.10] — 2026-05-05 (patch — close the gap on hide)
 
 User report from nola1, with two screenshots: "you can see how a gap is created when you close dom." alpha.9 made the toggle visibly hide the panel content but left a dead column slot behind — Golden Layout still allocated the panel's percentage to its slot because it didn't know the panel was gone. This patch wires the toggle through GL's own size system so siblings actually reclaim the space.

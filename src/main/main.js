@@ -184,6 +184,25 @@ function createMainWindow() {
   // Show only after first paint to avoid flash-of-unstyled-content
   mainWindow.once('ready-to-show', () => mainWindow.show())
 
+  // Lock the menu bar visible. Reported on nola1 2026-05-05: "when window
+  // was resized and adjusted several times the main menu disappeared."
+  // Electron + GTK CSD on Linux can lose the menu bar during rapid resizes
+  // (the GTK header bar gets re-decorated and the menu strip drops). The
+  // settings + the on('resize') re-assert defend against that — cheap
+  // belt-and-suspenders calls, no-op when the menu is already visible.
+  mainWindow.setAutoHideMenuBar(false)
+  mainWindow.setMenuBarVisibility(true)
+  const reassertMenu = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (!mainWindow.isMenuBarVisible()) {
+      mainWindow.setMenuBarVisibility(true)
+    }
+  }
+  mainWindow.on('resize', reassertMenu)
+  mainWindow.on('maximize', reassertMenu)
+  mainWindow.on('unmaximize', reassertMenu)
+  mainWindow.on('leave-full-screen', reassertMenu)
+
   // Load renderer
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
