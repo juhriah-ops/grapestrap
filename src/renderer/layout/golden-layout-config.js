@@ -1,11 +1,16 @@
 /**
  * GrapeStrap — Golden Layout configuration
  *
- * Default arrangement:
+ * Default arrangement (consolidated 2026-05-05 per nola1 user request — "all
+ * of these separate views should all be on the right as tabs in one panel
+ * like the library and assets"):
  *
- *   ┌──────────┬───────────┬─────────────────┬───────────┐
- *   │ FILE MGR │ DOM TREE  │ CANVAS / CODE   │ PROPS     │
- *   └──────────┴───────────┴─────────────────┴───────────┘
+ *   ┌─────────────────┬──────────────────────────┬────────────────────┐
+ *   │ Project │ Lib │ │  CANVAS / CODE / SPLIT   │ DOM │ Props │ CSS  │
+ *   │ Asset           │                          │                    │
+ *   └─────────────────┴──────────────────────────┴────────────────────┘
+ *      LEFT STACK              CENTER                  RIGHT STACK
+ *      (3 tabs)                                        (3 tabs)
  *
  * Each pane registers with Golden Layout under a unique component name. Plugins
  * can register additional panels via `api.registerPanel({ id, ... })` which adds
@@ -40,9 +45,10 @@ const DEFAULT_CONFIG = {
   root: {
     type: 'row',
     content: [
+      // LEFT STACK — Project / Library / Assets
       {
         type: 'stack',
-        width: 16,
+        width: 18,
         content: [
           { type: 'component', componentType: 'file-manager',   title: 'Project',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
@@ -52,30 +58,31 @@ const DEFAULT_CONFIG = {
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       },
-      {
-        type: 'column',
-        width: 16,
-        content: [
-          { type: 'component', componentType: 'dom-tree', title: 'DOM',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
-        ]
-      },
+      // CENTER — Canvas / Code / Split (single component, but a stack so it
+      // gets a header tab strip with title + maximize control like the others)
       {
         type: 'stack',
-        width: 46,
+        width: 56,
         content: [
           { type: 'component', componentType: 'canvas', title: 'Canvas',
             isClosable: false, minWidth: 320, minHeight: 240 }
         ]
       },
+      // RIGHT STACK — DOM / Properties / Custom CSS as tabs (consolidated
+      // per nola1 user 2026-05-05). Properties is the default-active tab
+      // since it's the most common edit surface; DOM is the secondary
+      // outline view; Custom CSS is the project-global stylesheet editor.
       {
-        type: 'column',
-        width: 22,
+        type: 'stack',
+        width: 26,
+        activeItemIndex: 1,
         content: [
+          { type: 'component', componentType: 'dom-tree',    title: 'DOM',
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
           { type: 'component', componentType: 'properties',  title: 'Properties',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H, height: 60 },
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
           { type: 'component', componentType: 'custom-css',  title: 'Custom CSS',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H, height: 40 }
+            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       }
     ]

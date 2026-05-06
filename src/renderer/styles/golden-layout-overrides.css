@@ -45,21 +45,26 @@
   border: 1px solid var(--border) !important;
 }
 
-/* File manager toggle stays on body-class CSS — it's a tab inside a 3-tab
-   stack (Project / Library / Assets). Hiding just the tab + content lets
-   the surrounding stack stay for Library + Assets. No layout gap to fix.
+/* All view toggles for tabs-in-a-stack hide via body class: the matching
+   `.lm_tab` in the strip and the `.lm_content` host both go display:none.
+   The stack stays visible for the remaining tabs.
 
-   DOM Tree, Properties, Custom CSS toggles are NOT body-class anymore —
-   they go through src/renderer/layout/panel-visibility.js which tells
-   Golden Layout directly to zero the panel's size and redistribute the
-   share to siblings, then `layout.updateSize()`. The previous body-class
-   `.lm_item ... { display: none }` pattern hid the content but GL still
-   allocated the panel's percentage to its slot, leaving an empty gap.
-   Reported on nola1 2026-05-05 with two screenshots: "you can see how a
-   gap is created when you close dom." Fixed in v0.0.2-alpha.10. */
+   For DOM / Properties / Custom CSS (right stack), if ALL three end up
+   hidden, panel-visibility.js additionally collapses the whole right
+   stack via size redistribution so the canvas reclaims its 26%. Showing
+   any of the three brings the stack back. */
 
 body.is-hide-file-manager .lm_tab[title="Project"]      { display: none !important; }
 body.is-hide-file-manager .lm_content.gstrap-fm-host    { display: none !important; }
+
+body.is-hide-dom-tree     .lm_tab[title="DOM"]          { display: none !important; }
+body.is-hide-dom-tree     .lm_content.gstrap-dom-host   { display: none !important; }
+
+body.is-hide-properties   .lm_tab[title="Properties"]   { display: none !important; }
+body.is-hide-properties   .lm_content.gstrap-props-host { display: none !important; }
+
+body.is-hide-custom-css   .lm_tab[title="Custom CSS"]   { display: none !important; }
+body.is-hide-custom-css   .lm_content.gstrap-cssp-host  { display: none !important; }
 
 /* Hide the splitter adjacent to a panel hidden via panel-visibility.js so we
    don't leave a 5px hairline in the freed slot. The class `is-gstrap-hidden`

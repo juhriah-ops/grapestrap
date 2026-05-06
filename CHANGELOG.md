@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+Open: Properties↔Custom CSS sync — selecting a background image in Properties doesn't write into the project's globalCSS, but Custom CSS may already have its own background-image rule for the same selector; precedence is opaque to the user. Tracked for the next batch.
+
+## [v0.0.2-alpha.12] — 2026-05-05 (patch — right-side panels consolidated)
+
+User: "the properties toolbar and the custom css dont actually update each other at points. the right side feels cumbersome. i think that all of these separate views should all be on the right as tabs in one panel like the library and assets... specifically dom, properties and custom css."
+
+### Changed (layout)
+- **DOM Tree, Properties, and Custom CSS are now three tabs in a single right-side stack** (Properties active by default). Same pattern as Project / Library / Assets on the left. The dedicated DOM Tree column is gone; the right column collapses from a `column { Properties, Custom CSS }` into one `stack { DOM, Properties, Custom CSS }`. Default widths: Project 18% / Canvas 56% / Right tabs 26%.
+- **View → Toggle X** for each of DOM / Properties / Custom CSS now hides just that tab + its content (body class, same mechanism as File Manager). The other tabs in the stack stay visible. If ALL THREE end up hidden, the entire right stack is collapsed via the alpha.10 size-redistribute trick so the canvas reclaims its 26%; toggling any of the three back on restores the stack and makes the freshly-shown tab the active one.
+
+### Tests
+53/53 green. Renamed/rebuilt `View toggles hide GL panels AND close the gap` into `Right-stack tabs: individual hide leaves stack, all-hidden collapses stack` — asserts (a) hiding one tab does NOT grow the canvas (stack stays for siblings), (b) hiding all three DOES grow the canvas (stack collapses), (c) showing any one of them restores the stack and the canvas shrinks back. The older `View toggles: menu/keybind events…` spec was updated to check the Properties content's display style (now body-class-driven again). The `Panel layout` positioning spec now activates each tab before measuring (inactive tabs in a stack are display:none and have no rect).
+
+### Known follow-ups
+- Properties panel writes background-image / position / attachment but those edits don't appear in the Custom CSS editor and vice versa — the two views can show conflicting state for the same selector with no precedence indicator. Need a single source of truth for project-global rules: either Properties writes into `globalCSS` (and Custom CSS reflects it live), or the two scopes are clearly separated in the UI. Tracked for the next batch.
+
 ## [v0.0.2-alpha.11] — 2026-05-05 (patch — Custom CSS lag + Linux menu)
 
 Two more user reports from nola1 same evening:

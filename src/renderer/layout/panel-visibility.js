@@ -1,35 +1,46 @@
 /**
- * GrapeStrap — GL panel visibility (real hide/show with layout redistribution)
+ * GrapeStrap — GL panel visibility (tab hide + auto-collapse stack)
  *
- * v0.0.2-alpha.9 hid panels via a body class + CSS `display: none` on the
- * matching `.lm_item.lm_stack`. That hid the panel content but Golden Layout
- * still allocated the panel's percentage to its slot, so the surrounding
- * panes never grew to fill the gap. Reported on nola1 2026-05-05 with two
- * screenshots: "you can see how a gap is created when you close dom."
+ * After the 2026-05-05 right-side consolidation (DOM / Properties / Custom CSS
+ * are now three tabs in a single right-side stack — same pattern as Project /
+ * Library / Assets on the left), per-panel visibility is just hiding a tab in
+ * its stack. Two pieces:
  *
- * This module replaces that mechanism with one that drives GL directly:
- *   - find the ContentItem for the panel
- *   - capture its parent's children sizes (snapshot for restore)
- *   - set the target's `size` to 0 and redistribute its share proportionally
- *     to its visible siblings
- *   - hide the element AND call `layout.updateSize()` so GL recomputes pixel
- *     widths/heights from the new percentage values
+ *   1. Each panel's "hide" state is a body class. CSS rules in
+ *      golden-layout-overrides.css turn off both the .lm_tab in the strip and
+ *      the .lm_content host for that panel's componentType. The stack stays
+ *      visible for the remaining tabs; no layout gap.
  *
- * Restore is the symmetric op: reapply the snapshot, show the element, update.
+ *   2. If ALL three right-side tabs are hidden, the entire right stack would
+ *      otherwise sit there as an empty 26%-wide column with just a tab strip
+ *      and nothing inside. So we additionally collapse the stack itself via
+ *      the size-redistribute trick from alpha.10: zero its `size`, boost
+ *      visible siblings (the canvas), then `requestFullRelayout()`. Restoring
+ *      any of the three panels reverses the stack collapse.
  *
- * Why not GL's own `item.hide()` (it exists)? It just toggles `display:none`
- * inside `beginSizeInvalidation`/`endSizeInvalidation`. The end-invalidation
- * runs `updateSizeFromContainer` → `setSize` on the root, but `setSize`'s
- * `calculateAbsoluteSizes` iterates ALL `contentItems` regardless of visibility
- * and assigns each its `size` percent of the available pixels. A hidden item
- * still gets its slice. Same gap. We have to zero the `size` ourselves.
+ * Caller surface (used by view-toggles.js):
+ *   - hideRightTab(componentType)        — hide one tab; auto-collapse stack if needed
+ *   - showRightTab(componentType)        — show one tab; auto-restore stack if needed
+ *   - applyInitialRightTabVisibility(map) — apply persisted prefs at boot
+ *
+ * Why not GL's own item.hide()? It only flips display:none inside
+ * beginSizeInvalidation / endSizeInvalidation; setSize→calculateAbsoluteSizes
+ * iterates ALL contentItems regardless of visibility and assigns each its
+ * size-percent share, so the slot stays. We have to zero the size ourselves.
  */
 
 import { getLayout, requestFullRelayout } from './golden-layout-config.js'
 
-// Per-target snapshot. Keyed by ContentItem so multiple distinct panels can
-// each track their own restore data without collision.
-const snapshots = new WeakMap()
+const RIGHT_TAB_CLASSES = {
+  'dom-tree':   { bodyClass: 'is-hide-dom-tree' },
+  'properties': { bodyClass: 'is-hide-properties' },
+  'custom-css': { bodyClass: 'is-hide-custom-css' }
+}
+
+// Snapshot of sibling sizes when the right stack itself is collapsed. WeakMap
+// keyed by ContentItem so the snapshot is collected if the layout is ever
+// rebuilt.
+const stackSnapshots = new WeakMap()
 
 function findComponentByType(item, type) {
   if (!item) return null
@@ -41,70 +52,52 @@ function findComponentByType(item, type) {
   return null
 }
 
-/**
- * Resolve a panel key to the ContentItem we actually want to hide.
- *
- * - 'dom-tree'   → the lm_column wrapping it (hide whole column so the row
- *                  redistributes width)
- * - 'properties' → the lm_stack containing it (hide just one stack so the
- *                  shared right column redistributes height between Props
- *                  and Custom CSS)
- * - 'custom-css' → ditto
- *
- * File manager is a tab inside a 3-tab stack; hiding it is handled by a CSS
- * body-class (the stack itself stays for Library + Assets), so it doesn't
- * route through here.
- */
-function resolveTarget(panelKey) {
+function findRightStack() {
   const layout = getLayout()
   if (!layout || !layout.isInitialised) return null
   const root = layout.rootItem
   if (!root) return null
+  const dom = findComponentByType(root, 'dom-tree')
+  // The stack containing DOM (and Properties + Custom CSS) is dom.parent.
+  return dom?.parent || null
+}
 
-  const comp = findComponentByType(root, panelKey)
-  if (!comp) return null
+function findTabComponent(panelKey) {
+  const layout = getLayout()
+  if (!layout || !layout.isInitialised) return null
+  return findComponentByType(layout.rootItem, panelKey)
+}
 
-  if (panelKey === 'dom-tree') {
-    // component → stack → column. Hide the column.
-    return comp.parent?.parent || null
+function activateAnyVisibleTab(stack) {
+  if (!stack) return
+  const visibleTab = (stack.contentItems || []).find(item => {
+    const cls = RIGHT_TAB_CLASSES[item.componentType]?.bodyClass
+    return !cls || !document.body.classList.contains(cls)
+  })
+  if (visibleTab && typeof stack.setActiveContentItem === 'function') {
+    try { stack.setActiveContentItem(visibleTab) } catch (_) { /* mid-transition */ }
   }
-  // properties / custom-css: hide the wrapping stack.
-  return comp.parent || null
 }
 
-export function hidePanel(panelKey) {
-  const target = resolveTarget(panelKey)
-  if (!target) return false
-  return hideItem(target)
+function allRightTabsHidden() {
+  for (const def of Object.values(RIGHT_TAB_CLASSES)) {
+    if (!document.body.classList.contains(def.bodyClass)) return false
+  }
+  return true
 }
 
-export function showPanel(panelKey) {
-  const target = resolveTarget(panelKey)
-  if (!target) return false
-  return showItem(target)
-}
-
-export function isPanelHidden(panelKey) {
-  const target = resolveTarget(panelKey)
-  if (!target) return false
-  return snapshots.has(target)
-}
-
-function hideItem(target) {
-  if (snapshots.has(target)) return false  // already hidden
+function hideStackItem(target) {
+  if (!target || stackSnapshots.has(target)) return false
   const parent = target.parent
   if (!parent || !Array.isArray(parent.contentItems)) return false
 
-  // Snapshot every sibling's current size for exact restore.
   const sizes = parent.contentItems.map(c => ({ item: c, size: c.size }))
-  snapshots.set(target, sizes)
+  stackSnapshots.set(target, sizes)
 
   const targetShare = target.size
   const others = parent.contentItems.filter(c => c !== target && c.size > 0)
   const totalOthers = others.reduce((s, c) => s + c.size, 0)
   if (totalOthers > 0 && targetShare > 0) {
-    // Distribute the freed share proportionally so existing relative
-    // proportions among siblings are preserved.
     for (const c of others) {
       c.size = c.size + (c.size / totalOthers) * targetShare
     }
@@ -112,57 +105,86 @@ function hideItem(target) {
   target.size = 0
   if (target.element) {
     target.element.style.display = 'none'
-    // Mark the element so a CSS rule can hide its adjacent splitter (the
-    // splitter between this item and the next one would otherwise stay as
-    // a visible 5px hairline next to nothing).
     target.element.classList.add('is-gstrap-hidden')
   }
-
-  // Drive the full relayout chain (GL setSize + every Monaco editor.layout()
-  // + GrapesJS refresh). Just calling layout.updateSize() resizes the GL
-  // boxes but Monaco editors run with automaticLayout: false — they only
-  // resize when our relayoutAllMonaco() pokes them. Without this, hiding
-  // Properties grew the Custom CSS slot but Monaco kept its old pixel
-  // dimensions, so the editor looked frozen ("custom css ... doesnt resize"
-  // — nola1 2026-05-05).
   requestFullRelayout()
   return true
 }
 
-function showItem(target) {
-  const sizes = snapshots.get(target)
+function showStackItem(target) {
+  const sizes = stackSnapshots.get(target)
   if (!sizes) return false
   for (const { item, size } of sizes) {
     item.size = size
   }
-  snapshots.delete(target)
+  stackSnapshots.delete(target)
   if (target.element) {
     target.element.style.display = ''
     target.element.classList.remove('is-gstrap-hidden')
   }
-
-  // Drive the full relayout chain (GL setSize + every Monaco editor.layout()
-  // + GrapesJS refresh). Just calling layout.updateSize() resizes the GL
-  // boxes but Monaco editors run with automaticLayout: false — they only
-  // resize when our relayoutAllMonaco() pokes them. Without this, hiding
-  // Properties grew the Custom CSS slot but Monaco kept its old pixel
-  // dimensions, so the editor looked frozen ("custom css ... doesnt resize"
-  // — nola1 2026-05-05).
   requestFullRelayout()
   return true
 }
 
+export function hideRightTab(componentType) {
+  const def = RIGHT_TAB_CLASSES[componentType]
+  if (!def) return false
+  document.body.classList.add(def.bodyClass)
+
+  // If we just hid the active tab, switch to a still-visible one.
+  const stack = findRightStack()
+  activateAnyVisibleTab(stack)
+
+  // If everyone is hidden, collapse the whole stack so the canvas can grow.
+  if (allRightTabsHidden() && stack && !stackSnapshots.has(stack)) {
+    hideStackItem(stack)
+  }
+  return true
+}
+
+export function showRightTab(componentType) {
+  const def = RIGHT_TAB_CLASSES[componentType]
+  if (!def) return false
+  document.body.classList.remove(def.bodyClass)
+
+  // If the stack was collapsed and we now have at least one visible tab,
+  // restore the stack first so the tab has a place to render.
+  const stack = findRightStack()
+  if (stack && stackSnapshots.has(stack)) {
+    showStackItem(stack)
+  }
+
+  // Make the freshly-shown tab the active one so the user sees their click.
+  const comp = findTabComponent(componentType)
+  if (comp && stack && typeof stack.setActiveContentItem === 'function') {
+    try { stack.setActiveContentItem(comp) } catch (_) { /* mid-transition */ }
+  }
+  return true
+}
+
+export function isRightTabHidden(componentType) {
+  const def = RIGHT_TAB_CLASSES[componentType]
+  if (!def) return false
+  return document.body.classList.contains(def.bodyClass)
+}
+
 /**
  * Apply boot-time visibility (from prefs) once the layout is initialised.
- * Call from wireViewToggles after the layout exists. Returns the count of
- * panels that needed to be hidden.
+ * Called from wireViewToggles.
  */
-export function applyInitialVisibility(prefVisibility) {
-  let count = 0
-  for (const [panelKey, visible] of Object.entries(prefVisibility)) {
-    if (visible === false) {
-      if (hidePanel(panelKey)) count++
-    }
+export function applyInitialRightTabVisibility(map) {
+  // First, set body classes for any tabs that should start hidden. Don't
+  // collapse the stack yet — we want a single relayout at the end, not one
+  // per tab.
+  for (const [panelKey, def] of Object.entries(RIGHT_TAB_CLASSES)) {
+    const visible = map[panelKey]
+    document.body.classList.toggle(def.bodyClass, visible === false)
   }
-  return count
+  // Switch active tab away from any hidden one.
+  const stack = findRightStack()
+  activateAnyVisibleTab(stack)
+  // Collapse the whole stack only if every tab ended up hidden.
+  if (allRightTabsHidden() && stack && !stackSnapshots.has(stack)) {
+    hideStackItem(stack)
+  }
 }
