@@ -2317,18 +2317,23 @@ test('View toggles: menu/keybind events hide & show the right region', async () 
   const { app, appWindow } = await launch()  // launch() isolates prefs per run
   await openSeedProject(appWindow, projectPath)
 
+  // Properties hide/show now goes through panel-visibility.js (alpha.10) —
+  // the body-class is gone, so we check the GL stack's display directly.
   const initial = await appWindow.evaluate(() => ({
     insert: document.getElementById('gstrap-insert').hidden,
     strip:  document.getElementById('gstrap-strip').hidden,
     status: document.getElementById('gstrap-status').hidden,
     fmHide:    document.body.classList.contains('is-hide-file-manager'),
-    propsHide: document.body.classList.contains('is-hide-properties')
+    propsHidden: (() => {
+      const stack = document.querySelector('.lm_item.lm_stack:has(.gstrap-props-host)')
+      return stack ? getComputedStyle(stack).display === 'none' : null
+    })()
   }))
   expect(initial.insert).toBe(false)
   expect(initial.strip).toBe(false)
   expect(initial.status).toBe(false)
   expect(initial.fmHide).toBe(false)
-  expect(initial.propsHide).toBe(false)
+  expect(initial.propsHidden).toBe(false)
 
   // Fire all five toggles.
   await appWindow.evaluate(() => {
@@ -2339,19 +2344,23 @@ test('View toggles: menu/keybind events hide & show the right region', async () 
     eb.emit('view:toggle-file-manager')
     eb.emit('view:toggle-properties')
   })
+  await appWindow.waitForTimeout(150)
 
   const afterToggle = await appWindow.evaluate(() => ({
     insert: document.getElementById('gstrap-insert').hidden,
     strip:  document.getElementById('gstrap-strip').hidden,
     status: document.getElementById('gstrap-status').hidden,
     fmHide:    document.body.classList.contains('is-hide-file-manager'),
-    propsHide: document.body.classList.contains('is-hide-properties')
+    propsHidden: (() => {
+      const stack = document.querySelector('.lm_item.lm_stack:has(.gstrap-props-host)')
+      return stack ? getComputedStyle(stack).display === 'none' : null
+    })()
   }))
   expect(afterToggle.insert).toBe(true)
   expect(afterToggle.strip).toBe(true)
   expect(afterToggle.status).toBe(true)
   expect(afterToggle.fmHide).toBe(true)
-  expect(afterToggle.propsHide).toBe(true)
+  expect(afterToggle.propsHidden).toBe(true)
 
   // Toggle insert back on, verify only it flipped.
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-insert'))
@@ -3605,59 +3614,120 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
-test('View toggles actually hide GL panels (not just flip a body class)', async () => {
-  // Reported on nola1 2026-05-05: "the dom panel i cant remove the
-  // link/toggle in the top menu doesnt work." The toggle event was wired and
-  // the body class was set, but the CSS hide rule used a selector that
-  // matched nothing — `.lm_item:has(> .lm_items > .lm_item_container > ...)`.
-  // GL v2's actual structure under .lm_items is `> div > .lm_content` with
-  // no .lm_item_container class, so the rule failed silently. Existing
-  // 'View toggles' spec only checked the body class flipped; this spec
-  // checks the panel actually disappears.
+test('View toggles hide GL panels AND close the gap (siblings reclaim space)', async () => {
+  // Two related bugs fixed across alpha.9 → alpha.10.
+  //
+  // alpha.9 fixed silent failure: nola1 2026-05-05 "the dom panel i cant
+  // remove the link/toggle in the top menu doesnt work." The toggle event
+  // was wired and the body class flipped, but the CSS hide selector was
+  // `:has(> .lm_items > .lm_item_container > ...)` and GL v2's actual
+  // structure has `> div > .lm_content` (no .lm_item_container).
+  //
+  // alpha.10 fixed gap-on-hide: nola1 2026-05-05 "you can see how a gap is
+  // created when you close dom" (with screenshots). The body-class hide
+  // collapsed visibility but GL still allocated the panel's percentage to
+  // its slot. New panel-visibility.js drives GL directly: zeroes target
+  // `size`, redistributes the share to siblings, then `layout.updateSize()`.
+  // This spec asserts both: panel hidden AND siblings actually grew.
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-vthide-'))
   const projectPath = join(projectDir, 'vthide.gstrap')
 
   const { app, appWindow } = await launch()
   await openSeedProject(appWindow, projectPath)
 
+  // Force-show all three so the test starts from a known state regardless
+  // of what prior specs persisted to the prefs file.
   await appWindow.evaluate(() => {
-    document.body.classList.remove('is-hide-dom-tree','is-hide-properties','is-hide-custom-css')
+    const hidden = window.__gstrap?.eventBus
+    if (!hidden) return
+    // Toggle each panel off then on to make sure they're visible (idempotent).
+    for (const ev of ['view:toggle-dom-tree','view:toggle-properties','view:toggle-custom-css']) {
+      // No isPanelHidden in the bus; rely on the show side: emit twice means
+      // we're back to the same state. Cheaper: directly use the API.
+    }
   })
   await appWindow.waitForTimeout(100)
 
-  async function visible(host) {
-    return appWindow.evaluate((hostClass) => {
-      const stack = document.querySelector(`.lm_item.lm_stack:has(.${hostClass})`)
+  async function panelVisible(hostClass) {
+    return appWindow.evaluate((cls) => {
+      const stack = document.querySelector(`.lm_item.lm_stack:has(.${cls})`)
       if (!stack) return false
-      return getComputedStyle(stack).display !== 'none'
-    }, host)
+      // Walk ancestors — DOM tree's stack is display:block but its parent
+      // .lm_column is display:none when DOM is hidden via panel-visibility.
+      // offsetParent is null when any ancestor is display:none, but not
+      // when the element itself is display:none (false negative). Check
+      // bounding rect width as the witness — rendered = >0 wide.
+      const r = stack.getBoundingClientRect()
+      return r.width > 0 && r.height > 0
+    }, hostClass)
   }
 
-  // All three start visible
-  expect(await visible('gstrap-dom-host')).toBe(true)
-  expect(await visible('gstrap-props-host')).toBe(true)
-  expect(await visible('gstrap-cssp-host')).toBe(true)
+  // Ensure each is visible to start (toggle each ON if currently hidden).
+  for (const event of ['view:toggle-dom-tree','view:toggle-properties','view:toggle-custom-css']) {
+    const cls = { 'view:toggle-dom-tree': 'gstrap-dom-host', 'view:toggle-properties': 'gstrap-props-host', 'view:toggle-custom-css': 'gstrap-cssp-host' }[event]
+    if (!(await panelVisible(cls))) {
+      await appWindow.evaluate(ev => window.__gstrap.eventBus.emit(ev), event)
+      await appWindow.waitForTimeout(100)
+    }
+  }
 
-  // Toggle DOM tree off — must visually disappear AND its column collapse
-  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-dom-tree'))
-  await appWindow.waitForTimeout(150)
-  expect(await visible('gstrap-dom-host')).toBe(false)
-  const domColHidden = await appWindow.evaluate(() => {
-    const col = document.querySelector('.lm_item.lm_column:has(.gstrap-dom-host)')
-    return col ? getComputedStyle(col).display === 'none' : false
+  // Capture canvas pane width with all panels visible — it's our witness
+  // for "the row redistributes."
+  const canvasBefore = await appWindow.evaluate(() => {
+    const canvas = document.querySelector('.lm_item.lm_stack:has(.gstrap-canvas-host)')
+    return canvas ? Math.round(canvas.getBoundingClientRect().width) : 0
   })
-  expect(domColHidden).toBe(true)
+  expect(canvasBefore).toBeGreaterThan(0)
 
-  // Toggle Properties off — Properties stack hides, Custom CSS stack stays
-  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-properties'))
-  await appWindow.waitForTimeout(150)
-  expect(await visible('gstrap-props-host')).toBe(false)
-  expect(await visible('gstrap-cssp-host')).toBe(true)
-
-  // Toggle DOM tree back on — visible again
+  // Toggle DOM tree OFF — column hides AND canvas grows
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-dom-tree'))
-  await appWindow.waitForTimeout(150)
-  expect(await visible('gstrap-dom-host')).toBe(true)
+  await appWindow.waitForTimeout(200)
+  expect(await panelVisible('gstrap-dom-host')).toBe(false)
+  const canvasAfterDomHide = await appWindow.evaluate(() => {
+    const canvas = document.querySelector('.lm_item.lm_stack:has(.gstrap-canvas-host)')
+    return canvas ? Math.round(canvas.getBoundingClientRect().width) : 0
+  })
+  // Canvas should have reclaimed at least 50px of the freed DOM column slot.
+  // Pre-fix the gap was preserved and canvas didn't grow at all.
+  expect(canvasAfterDomHide - canvasBefore, `canvas should grow when DOM hides (was ${canvasBefore}, now ${canvasAfterDomHide})`).toBeGreaterThan(50)
+
+  // Toggle Properties OFF — Properties hides, Custom CSS grows in the same column
+  const csspBefore = await appWindow.evaluate(() => {
+    const stack = document.querySelector('.lm_item.lm_stack:has(.gstrap-cssp-host)')
+    return stack ? Math.round(stack.getBoundingClientRect().height) : 0
+  })
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-properties'))
+  await appWindow.waitForTimeout(200)
+  expect(await panelVisible('gstrap-props-host')).toBe(false)
+  expect(await panelVisible('gstrap-cssp-host')).toBe(true)
+  const csspAfter = await appWindow.evaluate(() => {
+    const stack = document.querySelector('.lm_item.lm_stack:has(.gstrap-cssp-host)')
+    return stack ? Math.round(stack.getBoundingClientRect().height) : 0
+  })
+  expect(csspAfter - csspBefore, `Custom CSS stack should grow when Properties hides (was ${csspBefore}, now ${csspAfter})`).toBeGreaterThan(100)
+
+  // Toggle DOM tree back ON — canvas shrinks back close to original width
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-dom-tree'))
+  await appWindow.waitForTimeout(200)
+  expect(await panelVisible('gstrap-dom-host')).toBe(true)
+  const canvasAfterDomShow = await appWindow.evaluate(() => {
+    const canvas = document.querySelector('.lm_item.lm_stack:has(.gstrap-canvas-host)')
+    return canvas ? Math.round(canvas.getBoundingClientRect().width) : 0
+  })
+  // Should be within ~5px of the original (rounding + splitter math).
+  expect(Math.abs(canvasAfterDomShow - canvasBefore), `canvas width should restore on DOM show (orig ${canvasBefore}, now ${canvasAfterDomShow})`).toBeLessThan(10)
+
+  // Adjacent splitter to the hidden DOM column should also be hidden.
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-dom-tree'))
+  await appWindow.waitForTimeout(200)
+  const orphanSplitterVisible = await appWindow.evaluate(() => {
+    const col = document.querySelector('.lm_item.is-gstrap-hidden')
+    if (!col) return null
+    const sib = col.nextElementSibling
+    if (!sib || !sib.classList.contains('lm_splitter')) return null
+    return getComputedStyle(sib).display !== 'none'
+  })
+  expect(orphanSplitterVisible).toBe(false)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })

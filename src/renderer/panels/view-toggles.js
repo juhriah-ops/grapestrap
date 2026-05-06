@@ -2,7 +2,7 @@
  * GrapeStrap — View toggle wiring
  *
  * Centralises the `view:toggle-*` event handlers that the menu router emits
- * (Ctrl+B file manager, Ctrl+J properties, etc.). Two flavours of region:
+ * (Ctrl+B file manager, Ctrl+J properties, etc.). Three flavours of region:
  *
  *   - **Fixed shell strips** (insert / inspector strip / status / linked
  *     files / breakpoints / tabs) — toggle the `hidden` attribute on the
@@ -10,13 +10,19 @@
  *     `auto` row when the element has `display: none` (per shell.css), so
  *     the layout closes cleanly.
  *
- *   - **GL-managed panels** (file manager / dom tree / properties /
- *     custom CSS / library / asset manager) — toggle a body class that a
- *     CSS rule uses to `display: none` the matching `.lm_content` host.
- *     Golden Layout doesn't re-layout the rest of its tree on a CSS hide,
- *     so the splitter slot stays visible (a small blank gap). True
- *     "remove from layout" via GL v2's API is fiddly enough that we defer
- *     it to v0.0.3 — the body-class hide is the v0.0.2 ship.
+ *   - **Stack tabs** (file manager) — body-class CSS hides just the matching
+ *     tab + content inside its multi-tab stack. The stack itself stays for
+ *     the remaining tabs (Library + Assets), so no gap. Body-class is the
+ *     simplest correct mechanism here.
+ *
+ *   - **Whole columns / single-tab stacks** (DOM Tree, Properties, Custom
+ *     CSS) — driven through `panel-visibility.js` which calls Golden Layout
+ *     directly: zeroes the target's `size`, redistributes the freed share to
+ *     visible siblings, hides the element, then `layout.updateSize()` to
+ *     recompute pixels. Restores symmetrically on show. This is what
+ *     replaced the v0.0.2-alpha.9 body-class hide that left a dead slot
+ *     behind ("you can see how a gap is created when you close dom" — nola1
+ *     2026-05-05).
  *
  * Persistence: every toggle writes the visible-set into prefs.view (matches
  * the schema in src/main/prefs.js), so panel visibility survives a relaunch.
@@ -24,6 +30,7 @@
 
 import { eventBus } from '../state/event-bus.js'
 import { log } from '../log.js'
+import { hidePanel, showPanel, isPanelHidden, applyInitialVisibility } from '../layout/panel-visibility.js'
 
 // Fixed shell strips. Element id → toggle event suffix. Linked Files and
 // Breakpoints panels do their own visibility (they hide based on tab kind /
@@ -36,28 +43,52 @@ const FIXED_REGIONS = {
   'view:toggle-status':  { id: 'gstrap-status', prefKey: 'statusBarVisible',     defaultVisible: true }
 }
 
-// GL-managed panels. Each maps to a `body` class; CSS in shell.css hides
-// the matching .lm_content host when the class is set.
-const GL_PANELS = {
-  'view:toggle-file-manager': { bodyClass: 'is-hide-file-manager', prefKey: 'fileManagerVisible',     defaultVisible: true  },
-  'view:toggle-properties':   { bodyClass: 'is-hide-properties',   prefKey: 'propertiesPanelVisible', defaultVisible: true  },
-  'view:toggle-dom-tree':     { bodyClass: 'is-hide-dom-tree',     prefKey: 'domTreeVisible',         defaultVisible: false },
-  'view:toggle-custom-css':   { bodyClass: 'is-hide-custom-css',   prefKey: 'customCssVisible',       defaultVisible: true  }
+// Tab-in-stack panels: hide the .lm_content + .lm_tab via body class. The
+// surrounding stack stays for the other tabs.
+const STACK_TAB_PANELS = {
+  'view:toggle-file-manager': { bodyClass: 'is-hide-file-manager', prefKey: 'fileManagerVisible', defaultVisible: true }
+}
+
+// Whole-column / single-tab stacks: hide via real GL layout redistribution.
+// `panelKey` matches the GL componentType so panel-visibility.js can find
+// the ContentItem.
+const GL_LAYOUT_PANELS = {
+  'view:toggle-dom-tree':    { panelKey: 'dom-tree',   prefKey: 'domTreeVisible',         defaultVisible: false },
+  'view:toggle-properties':  { panelKey: 'properties', prefKey: 'propertiesPanelVisible', defaultVisible: true  },
+  'view:toggle-custom-css':  { panelKey: 'custom-css', prefKey: 'customCssVisible',       defaultVisible: true  }
 }
 
 export async function wireViewToggles() {
   const stored = (await window.grapestrap?.prefs?.get?.('view')) || {}
 
-  // Apply persisted visibility to each region on boot.
+  // Fixed strips: apply persisted visibility immediately, wire the toggle.
   for (const [event, def] of Object.entries(FIXED_REGIONS)) {
     const visible = stored[def.prefKey] ?? def.defaultVisible
     setFixedVisible(def.id, visible)
     eventBus.on(event, () => toggleFixed(def))
   }
-  for (const [event, def] of Object.entries(GL_PANELS)) {
+
+  // Stack-tab panels (file manager): same body-class pattern as before.
+  for (const [event, def] of Object.entries(STACK_TAB_PANELS)) {
     const visible = stored[def.prefKey] ?? def.defaultVisible
-    setGlPanelVisible(def.bodyClass, visible)
-    eventBus.on(event, () => toggleGlPanel(def))
+    document.body.classList.toggle(def.bodyClass, !visible)
+    eventBus.on(event, () => {
+      document.body.classList.toggle(def.bodyClass)
+      const nowVisible = !document.body.classList.contains(def.bodyClass)
+      persist(def.prefKey, nowVisible)
+    })
+  }
+
+  // GL layout panels: apply initial state once layout is ready, then wire
+  // the toggles to call hidePanel/showPanel directly.
+  const initialVisibility = {}
+  for (const def of Object.values(GL_LAYOUT_PANELS)) {
+    initialVisibility[def.panelKey] = stored[def.prefKey] ?? def.defaultVisible
+  }
+  applyInitialVisibility(initialVisibility)
+
+  for (const [event, def] of Object.entries(GL_LAYOUT_PANELS)) {
+    eventBus.on(event, () => toggleGlLayoutPanel(def))
   }
 }
 
@@ -74,14 +105,14 @@ function toggleFixed(def) {
   persist(def.prefKey, !el.hidden)
 }
 
-function setGlPanelVisible(bodyClass, visible) {
-  document.body.classList.toggle(bodyClass, !visible)
-}
-
-function toggleGlPanel(def) {
-  document.body.classList.toggle(def.bodyClass)
-  const visible = !document.body.classList.contains(def.bodyClass)
-  persist(def.prefKey, visible)
+function toggleGlLayoutPanel(def) {
+  const wasHidden = isPanelHidden(def.panelKey)
+  const ok = wasHidden ? showPanel(def.panelKey) : hidePanel(def.panelKey)
+  if (!ok) {
+    log.warn(`view-toggle: GL panel "${def.panelKey}" not found in current layout — skipping`)
+    return
+  }
+  persist(def.prefKey, wasHidden)  // now visible if it was hidden
 }
 
 // Serialize persists. Each toggle reads-modifies-writes the whole 'view'

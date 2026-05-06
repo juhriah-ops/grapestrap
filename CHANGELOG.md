@@ -8,6 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch).
 
+## [v0.0.2-alpha.10] — 2026-05-05 (patch — close the gap on hide)
+
+User report from nola1, with two screenshots: "you can see how a gap is created when you close dom." alpha.9 made the toggle visibly hide the panel content but left a dead column slot behind — Golden Layout still allocated the panel's percentage to its slot because it didn't know the panel was gone. This patch wires the toggle through GL's own size system so siblings actually reclaim the space.
+
+### Fixed
+- **Hiding DOM Tree / Properties / Custom CSS now closes the gap.** New `src/renderer/layout/panel-visibility.js` resolves the panel to its GL ContentItem (DOM Tree → its column; Properties / Custom CSS → their wrapping single-tab stack), snapshots the parent's children sizes, sets the target's `size` to 0, redistributes the freed share proportionally to visible siblings, then calls `layout.updateSize()`. Showing restores from the snapshot. The orphaned splitter adjacent to a hidden panel is also hidden via a small CSS rule (`.is-gstrap-hidden + .lm_splitter, .lm_splitter:has(+ .is-gstrap-hidden) { display: none }`).
+- **`item.hide()` from GL itself didn't work for our case.** It toggles `display:none` inside `beginSizeInvalidation` / `endSizeInvalidation`, but `setSize`'s `calculateAbsoluteSizes` iterates ALL `contentItems` regardless of visibility and assigns each its `size`-percent share. Same gap. We have to zero the `size` ourselves — that's what the new module does.
+
+### Changed
+- **Removed the alpha.9 body-class hide rules for DOM Tree / Properties / Custom CSS** — they're handled by `panel-visibility.js` now. File Manager stays on body-class hide because it's a tab inside a 3-tab stack (Project / Library / Assets) and the surrounding stack should remain for the other two tabs. No gap to fix there.
+
+### Tests
+53/53 green. The alpha.9 `View toggles actually hide GL panels` spec was strengthened into `View toggles hide GL panels AND close the gap (siblings reclaim space)` — it now witnesses the canvas pane growing when DOM hides (>50px reclaimed) and Custom CSS growing when Properties hides (>100px reclaimed), plus that the orphaned splitter next to the hidden DOM column is also hidden. The earlier `View toggles: menu/keybind events…` spec was updated to check the Properties stack's bounding rect instead of the now-obsolete `is-hide-properties` body class.
+
 ## [v0.0.2-alpha.9] — 2026-05-05 (patch — panel positioning + view toggles)
 
 User report from nola1, with screenshots: "the properties is over the canvas... overlap and size of the properties squishing... the dom panel i cant remove the link/toggle in the top menu doesnt work... right toolbars are static/locked and not really adjustable." Two real bugs fixed; a third (splitter "snaps then locks" on real machine) is mitigated by a clearer hover affordance and being unblocked from the broken hit-testing the positioning bug created.

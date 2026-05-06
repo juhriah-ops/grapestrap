@@ -45,32 +45,27 @@
   border: 1px solid var(--border) !important;
 }
 
-/* View → Toggle commands set body classes that hide GL-managed panels.
-   Chromium 105+ ships :has(); we're on a more recent Electron, so we use
-   it to target the leaf `.lm_item.lm_stack` that wraps each panel.
+/* File manager toggle stays on body-class CSS — it's a tab inside a 3-tab
+   stack (Project / Library / Assets). Hiding just the tab + content lets
+   the surrounding stack stay for Library + Assets. No layout gap to fix.
 
-   Two patterns:
-   - Stacked-component columns (file-manager / library / asset-manager
-     share one stack in the left column) → hide just the matching tab
-     + content; the stack itself stays visible for the remaining tabs.
-   - Single-tab stacks (Properties, DOM Tree, Custom CSS) → hide the
-     `.lm_stack` wrapper. For DOM Tree (its own column) the parent
-     `.lm_column` is hidden too so the slot collapses visually. The
-     adjacent splitter remains as a 5px hairline — true splitter
-     removal lands in v0.0.3 once we wire GL `item.hide()`.
-
-   The previous selector targeted `> .lm_items > .lm_item_container > .lm_content`
-   but GL v2's actual subtree under `.lm_items` is just `> div > .lm_content`
-   (no `.lm_item_container` class), so the rule never matched and toggling
-   DOM / Properties / Custom CSS appeared to do nothing. Fixed 2026-05-05. */
+   DOM Tree, Properties, Custom CSS toggles are NOT body-class anymore —
+   they go through src/renderer/layout/panel-visibility.js which tells
+   Golden Layout directly to zero the panel's size and redistribute the
+   share to siblings, then `layout.updateSize()`. The previous body-class
+   `.lm_item ... { display: none }` pattern hid the content but GL still
+   allocated the panel's percentage to its slot, leaving an empty gap.
+   Reported on nola1 2026-05-05 with two screenshots: "you can see how a
+   gap is created when you close dom." Fixed in v0.0.2-alpha.10. */
 
 body.is-hide-file-manager .lm_tab[title="Project"]      { display: none !important; }
 body.is-hide-file-manager .lm_content.gstrap-fm-host    { display: none !important; }
 
-body.is-hide-properties .lm_item.lm_stack:has(.lm_content.gstrap-props-host) { display: none !important; }
-body.is-hide-custom-css .lm_item.lm_stack:has(.lm_content.gstrap-cssp-host)  { display: none !important; }
-
-/* DOM Tree owns a whole column; hide the column too so its width
-   visually collapses (splitter to its right stays as a hairline). */
-body.is-hide-dom-tree   .lm_item.lm_stack:has(.lm_content.gstrap-dom-host)   { display: none !important; }
-body.is-hide-dom-tree   .lm_item.lm_column:has(.lm_content.gstrap-dom-host)  { display: none !important; }
+/* Hide the splitter adjacent to a panel hidden via panel-visibility.js so we
+   don't leave a 5px hairline in the freed slot. The class `is-gstrap-hidden`
+   is added by hideItem(); the rule covers both "splitter to the right of"
+   the hidden item (`+`) and "splitter to the left of" (`:has(+ ...)`). */
+.is-gstrap-hidden + .lm_splitter,
+.lm_splitter:has(+ .is-gstrap-hidden) {
+  display: none !important;
+}
