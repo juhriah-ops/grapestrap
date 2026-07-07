@@ -24,7 +24,7 @@
 import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
 import { eventBus } from '../../state/event-bus.js'
-import { getEditor, getCanvasHtml } from '../../editor/grapesjs-init.js'
+import { getEditor } from '../../editor/grapesjs-init.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
 import { wireLibraryLock } from './lock.js'
 import { propagateLibraryItem } from './propagate.js'
@@ -153,19 +153,16 @@ function cmdInsert(id) {
   const html = makeWrapperHtml(item, item.html || '')
   const anchor = editor.getSelected?.()
   const wrapper = editor.getWrapper()
-  let target, added
+  let added
   if (!anchor || anchor === wrapper) {
-    target = wrapper
     added = wrapper.append(html)
   } else {
     const tag = tagOf(anchor)
     if (CONTAINER_TAGS.has(tag)) {
-      target = anchor
       added = anchor.append(html)
     } else {
       const parent = anchor.parent?.() || wrapper
       const idx = parent.components().indexOf(anchor)
-      target = parent
       added = parent.append(html, { at: idx + 1 })
     }
   }

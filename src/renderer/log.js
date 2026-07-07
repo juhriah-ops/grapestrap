@@ -11,7 +11,7 @@ function send(level, args) {
   // electron-log/renderer uses ipcRenderer directly; we don't have it. Console
   // first; preload-bridged log can land here later via grapestrap.app.log() when
   // we expose it.
-  // eslint-disable-next-line no-console
+   
   console[level === 'verbose' ? 'log' : level](...args)
 }
 

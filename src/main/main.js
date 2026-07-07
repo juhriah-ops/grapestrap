@@ -54,10 +54,17 @@ applyDisplayProtocolFlags(app)
 // `secure` lets the renderer treat it as a trustworthy origin (so dynamic
 // import works inside the locked-down renderer), `supportFetchAPI` covers
 // plugins that call fetch() against their own resources.
+//
+// `corsEnabled` (+ the ACAO header in the handler) is required since the
+// Electron 43 bump: the renderer document is file:// origin, so a dynamic
+// import() of gstrap-plugin:// is a cross-origin module fetch — Chromium 150
+// hard-blocks schemes that don't opt into CORS ("Cross origin requests are
+// only supported for protocol schemes: ..."). Electron ≤42 didn't enforce
+// this for module scripts; without it every plugin fails to activate.
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'gstrap-plugin',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true }
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true }
   }
 ])
 
@@ -270,7 +277,13 @@ function registerPluginProtocolHandler(registry) {
       if (!response.ok) return new Response('Not found', { status: 404 })
       const buf = await response.arrayBuffer()
       return new Response(buf, {
-        headers: { 'Content-Type': mimeForPath(target) }
+        headers: {
+          'Content-Type': mimeForPath(target),
+          // file:// documents send Origin: null, so the wildcard is the only
+          // workable CORS grant. Scope stays tight: this scheme serves plugin
+          // files only, path-traversal-guarded, to our own renderer.
+          'Access-Control-Allow-Origin': '*'
+        }
       })
     } catch (err) {
       log.warn(`gstrap-plugin: read failed for ${target}: ${err.message}`)

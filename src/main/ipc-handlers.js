@@ -16,8 +16,8 @@ import { log } from './logger.js'
 import { getPref, setPref } from './prefs.js'
 import { xdg } from './platform/xdg.js'
 import {
-  setProjectRoot, getProjectRoot,
-  readFile, writeFile, deleteFile, copyAsset, listDir, exists, dispose
+  setProjectRoot,
+  readFile, writeFile, deleteFile, copyAsset, listDir, exists
 } from './file-operations.js'
 import {
   createProject, loadProject, saveProject,
@@ -225,7 +225,7 @@ export function registerIpcHandlers({ pluginRegistry }) {
   // File via arrayBuffer() and shoots the bytes through here.
   ipcMain.handle('file:write-asset-buffer', async (_e, kind, filename, bytes) => {
     if (!ASSET_KIND_FILTERS[kind]) throw new Error(`Unknown asset kind: ${kind}`)
-    const safeName = filename.replace(/[^\w.\-]+/g, '_')
+    const safeName = filename.replace(/[^\w.-]+/g, '_')
     const subdir = `site/assets/${kind}`
     const target = `${subdir}/${safeName}`
     // bytes arrives as Uint8Array from the contextBridge structured clone.
@@ -270,19 +270,6 @@ export function registerIpcHandlers({ pluginRegistry }) {
 // is properly modal-attached and always raised on top.
 function parentWindow() {
   return BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null
-}
-
-async function pickNewProjectPath(suggestedName = 'Untitled') {
-  const parent = parentWindow()
-  const opts = {
-    title: 'New GrapeStrap project',
-    defaultPath: `${suggestedName.replace(/\s+/g, '-').toLowerCase()}.gstrap`,
-    filters: [{ name: 'GrapeStrap project', extensions: ['gstrap'] }]
-  }
-  const result = parent
-    ? await dialog.showSaveDialog(parent, opts)
-    : await dialog.showSaveDialog(opts)
-  return result.canceled ? null : result.filePath
 }
 
 async function pickOpenProjectPath() {

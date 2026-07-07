@@ -3,6 +3,13 @@
  *
  * Small Monaco instance bound to the project's style.css. Saves on Ctrl+S like
  * everything else (the project save loop picks up globalCSS).
+ *
+ * globalCSS has multiple writers (this editor, Style Manager background/
+ * pseudo-class panels, menu-router). All of them emit 'project:css-changed';
+ * this panel both emits (on local edits) and listens (to refresh its buffer
+ * after an external write). Without the listener the Monaco buffer goes
+ * stale and the next keystroke here silently clobbers the external rule —
+ * the alpha.12 "Properties writes don't stick" bug.
  */
 
 import { monaco, registerForRelayout } from '../../editor/monaco-init.js'
@@ -36,12 +43,30 @@ export function renderCustomCss(host) {
   // Reported on nola1 2026-05-04: edits in the Custom CSS toolbar didn't
   // update the page until something else fired the sync event.
   let livePreviewTimer = null
+  let refreshingFromState = false
   cssEditor.onDidChangeModelContent(() => {
-    if (!projectState.current) return
+    if (!projectState.current || refreshingFromState) return
     projectState.current.globalCSS = cssEditor.getValue()
     projectState.markCssDirty()
     clearTimeout(livePreviewTimer)
     livePreviewTimer = setTimeout(() => eventBus.emit('project:css-changed'), 250)
+  })
+
+  // External writers (Style Manager background/pseudo panels, menu-router)
+  // mutate projectState.current.globalCSS directly, then emit. Refresh the
+  // buffer so the next local keystroke starts from current state instead of
+  // clobbering theirs. The value-equality check makes our own debounced emit
+  // a no-op (buffer === state by then), so this can't loop; the flag keeps
+  // the programmatic setValue from re-entering the change handler above.
+  eventBus.on('project:css-changed', () => {
+    if (!projectState.current) return
+    const state = projectState.current.globalCSS || ''
+    if (cssEditor.getValue() === state) return
+    const pos = cssEditor.getPosition()
+    refreshingFromState = true
+    cssEditor.setValue(state)
+    refreshingFromState = false
+    if (pos) cssEditor.setPosition(pos)
   })
 
   eventBus.on('project:opened', () => {

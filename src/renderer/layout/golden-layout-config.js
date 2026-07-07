@@ -38,8 +38,22 @@ let layout = null
 // minWidth/minHeight floors stop GL from collapsing a panel to nothing when
 // the host resizes (e.g. windowed → fullscreen on an ultrawide). Without them
 // GL treats panels as fully fluid and the proportions can flip on resize.
-const PANEL_MIN_W = 180
-const PANEL_MIN_H = 120
+//
+// The values are PER TAB, and GL v2's splitter-drag bounds SUM them across a
+// stack's tabs (onSplitterDragStart → calculateContentItemsTotalMinSize) even
+// though tabs display one at a time. Our side stacks hold 3 tabs each, so the
+// per-tab floor must be the intended per-stack floor ÷ 3. The original 180/120
+// per tab gave the stacks a 540px effective floor: in any window where a
+// sidebar sat below that, GL clamped EVERY splitter drag to a positive offset
+// — the sidebar jumped out to 540px no matter which way you dragged, and
+// dragStop persisted the bigger percentage ("snaps then sticks" on alpha.9,
+// "only gets larger" windowed on 2026-07-06). If a stack gains/loses tabs,
+// re-derive these.
+const STACK_MIN_W = 180
+const STACK_MIN_H = 120
+const SIDE_STACK_TABS = 3
+const PANEL_MIN_W = STACK_MIN_W / SIDE_STACK_TABS
+const PANEL_MIN_H = STACK_MIN_H / SIDE_STACK_TABS
 
 const DEFAULT_CONFIG = {
   root: {

@@ -30,7 +30,7 @@ class EventBus {
     for (const handler of set) {
       try { handler(payload) }
       catch (err) {
-        // eslint-disable-next-line no-console
+         
         console.error(`event handler for "${event}" threw:`, err)
       }
     }

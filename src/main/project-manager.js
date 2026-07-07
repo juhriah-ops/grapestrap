@@ -375,7 +375,7 @@ function guessAssetKind(ext) {
   return null
 }
 
-export async function createProject({ targetPath, name, templateId = 'blank' }) {
+export async function createProject({ targetPath, name, templateId: _templateId = 'blank' }) {
   const projectDir = dirname(targetPath)
   const site = siteDir(projectDir)
   await fsp.mkdir(projectDir, { recursive: true })

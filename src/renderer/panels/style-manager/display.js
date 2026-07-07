@@ -14,9 +14,9 @@
 
 import {
   BREAKPOINTS, DISPLAY_VALUES, VISIBILITY_VALUES,
-  displayClass, displayPattern, visibilityPattern
+  displayClass, visibilityPattern
 } from './bs-classes.js'
-import { applyGroup, readGroup, toggleClass } from './class-utils.js'
+import { applyGroup, readGroup } from './class-utils.js'
 
 let activeBreakpoint = ''  // '' = xs (default)
 

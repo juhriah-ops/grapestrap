@@ -51,6 +51,7 @@ import { openPreferencesDialog } from './dialogs/preferences.js'
 import { showWelcomeIfFirstRun } from './dialogs/welcome.js'
 import { showContextMenu } from './dialogs/context-menu.js'
 import { buildComponentMenuItems } from './shortcuts/component-actions.js'
+import { getCssEditor } from './panels/custom-css/index.js'
 import { log } from './log.js'
 
 async function boot() {
@@ -140,4 +141,4 @@ boot().catch(err => {
 // the public API surface — plugins access state via `api.*` from buildApi(),
 // not through this. Containment relies on preload-bridge-only IPC + sandbox +
 // contextIsolation, not on hiding this object.
-window.__gstrap = { eventBus, projectState, pageState, pluginRegistry }
+window.__gstrap = { eventBus, projectState, pageState, pluginRegistry, getCssEditor }

@@ -208,11 +208,6 @@ const CONTAINER_TAGS = new Set([
   'header', 'footer', 'nav', 'form',
   'ul', 'ol'
 ])
-const LEAF_TAGS = new Set([
-  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'span', 'img', 'a', 'button', 'input', 'label'
-])
-
 function tagOf(component) {
   return (component?.get?.('tagName') || '').toLowerCase()
 }

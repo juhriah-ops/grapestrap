@@ -7,9 +7,8 @@
  */
 
 import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml, getEditor } from '../../editor/grapesjs-init.js'
-import { createMonacoPair, bindMonacoToRegistry } from '../../editor/monaco-init.js'
+import { createMonacoPair, bindMonacoToRegistry, relayoutAllMonaco } from '../../editor/monaco-init.js'
 import { bindSync, onViewModeChange } from '../../editor/canvas-sync.js'
-import { pageState } from '../../state/page-state.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { propagateLibraryItem } from '../library-items/propagate.js'
@@ -180,10 +179,7 @@ function applyViewMode(host, next, prev) {
   // Without this explicit refresh, the GrapesJS iframe rulers and selection
   // overlays draw at the old width and the canvas paints over the code pane.
   requestAnimationFrame(() => {
-    if (next === 'code' || next === 'split') {
-      const monaco = window.__gstrap?.pluginRegistry?.bound?.monaco
-      monaco?.editor?.getEditors?.().forEach(e => { try { e.layout?.() } catch (_) {} })
-    }
+    if (next === 'code' || next === 'split') relayoutAllMonaco()
     try { getEditor()?.refresh?.() } catch (_) { /* GrapesJS not ready */ }
   })
 

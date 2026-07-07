@@ -91,8 +91,8 @@ export function buildApi(manifest) {
     // Sandboxed I/O — plugin-data only via preload bridge (TODO v0.0.2: plumb
     // a real fs proxy through ipcRenderer with plugin-name-scoped paths)
     fs: {
-      readFile:  (path) => Promise.reject(new Error('plugin fs not wired in v0.0.1')),
-      writeFile: (path) => Promise.reject(new Error('plugin fs not wired in v0.0.1'))
+      readFile:  (_path) => Promise.reject(new Error('plugin fs not wired in v0.0.1')),
+      writeFile: (_path) => Promise.reject(new Error('plugin fs not wired in v0.0.1'))
     },
 
     // UI helpers

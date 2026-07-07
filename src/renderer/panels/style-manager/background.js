@@ -11,7 +11,7 @@
 
 import {
   BG_COLOR, BG_SUBTLE,
-  bgColorPattern, bgGradientPattern
+  bgColorPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup, toggleClass } from './class-utils.js'
 import { projectState } from '../../state/project-state.js'

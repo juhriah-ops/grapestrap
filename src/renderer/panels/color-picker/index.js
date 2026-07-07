@@ -131,7 +131,7 @@ export function openColorPicker({ anchor, value = '', onChange, onClose } = {}) 
     })
     popover.querySelector('[data-cp-eyedrop]')?.addEventListener('click', async () => {
       try {
-        // eslint-disable-next-line no-undef -- EyeDropper is a Chromium global
+         
         const ed = new EyeDropper()
         const result = await ed.open()
         if (result?.sRGBHex) commit(result.sRGBHex)

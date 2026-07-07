@@ -583,13 +583,6 @@ test('Code view shows pretty-printed HTML, not the GrapesJS one-liner', async ()
   })
   // Force a sync so Monaco gets the latest html.
   await appWindow.waitForTimeout(400)
-  const monacoVal = await appWindow.evaluate(() => {
-    const monacoHosts = document.querySelectorAll('.gstrap-monaco-host .monaco-editor')
-    if (!monacoHosts.length) return ''
-    // Walk the Monaco DOM for the textarea that holds the value.
-    const ta = document.querySelector('.gstrap-monaco-host textarea')
-    return ta?.value || document.querySelector('.gstrap-monaco-host .view-lines')?.textContent || ''
-  })
   // The Monaco textarea holds focused content only; the .view-lines is a
   // visual representation. Pull the editor's underlying model value via
   // window.monaco — the editor whose value starts with `<` is the HTML one.
@@ -2397,7 +2390,6 @@ test('Audit fixes: dirty-state for snippets/library-delete, orphan menu wiring, 
   await openSeedProject(appWindow, projectPath)
 
   // ── 1. Snippet create marks dirty ──────────────────────────────────────
-  let dirty = await appWindow.evaluate(() => window.__gstrap.projectState.isDirty())
   // (start state may already be dirty from openSeedProject; clear it via save)
   await appWindow.evaluate(async () => {
     await window.grapestrap.project.save(window.__gstrap.projectState.current)
@@ -2491,6 +2483,67 @@ test('Custom CSS live preview: edits debounce-emit project:css-changed; iframe <
     const tag = doc.querySelector('style[data-grapestrap-globalcss]')
     return tag?.textContent?.includes('rebeccapurple')
   }, null, { timeout: 3_000 })
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Properties→Custom CSS sync: external globalCSS write refreshes Monaco; next edit does not clobber', async () => {
+  // alpha.12 open item: Style Manager panels (background.js writeBgRule,
+  // pseudo-class.js) mutate projectState.current.globalCSS and emit
+  // 'project:css-changed', but the Custom CSS Monaco buffer only re-read
+  // state on project:opened. The stale buffer meant the next Custom CSS
+  // keystroke wrote old text back over the Properties rule — last-writer-
+  // wins, one direction only. Verifies:
+  //   1. An external write + emit refreshes the Monaco buffer.
+  //   2. A subsequent Monaco edit preserves the external rule (no clobber).
+  //   3. Buffer and state converge after the editor's own debounced emit
+  //      (no refresh loop).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-cssync-'))
+  const projectPath = join(projectDir, 'cssync.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // 1. Simulate the Style Manager write path — the exact mutation + emit
+  //    writeBgRule performs. (GL instantiates the custom-css panel eagerly
+  //    even in a background stack tab, so the editor exists unfocused.)
+  await appWindow.evaluate(() => {
+    const { projectState, eventBus } = window.__gstrap
+    projectState.current.globalCSS = '.from-props { background-image: url("x.png"); }\n'
+    projectState.markCssDirty()
+    eventBus.emit('project:css-changed')
+  })
+  await appWindow.waitForFunction(
+    () => window.__gstrap.getCssEditor()?.getValue().includes('.from-props'),
+    null, { timeout: 3_000 }
+  )
+
+  // 2. Edit in Monaco: executeEdits drives onDidChangeModelContent the same
+  //    way real keystrokes do, without needing the tab focused.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.getCssEditor()
+    const end = ed.getModel().getFullModelRange().getEndPosition()
+    ed.executeEdits('spec', [{
+      range: {
+        startLineNumber: end.lineNumber, startColumn: end.column,
+        endLineNumber: end.lineNumber, endColumn: end.column
+      },
+      text: '.from-monaco { color: teal; }\n'
+    }])
+  })
+
+  // Wait out the 250ms live-preview debounce so the editor's own emit lands.
+  await appWindow.waitForTimeout(600)
+
+  // 3. Both rules survive in state; buffer matches state exactly.
+  const { state, buffer } = await appWindow.evaluate(() => ({
+    state: window.__gstrap.projectState.current.globalCSS,
+    buffer: window.__gstrap.getCssEditor().getValue()
+  }))
+  expect(state).toContain('.from-props')
+  expect(state).toContain('.from-monaco')
+  expect(buffer).toBe(state)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
@@ -3712,6 +3765,87 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
   expect(await rightStackVisible()).toBe(true)
   const canvasRestored = await canvasWidth()
   expect(Math.abs(canvasRestored - canvasBaseline)).toBeLessThan(10)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Splitter drag in a windowed layout: sidebars can shrink, never force-grow', async () => {
+  // Reported on nola1 2026-07-06: "sidebar windows both left and right side
+  // dont resize correctly when window not in max view. it only gets larger."
+  // Root cause in GL v2.6: onSplitterDragStart bounds the drag with
+  // calculateContentItemsTotalMinSize(stack.contentItems), which SUMS the
+  // minWidth of every tab in the stack — but tabs display one at a time.
+  // With 3 tabs × 180px the stack's effective floor was 540px; in any window
+  // where a sidebar sits below that, Math.max(offset, positiveMin) turned
+  // EVERY drag (including shrinks) into a forced jump out to 540px, and
+  // dragStop persisted the bigger percentage. Same mechanism as the
+  // alpha.9 "snaps ~50px then sticks" report (smaller jump at maximized
+  // widths). Fix: per-tab minWidth is the intended stack floor ÷ tab count.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-split-'))
+  const projectPath = join(projectDir, 'split.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  // Dismiss the first-run welcome for real: its .gstrap-modal-overlay spans
+  // the window and swallows pointer input until a button is clicked. Specs
+  // that drive everything through evaluate() never notice it — this spec
+  // uses real mouse events, so it must clear the overlay like a user would.
+  await appWindow.click('.gstrap-modal-overlay [data-action="dismiss"]')
+  await appWindow.waitForFunction(
+    () => !document.querySelector('.gstrap-modal-overlay'), null, { timeout: 3_000 })
+
+  // Windowed (non-maximized) size — small enough that 18%/26% sidebars sit
+  // far below the old broken 540px stack floor.
+  await appWindow.setViewportSize({ width: 1200, height: 800 })
+  await appWindow.waitForTimeout(400)
+
+  const stackWidth = i => appWindow.evaluate(idx => {
+    const stacks = document.querySelectorAll('#gstrap-main .lm_stack')
+    return stacks[idx].getBoundingClientRect().width
+  }, i)
+
+  const dragSplitter = async (idx, dx) => {
+    const box = await appWindow.evaluate(i => {
+      const s = document.querySelectorAll('#gstrap-main .lm_splitter')[i]
+      const r = s.getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+    }, idx)
+    await appWindow.mouse.move(box.x, box.y)
+    await appWindow.mouse.down()
+    // Two intermediate moves so GL's drag listener sees real movement.
+    await appWindow.mouse.move(box.x + dx / 2, box.y)
+    await appWindow.mouse.move(box.x + dx, box.y)
+    await appWindow.mouse.up()
+    await appWindow.waitForTimeout(300) // dragStop applies sizes on rAF
+  }
+
+  // Left sidebar: drag the left splitter 30px LEFT — must shrink by ~30,
+  // not jump out to the old 540px sum-of-tabs floor.
+  const leftBefore = await stackWidth(0) // ~215px at 18% of 1200
+  await dragSplitter(0, -30)
+  const leftAfter = await stackWidth(0)
+  expect(leftAfter).toBeLessThan(leftBefore)
+  expect(Math.abs(leftBefore - 30 - leftAfter)).toBeLessThan(15)
+
+  // The per-stack floor still holds: a huge shrink clamps at ~180px
+  // (3 tabs × 60px per-tab minWidth), it doesn't collapse to nothing.
+  await dragSplitter(0, -100)
+  const leftFloor = await stackWidth(0)
+  expect(Math.abs(leftFloor - 180)).toBeLessThan(15)
+
+  // Right sidebar: drag the right splitter 60px RIGHT — must shrink it.
+  const rightBefore = await stackWidth(2)
+  await dragSplitter(1, 60)
+  const rightAfter = await stackWidth(2)
+  expect(rightAfter).toBeLessThan(rightBefore)
+  expect(Math.abs(rightBefore - 60 - rightAfter)).toBeLessThan(15)
+
+  // Growing still works and stays symmetric: drag left splitter back RIGHT.
+  await dragSplitter(0, 40)
+  const leftGrown = await stackWidth(0)
+  expect(Math.abs(leftGrown - (leftFloor + 40))).toBeLessThan(15)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })

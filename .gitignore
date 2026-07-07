@@ -4,6 +4,9 @@ build/
 release/
 out/
 
+# Local Claude instructions (internal workflow, not for the public repo)
+CLAUDE.md
+
 # User project files (never commit)
 *.gstrap
 *.gstrap.recovery
