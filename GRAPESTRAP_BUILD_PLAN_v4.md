@@ -1,4 +1,10 @@
-# GrapeStrap — Build Plan v4 (FINAL)
+# GrapeStrap — Build Plan v4 (SUPERSEDED — see GRAPESTRAP_BUILD_PLAN_v5.md)
+
+> **2026-07-08:** v5 supersedes this document's roadmap, milestones, and packaging plan.
+> v4 remains canonical for the feature specifications it defines (plugin architecture/API,
+> sync policy, project structure, .gstrap format, block system, Style Manager,
+> Master Templates & Library Items specs). Read v5 for what ships when.
+
 **The Dreamweaver alternative the Linux community has been waiting for.**
 
 **Stack:** Electron + GrapesJS + Monaco + Golden Layout + Vite
