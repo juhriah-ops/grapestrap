@@ -8,17 +8,17 @@ Paste this into a fresh Claude session. Self-contained — assumes no memory of 
 
 You are picking up a GrapeStrap debug session. The user runs the app on nola1 (Linux workstation `jsmith@192.168.0.192`) and reports bugs from real-project testing. The most recent stretch shipped four patch releases — alpha.9 → alpha.12 — driven by a single evening of nola1 reports about the right-side panel column.
 
-State at session start:
+State at session start (updated 2026-07-12 — Wave 0 of the v0.1.0 campaign complete):
 
 - Repo: `/home/numb1/projects/grapestrap`
 - Branch: `main`, clean tree
-- HEAD: `ba90aab` (or later)
-- Tags: `v0.0.1-alpha`, `v0.0.2-alpha` … `v0.0.2-alpha.12`
-- Specs: 53/53 green via `xvfb-run -a npx playwright test`
-- Origin: `github.com/juhriah-ops/grapestrap`
+- HEAD: `f70f9ef` (Wave 0 complete: spec split into 9 domain files + helpers.js, plugin-semver landmine defused, CI e2e enabled, coverage-hole specs). Last tag: `v0.0.2-alpha.13`; package.json is `0.1.0-rc.0` UNTAGGED on purpose — the rc ladder tags in Wave 6.
+- Specs: 68/68 green via `xvfb-run -a npx playwright test` (~2.7m). Shared helpers in `tests/e2e/helpers.js` (launch, openSeedProject, selectFirstByTag, dismissWelcome, EXPECTED_PLUGIN_COUNT).
+- Wave 0 also fixed two app bugs its specs surfaced: cross-tab undo leaked the previous page's tree (UndoManager fence in `swapToTab`, canvas/index.js) and save never cleared dirty dots (`projectState.markAllClean()`, menu-router cmdSave/cmdRefresh).
+- Origin: `github.com/juhriah-ops/grapestrap` — local is AHEAD; pushes are user-gated.
 - nola1: synced via tar pipe (no git/rsync there). Verify with `cat .git/refs/heads/main`.
 
-Read the auto-memory entry at `~/.claude/projects/-home-numb1/memory/session_2026_05_05_grapestrap_alpha9_12.md` for the full architecture context. The build plan is at `GRAPESTRAP_BUILD_PLAN_v4.md` in the repo.
+**The campaign roadmap is `GRAPESTRAP_BUILD_PLAN_v5.md`** (v4 stays canonical for feature specs only). Next: Wave 1 — crash recovery + i18n runtime core. Known product decision parked for Wave 2: undo-across-code-view-sync has no contract (see sandbox-artifacts/grapestrap/w0-coverage-specs/PLAN.md). Read the auto-memory entry at `~/.claude/projects/-home-numb1/memory/session_2026_05_05_grapestrap_alpha9_12.md` for the full architecture context (still canonical for the layout notes below).
 
 ## What landed alpha.9 → alpha.12 (in priority of "things you'll touch when debugging")
 
