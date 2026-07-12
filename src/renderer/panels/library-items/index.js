@@ -30,12 +30,22 @@ import { wireLibraryLock } from './lock.js'
 import { propagateLibraryItem } from './propagate.js'
 
 let host = null
+let eventsWired = false
 
 export function renderLibraryItems(target) {
   host = target
   host.classList.add('gstrap-lib-host')
   wireLibraryLock()
   paint()
+  wireLibraryPanelEvents()
+}
+
+// Wire-once (Wave 3 idempotency — GL loadLayout re-invokes the factory; the
+// once-guard generalises the wireLibraryLock pattern above). paint() reads
+// the module `host`, reassigned per render run.
+function wireLibraryPanelEvents() {
+  if (eventsWired) return
+  eventsWired = true
   eventBus.on('project:opened',  () => paint())
   eventBus.on('project:closed',  () => paint())
   eventBus.on('library:changed', () => paint())

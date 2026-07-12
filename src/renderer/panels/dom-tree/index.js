@@ -21,23 +21,13 @@ import { getEditor } from '../../editor/grapesjs-init.js'
 let hostEl = null
 let selectedId = null
 let refreshScheduled = false
+let eventsWired = false
 
 export function renderDomTree(host) {
   hostEl = host
   host.classList.add('gstrap-dom-host')
   paint()
-
-  eventBus.on('canvas:ready',           () => paint())
-  eventBus.on('canvas:content-changed', () => schedulePaint())
-  eventBus.on('canvas:selected', component => {
-    selectedId = component?.getId?.() || null
-    applyHighlight()
-  })
-  eventBus.on('canvas:deselected', () => {
-    selectedId = null
-    applyHighlight()
-  })
-  eventBus.on('project:closed', () => paint())
+  wireDomTreeEvents()
 
   host.addEventListener('click', evt => {
     const row = evt.target.closest('[data-cid]')
@@ -63,6 +53,25 @@ export function renderDomTree(host) {
       x: evt.clientX, y: evt.clientY, component: found
     })
   })
+}
+
+// Wire-once (Wave 3 idempotency — GL loadLayout re-invokes the factory).
+// paint()/applyHighlight() already read the module hostEl, which every
+// render run reassigns, so the handlers always target the live host.
+function wireDomTreeEvents() {
+  if (eventsWired) return
+  eventsWired = true
+  eventBus.on('canvas:ready',           () => paint())
+  eventBus.on('canvas:content-changed', () => schedulePaint())
+  eventBus.on('canvas:selected', component => {
+    selectedId = component?.getId?.() || null
+    applyHighlight()
+  })
+  eventBus.on('canvas:deselected', () => {
+    selectedId = null
+    applyHighlight()
+  })
+  eventBus.on('project:closed', () => paint())
 }
 
 // Coalesce bursts of canvas:content-changed (e.g. dropping a section that

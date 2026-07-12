@@ -1,8 +1,11 @@
 /**
  * GrapeStrap — Custom CSS panel (project-global style.css)
  *
- * Small Monaco instance bound to the project's style.css. Saves on Ctrl+S like
- * everything else (the project save loop picks up globalCSS).
+ * PATH: src/renderer/panels/custom-css/index.js
+ * ROLE: Small Monaco instance bound to the project's style.css. Saves on
+ *       Ctrl+S like everything else (the project save loop picks up globalCSS).
+ * DEPENDS: editor/monaco-init.js, state/project-state.js, state/event-bus.js
+ * CREATED: 2026-05-04 (breadcrumb header added with the Wave 3 rewrite)
  *
  * globalCSS has multiple writers (this editor, Style Manager background/
  * pseudo-class panels, menu-router). All of them emit 'project:css-changed';
@@ -10,6 +13,13 @@
  * after an external write). Without the listener the Monaco buffer goes
  * stale and the next keystroke here silently clobbers the external rule —
  * the alpha.12 "Properties writes don't stick" bug.
+ *
+ * Wave 3 idempotency contract: GL's loadLayout (workspace apply, Reset
+ * Layout) re-invokes this factory. The Monaco editor is created exactly ONCE
+ * inside a module-held persistent subtree that re-runs re-parent into the
+ * fresh GL host — so the CSS-editor undo stack survives applies and the old
+ * pre-fix leak (a new editor per reset, old one never disposed, stranded in
+ * liveEditors) is structurally impossible. Event subscriptions are wire-once.
  */
 
 import { monaco, registerForRelayout } from '../../editor/monaco-init.js'
@@ -17,11 +27,30 @@ import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 
 let cssEditor = null
+let persistentRoot = null
+let eventsWired = false
+
+// Shared between the local-edit handler and the external-write refresh below;
+// module scope because the two live in different wire-once blocks.
+let refreshingFromState = false
 
 export function renderCustomCss(host) {
   host.classList.add('gstrap-cssp-host')
-  host.innerHTML = `<div class="gstrap-monaco-host" data-region="cssp"></div>`
-  const slot = host.querySelector('[data-region="cssp"]')
+
+  if (persistentRoot) {
+    // GL re-invoked us: re-parent the living editor, re-measure next frame.
+    host.appendChild(persistentRoot)
+    requestAnimationFrame(() => {
+      try { cssEditor?.layout?.() } catch (_) { /* editor transitioning */ }
+    })
+    return
+  }
+
+  persistentRoot = document.createElement('div')
+  persistentRoot.className = 'gstrap-persistent-root'
+  persistentRoot.innerHTML = `<div class="gstrap-monaco-host" data-region="cssp"></div>`
+  host.appendChild(persistentRoot)
+  const slot = persistentRoot.querySelector('[data-region="cssp"]')
 
   cssEditor = monaco.editor.create(slot, {
     value: projectState.current?.globalCSS || '/* Project-global custom CSS */\n',
@@ -42,8 +71,8 @@ export function renderCustomCss(host) {
   // canvas iframe so the canvas reflects new CSS without a manual save.
   // Reported on nola1 2026-05-04: edits in the Custom CSS toolbar didn't
   // update the page until something else fired the sync event.
+  // (Editor-scoped, so inherently once: the editor is only ever created once.)
   let livePreviewTimer = null
-  let refreshingFromState = false
   cssEditor.onDidChangeModelContent(() => {
     if (!projectState.current || refreshingFromState) return
     projectState.current.globalCSS = cssEditor.getValue()
@@ -51,6 +80,15 @@ export function renderCustomCss(host) {
     clearTimeout(livePreviewTimer)
     livePreviewTimer = setTimeout(() => eventBus.emit('project:css-changed'), 250)
   })
+
+  wireCssPanelEvents()
+}
+
+// Wire-once (house pattern: wireLibraryLock). Handlers read the module
+// `cssEditor` binding — created once, so no stale references possible.
+function wireCssPanelEvents() {
+  if (eventsWired) return
+  eventsWired = true
 
   // External writers (Style Manager background/pseudo panels, menu-router)
   // mutate projectState.current.globalCSS directly, then emit. Refresh the

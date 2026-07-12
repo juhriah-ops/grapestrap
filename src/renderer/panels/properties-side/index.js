@@ -21,11 +21,23 @@ import { renderStyleManager } from '../style-manager/index.js'
 
 let host = null
 let currentComponent = null
+let eventsWired = false
 
 export function renderProperties(target) {
   host = target
   host.classList.add('gstrap-props-host')
-  setEmpty()
+  // Factory re-runs (GL loadLayout — Wave 3) land mid-session: repaint the
+  // current selection into the fresh host instead of blanking it.
+  if (currentComponent) renderForElement()
+  else setEmpty()
+  wirePropsEvents()
+}
+
+// Wire-once (Wave 3 idempotency — GL loadLayout re-invokes the factory).
+// Handlers read the module `host`, reassigned per render run.
+function wirePropsEvents() {
+  if (eventsWired) return
+  eventsWired = true
   eventBus.on('canvas:selected',   c => { currentComponent = c; renderForElement() })
   eventBus.on('canvas:deselected', () => { currentComponent = null; setEmpty() })
   // Keep chip list in sync if classes are mutated by the Style Manager or

@@ -3,6 +3,14 @@
  *
  * Three sections in v0.0.1: Pages, Assets, Styles. Templates and Library
  * sections appear in v0.0.2/v0.1.0 as those features ship.
+ *
+ * Wave 3 idempotency contract: GL's loadLayout (workspace apply, Reset
+ * Layout) re-invokes this factory with a fresh host element. Event
+ * subscriptions are wire-once and repaint through the module `hostEl`
+ * (reassigned per run) — the pre-fix version closed over the render-scoped
+ * host, so after a reset the re-created panel never repainted again
+ * (stale-host closure). DOM listeners stay in the render fn: the host is a
+ * fresh element each apply, old listeners die with the old host.
  */
 
 import { projectState } from '../../state/project-state.js'
@@ -20,12 +28,13 @@ const UI_STRINGS = {
   deleteTemplate: 'Delete Template'
 }
 
+let hostEl = null
+let eventsWired = false
+
 export function renderFileManager(host) {
+  hostEl = host
   host.classList.add('gstrap-fm-host')
-  refresh(host)
-  eventBus.on('project:opened', () => refresh(host))
-  eventBus.on('project:closed', () => refresh(host))
-  eventBus.on('project:dirty-changed', () => refresh(host))
+  refresh()
 
   host.addEventListener('dblclick', evt => {
     const pageEl = evt.target.closest('[data-fm-page]')
@@ -56,10 +65,23 @@ export function renderFileManager(host) {
     ])
   })
 
-  eventBus.on('templates:changed', () => refresh(host))
+  wireFmEvents()
 }
 
-function refresh(host) {
+// Wire-once (house pattern: wireLibraryLock). Handlers repaint via the module
+// hostEl so they always target the live panel, never a detached one.
+function wireFmEvents() {
+  if (eventsWired) return
+  eventsWired = true
+  eventBus.on('project:opened',        () => refresh())
+  eventBus.on('project:closed',        () => refresh())
+  eventBus.on('project:dirty-changed', () => refresh())
+  eventBus.on('templates:changed',     () => refresh())
+}
+
+function refresh() {
+  const host = hostEl
+  if (!host) return
   const project = projectState.current
   if (!project) {
     host.innerHTML = `<div class="gstrap-empty">No project open.<br><br>

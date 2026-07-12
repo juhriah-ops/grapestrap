@@ -44,12 +44,14 @@ const CONTAINER_TAGS = new Set([
 
 let host = null
 let assetsByKind = { images: [], fonts: [], videos: [] }
+let eventsWired = false
 
 export function renderAssetManager(target) {
   host = target
   host.classList.add('gstrap-am-host')
   paint()
   refreshList()
+  wireAssetEvents()
 
   // Drag-and-drop multi-file upload: drop OS files onto any of the three
   // section grids (or the host generally) and they're routed by extension.
@@ -74,6 +76,16 @@ export function renderAssetManager(target) {
     const dropSection = evt.target.closest?.('[data-kind]')?.dataset?.kind || null
     await handleDroppedFiles(evt.dataTransfer.files, dropSection)
   })
+}
+
+// Wire-once (Wave 3 idempotency — GL loadLayout re-invokes the factory).
+// Covers BOTH the eventBus subs and the two watcher IPC subscriptions:
+// grapestrap.watcher.onAdded/onDeleted are ipcRenderer.on under the hood and
+// were never unsubscribed, so pre-fix every reset stacked another pair.
+// Handlers read the module `host`/`assetsByKind`, reassigned per render run.
+function wireAssetEvents() {
+  if (eventsWired) return
+  eventsWired = true
 
   eventBus.on('project:opened',  () => refreshList())
   eventBus.on('project:closed',  () => { assetsByKind = { images: [], fonts: [], videos: [] }; paint() })

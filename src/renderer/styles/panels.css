@@ -138,6 +138,18 @@
   background: var(--bg-1);
   overflow: hidden;
 }
+
+/* Wave 3: canvas + custom-css keep their heavyweight widgets (GrapesJS,
+   Monaco) in a module-held subtree that survives GL loadLayout — factory
+   re-runs re-parent this element into the fresh .lm_content host. Fills the
+   host so child panes (absolute inset:0) anchor to it; NOT position:absolute
+   (RESTART_DEBUG panel-host rule — absolute escapes GL's containing block). */
+.gstrap-persistent-root {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
 .gstrap-canvas-design,
 .gstrap-canvas-code {
   position: absolute;
@@ -153,9 +165,13 @@
 }
 
 /* Split mode: opt out of the absolute-overlay layout that's correct for
-   single-pane modes, switch the host to a flex row, and let each pane take
-   half the width. The vertical divider doubles as a visual seam. */
-.gstrap-canvas-host.is-split {
+   single-pane modes, switch the pane parent to a flex row, and let each pane
+   take half the width. The vertical divider doubles as a visual seam. The
+   is-split flag stays on the GL host (pinned by code-view.spec.js); since
+   Wave 3 the panes' direct parent is the persistent root, so THAT carries
+   the flex layout. The GL host is rebuilt on every workspace apply — the
+   canvas factory re-asserts is-split on re-attach from module state. */
+.gstrap-canvas-host.is-split .gstrap-persistent-root {
   display: flex;
   flex-direction: row;
 }

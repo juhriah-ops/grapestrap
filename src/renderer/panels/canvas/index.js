@@ -1,9 +1,24 @@
 /**
  * GrapeStrap — Canvas panel
  *
- * Hosts GrapesJS in design view and Monaco in code view; toggles between them
- * (or splits) based on the active tab's view mode. The canvas-sync module
- * handles the actual content sync between them per the locked policy.
+ * PATH: src/renderer/panels/canvas/index.js
+ * ROLE: Hosts GrapesJS in design view and Monaco in code view; toggles between
+ *       them (or splits) based on the active tab's view mode. The canvas-sync
+ *       module handles the actual content sync between them per the locked
+ *       policy.
+ * DEPENDS: editor/grapesjs-init.js, editor/monaco-init.js, editor/canvas-sync.js,
+ *          state/project-state.js, state/event-bus.js
+ * CREATED: 2026-05-02 (breadcrumb header added with the Wave 3 rewrite)
+ *
+ * Wave 3 idempotency contract: GL's loadLayout (workspace apply, Reset Layout)
+ * tears down every ComponentItem and re-invokes this factory. GrapesJS and the
+ * Monaco pair are built exactly ONCE, ever, inside a module-held persistent
+ * subtree that re-runs simply re-parent into the fresh GL host. The canvas
+ * iframe reloads on re-parent — the existing maximize/restore path already
+ * handles that: GL 'stateChanged' → rAF-coalesced 'canvas:gl-state-changed' →
+ * grapesjs-init re-injects base href + framework links + globalCSS. Event
+ * subscriptions are wire-once (the wireLibraryLock house pattern) and read
+ * module state, never a render-scoped host.
  */
 
 import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml, getEditor } from '../../editor/grapesjs-init.js'
@@ -16,6 +31,18 @@ import { propagateTemplate, templateRegionsMeta } from '../templates/propagate.j
 
 let monacoPair = null
 
+// Living editor DOM (design slot + code slots), built on the first factory
+// run and re-parented on every subsequent one. Never rebuilt: rebuilding
+// would create a second GrapesJS editor + orphaned Monaco pair (the pre-fix
+// Reset Layout bug — see PLAN.md §1 in the Wave 3 artifacts).
+let persistentRoot = null
+let eventsWired = false
+
+// Current split state. The is-split class lives on the GL host (pinned by
+// code-view.spec.js), which loadLayout rebuilds — so re-attach re-asserts it
+// from here instead of losing an active split view on workspace apply.
+let splitActive = false
+
 // The canvas tracks which tab (page or library item) it's currently
 // displaying so that on tab swap we can capture the outgoing content back
 // into projectState before loading the incoming one. `loadingTabName` is
@@ -27,16 +54,31 @@ let loadingTabName = null
 
 export function renderCanvas(host) {
   host.classList.add('gstrap-canvas-host')
-  host.innerHTML = `
+
+  if (persistentRoot) {
+    // GL re-invoked us (loadLayout / Reset Layout): re-parent the living
+    // editor subtree. The iframe resync arrives free via the stateChanged →
+    // canvas:gl-state-changed chain; Monaco/GrapesJS re-measure on the next
+    // frame once the new geometry has settled.
+    host.appendChild(persistentRoot)
+    host.classList.toggle('is-split', splitActive)
+    scheduleReattachRelayout()
+    return
+  }
+
+  persistentRoot = document.createElement('div')
+  persistentRoot.className = 'gstrap-persistent-root'
+  persistentRoot.innerHTML = `
     <div class="gstrap-canvas-design" data-region="canvas-design"></div>
     <div class="gstrap-canvas-code"   data-region="canvas-code" hidden>
       <div class="gstrap-monaco-host" data-region="monaco-html"></div>
       <div class="gstrap-monaco-host" data-region="monaco-css" hidden></div>
     </div>
   `
-  const designSlot = host.querySelector('[data-region="canvas-design"]')
-  const htmlSlot   = host.querySelector('[data-region="monaco-html"]')
-  const cssSlot    = host.querySelector('[data-region="monaco-css"]')
+  host.appendChild(persistentRoot)
+  const designSlot = persistentRoot.querySelector('[data-region="canvas-design"]')
+  const htmlSlot   = persistentRoot.querySelector('[data-region="monaco-html"]')
+  const cssSlot    = persistentRoot.querySelector('[data-region="monaco-css"]')
 
   initGrapesJS(designSlot)
   monacoPair = createMonacoPair(htmlSlot, cssSlot)
@@ -47,15 +89,38 @@ export function renderCanvas(host) {
   // doesn't fire — but the canvas container DOES resize. Watch it directly
   // and refresh GrapesJS so its iframe offsets stay consistent. Same rAF +
   // integer-dim gate as the GL host RO; the two ROs observe disjoint elements
-  // and don't race.
-  installCanvasResizeWatcher(host)
+  // and don't race. Observing the persistent root (not the GL host) keeps the
+  // watcher alive across workspace applies.
+  installCanvasResizeWatcher(persistentRoot)
+
+  wireCanvasEvents()
+}
+
+// Post-re-parent measure pass. Deliberately NOT requestFullRelayout() from
+// golden-layout-config (importing it here would create a module cycle with
+// the factory registration); GL sizes its own items during loadLayout, and
+// the workspace apply flow calls requestFullRelayout() at its end anyway —
+// this covers the plain Reset Layout path.
+function scheduleReattachRelayout() {
+  requestAnimationFrame(() => {
+    relayoutAllMonaco()
+    try { getEditor()?.refresh?.() } catch (_) { /* GrapesJS not ready */ }
+  })
+}
+
+// Wire-once (house pattern: wireLibraryLock). Every handler reads module
+// state (`persistentRoot`, tab vars) — never a render-scoped host, so factory
+// re-runs can't strand them on a detached element.
+function wireCanvasEvents() {
+  if (eventsWired) return
+  eventsWired = true
 
   eventBus.on('viewmode:changed', ({ tab, mode, prev }) => {
     // `prev` is the mode the tab was in before this change. Reading
     // `tab.viewMode` here would always equal `mode` because pageState mutates
     // the tab before emitting — that's how the code→design rebuild was
     // silently never running.
-    applyViewMode(host, mode, prev ?? tab.viewMode)
+    applyViewMode(mode, prev ?? tab.viewMode)
   })
 
   eventBus.on('tab:focused', tab => swapToTab(tab))
@@ -158,7 +223,7 @@ function swapToTab(tab) {
   queueMicrotask(() => { loadingTabName = null })
 }
 
-function installCanvasResizeWatcher(host) {
+function installCanvasResizeWatcher(watchTarget) {
   if (typeof ResizeObserver !== 'function') return
   let pending = false
   let lastW = 0
@@ -168,28 +233,30 @@ function installCanvasResizeWatcher(host) {
     pending = true
     requestAnimationFrame(() => {
       pending = false
-      const w = host.clientWidth | 0
-      const h = host.clientHeight | 0
+      const w = watchTarget.clientWidth | 0
+      const h = watchTarget.clientHeight | 0
       if (w === lastW && h === lastH) return
       lastW = w
       lastH = h
       try { getEditor()?.refresh?.() } catch (_) { /* GrapesJS not ready */ }
     })
   })
-  ro.observe(host)
+  ro.observe(watchTarget)
 }
 
-function applyViewMode(host, next, prev) {
-  const design = host.querySelector('[data-region="canvas-design"]')
-  const code   = host.querySelector('[data-region="canvas-code"]')
+function applyViewMode(next, prev) {
+  if (!persistentRoot) return
+  const design = persistentRoot.querySelector('[data-region="canvas-design"]')
+  const code   = persistentRoot.querySelector('[data-region="canvas-code"]')
   if (!design || !code) return
 
   // Always reset the split flag first — the previous version added .is-split
   // when switching INTO split mode but never removed it on the way out, so a
-  // user who'd ever hit split mode permanently kept the class. With
-  // is-split as a future CSS hook (v0.0.2 50/50 layout), the orphan would
-  // have shipped a layout bug the moment that CSS landed.
-  host.classList.toggle('is-split', next === 'split')
+  // user who'd ever hit split mode permanently kept the class. The class
+  // stays on the GL host (code-view.spec.js pins that); module state backs
+  // it so re-attach after a workspace apply can re-assert it.
+  splitActive = (next === 'split')
+  persistentRoot.parentElement?.classList.toggle('is-split', splitActive)
 
   // Set both hidden flags every transition so we don't depend on the
   // previous state. If user reports "code view stuck behind canvas," that

@@ -46,6 +46,15 @@ const FRAMEWORK_JS = [
 let editor = null
 
 export function initGrapesJS(container) {
+  // Hard double-init guard (Wave 3). The canvas panel's persistent subtree
+  // means this is only ever called once in practice, but a second GrapesJS
+  // editor would silently swap pluginRegistry.bound.editor, duplicate the
+  // plugin:block-registered sub below, and orphan the first editor's canvas
+  // content — so no future caller may ever re-init.
+  if (editor) {
+    log.warn('initGrapesJS called twice — ignored, returning the existing editor')
+    return editor
+  }
   editor = grapesjs.init({
     container,
     fromElement: false,

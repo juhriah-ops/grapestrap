@@ -16,11 +16,15 @@
  * can register additional panels via `api.registerPanel({ id, ... })` which adds
  * them to the available pane menu.
  *
- * Saved layouts (v0.1.0): Golden Layout's toConfig()/loadConfig() round-trip is
- * persisted under $XDG_STATE_HOME/GrapeStrap/workspaces/.
+ * Saved layouts (v0.1.0): captured via saveLayout() → LayoutConfig.fromResolved()
+ * and re-applied via loadLayout() (GL 2.6 API — the older toConfig()/loadConfig()
+ * names this header used to promise do not exist in 2.6), persisted as one JSON
+ * per layout under $XDG_STATE_HOME/GrapeStrap/workspaces/ (see layout/workspaces.js).
+ * This module is the single owner of GL API calls — workspaces.js goes through
+ * getDefaultConfig()/captureLayoutConfig()/applyLayoutConfig(), never GL directly.
  */
 
-import { GoldenLayout } from 'golden-layout'
+import { GoldenLayout, LayoutConfig } from 'golden-layout'
 
 import { eventBus } from '../state/event-bus.js'
 import { renderFileManager } from '../panels/file-manager/index.js'
@@ -103,16 +107,26 @@ const DEFAULT_CONFIG = {
   }
 }
 
+// componentType → factory. Single source of truth for what a saved workspace
+// may reference — workspaces.js validates persisted configs against
+// getRegisteredComponentTypes() before any loadLayout (fail-open on unknown
+// types, e.g. a plugin panel from a since-disabled plugin).
+const PANEL_FACTORIES = {
+  'file-manager':  renderFileManager,
+  'library-items': renderLibraryItems,
+  'asset-manager': renderAssetManager,
+  'dom-tree':      renderDomTree,
+  'canvas':        renderCanvas,
+  'properties':    renderProperties,
+  'custom-css':    renderCustomCss
+}
+
 export function initGoldenLayout(host) {
   layout = new GoldenLayout(host)
 
-  layout.registerComponentFactoryFunction('file-manager',   container => renderFileManager(container.element))
-  layout.registerComponentFactoryFunction('library-items',  container => renderLibraryItems(container.element))
-  layout.registerComponentFactoryFunction('asset-manager',  container => renderAssetManager(container.element))
-  layout.registerComponentFactoryFunction('dom-tree',       container => renderDomTree(container.element))
-  layout.registerComponentFactoryFunction('canvas',         container => renderCanvas(container.element))
-  layout.registerComponentFactoryFunction('properties',     container => renderProperties(container.element))
-  layout.registerComponentFactoryFunction('custom-css',     container => renderCustomCss(container.element))
+  for (const [componentType, render] of Object.entries(PANEL_FACTORIES)) {
+    layout.registerComponentFactoryFunction(componentType, container => render(container.element))
+  }
 
   layout.loadLayout(DEFAULT_CONFIG)
 
@@ -226,4 +240,33 @@ export function getLayout() {
 export function resetLayout() {
   if (!layout) return
   layout.loadLayout(DEFAULT_CONFIG)
+}
+
+// ─── Workspace-layouts surface (Wave 3) ─────────────────────────────────────
+// workspaces.js never imports golden-layout directly — these three wrappers
+// plus getRegisteredComponentTypes() are its whole GL contract.
+
+/** Deep clone of the LOCKED 4-column default config. Presets are built from
+ *  this so they can never drift from the shell (PLAN.md §2.4). */
+export function getDefaultConfig() {
+  return structuredClone(DEFAULT_CONFIG)
+}
+
+/** Current arrangement as a serialisable LayoutConfig (GL 2.6:
+ *  saveLayout() → ResolvedLayoutConfig → LayoutConfig.fromResolved()). */
+export function captureLayoutConfig() {
+  if (!layout || !layout.isInitialised) return null
+  return LayoutConfig.fromResolved(layout.saveLayout())
+}
+
+/** Load a (pre-validated, floor-normalised) LayoutConfig. Throws GL errors
+ *  through to the caller — workspaces.js owns the fail-open catch. */
+export function applyLayoutConfig(config) {
+  if (!layout) throw new Error('applyLayoutConfig: layout not initialised')
+  layout.loadLayout(config)
+}
+
+/** componentTypes a workspace config may reference (the 7 built-in panels). */
+export function getRegisteredComponentTypes() {
+  return Object.keys(PANEL_FACTORIES)
 }
