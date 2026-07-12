@@ -18,8 +18,11 @@ import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
 import { rebuildCanvasFromCode } from '../editor/canvas-sync.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
 import { showTextPrompt } from '../dialogs/text-prompt.js'
+import { showNewPageDialog } from '../dialogs/new-page.js'
 import { duplicateComponent, deleteComponent } from './component-actions.js'
 import { propagateLibraryItem } from '../panels/library-items/propagate.js'
+import { createPage, validateNewName } from '../panels/templates/manage.js'
+import { propagateTemplate, templateRegionsMeta, refreshPageRegionsSnapshot } from '../panels/templates/propagate.js'
 import { openPagePropertiesDialog } from '../dialogs/page-properties.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
@@ -51,9 +54,22 @@ function flushActiveTabIntoProject() {
     }
     return
   }
+  if (tab.kind === 'template') {
+    const tpl = projectState.getTemplate(tab.pageName)
+    if (!tpl) return
+    if (tpl.html !== captured) {
+      tpl.html = captured
+      tpl.regions = templateRegionsMeta(captured)
+      // Save also propagates (same contract as library items).
+      propagateTemplate(tpl.name, captured)
+    }
+    return
+  }
   const page = projectState.getPage(tab.pageName)
   if (!page) return
   page.html = captured
+  // Templated pages keep their manifest regions{} snapshot fresh at save.
+  refreshPageRegionsSnapshot(page)
 }
 
 export function wireMenuActions() {
@@ -180,26 +196,15 @@ async function cmdImportFolder() {
 
 async function cmdNewPage() {
   if (!projectState.current) return eventBus.emit('toast', { type: 'warning', message: 'Open a project first.' })
-  const name = await showTextPrompt({
-    title: 'New page',
-    label: 'Page name (no extension)',
-    initialValue: 'about',
-    placeholder: 'e.g. about',
-    okLabel: 'Create'
+  // Dialog validates inline (duplicate names — Wave 0 bug #6 — and unsafe
+  // charsets); page creation/composition lives in templates/manage.js so the
+  // dialog stays a dumb collector.
+  const result = await showNewPageDialog({
+    templates: projectState.current.templates || [],
+    validateName: validateNewName
   })
-  if (!name) return
-  const page = {
-    name,
-    file: `pages/${name}.html`,
-    templateName: null,
-    regions: {},
-    head: { title: name, description: '' },
-    html: `<main class="container py-5"><h1>${name}</h1></main>\n`
-  }
-  projectState.current.pages.push(page)
-  projectState.markPageDirty(name)
-  pageState.open(name)
-  eventBus.emit('project:dirty-changed')
+  if (!result) return
+  createPage(result.name, result.templateName)
 }
 
 // User reported on nola1 2026-05-03 that toolbar Save / Code / Split
@@ -297,14 +302,14 @@ function cmdDuplicate() {
   const sel = getEditor()?.getSelected?.()
   if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
   if (!duplicateComponent(sel)) {
-    eventBus.emit('toast', { type: 'warning', message: 'Cannot duplicate the page root.' })
+    eventBus.emit('toast', { type: 'warning', message: 'This element cannot be duplicated (root or locked).' })
   }
 }
 function cmdDelete() {
   const sel = getEditor()?.getSelected?.()
   if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
   if (!deleteComponent(sel)) {
-    eventBus.emit('toast', { type: 'warning', message: 'Cannot delete the page root.' })
+    eventBus.emit('toast', { type: 'warning', message: 'This element cannot be deleted (root or locked).' })
   }
 }
 

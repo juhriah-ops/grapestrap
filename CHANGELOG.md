@@ -8,6 +8,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch). Deferred from the 2026-07-06 hygiene sweep: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
 
+### Added (Wave 2 — Master Templates, 2026-07-12)
+- **Master templates** (BUILD_PLAN v4 §14, v5 Wave 2). A template is a body-only chrome fragment saved as `site/templates/<name>.gstrap-tpl`, with editable regions marked by `data-grpstr-region="<id>"` (optional `data-grpstr-region-label`). Pages created from a template store the FULLY COMPOSED body in `page.html` — pages on disk stay standalone/deployable and export needs zero template resolution (`.gstrap-tpl` files never reach an export). New modules: `panels/templates/propagate.js` (pure region extract/compose + template→pages propagation), `lock.js` (chrome lock walk, re-applied on frame load / `component:add` / code-sync rebuild), `manage.js` (create/delete template, create page, detach, make/remove region), `context-items.js`; `dialogs/new-page.js`.
+- **File Manager Templates section** (+ New, dblclick opens a template tab with a `tpl` badge, right-click Delete — refused while pages reference it). Right-click on a templated page: "Edit Master Template", "Detach from Template". Right-click in a template tab: "Make Editable Region…" (refuses nesting + duplicate ids), "Remove Editable Region".
+- **Propagation** mirrors library items: template tab focus-out and save fan the new chrome out to every referencing page, preserving each page's own region content; content for a region the template no longer defines is preserved in the manifest (`pages[].regions`) and warned about, never silently destroyed.
+- **Status bar region indicator** on templated pages: `Region: <id>` / `Locked — template "<name>"` / `Template: <name>` (state in `data-region-state`), plus per-kind tab extension (`.gstrap-tpl`).
+
+### Fixed
+- **`file:new-page` accepted duplicate page names** (Wave 0 finding #6) — the New Page dialog now validates collisions across pages/templates/library ids inline, and rejects unsafe charsets (also closes a latent `pages/../x` path traversal into `page.file` from the old raw prompt).
+- **A missing template file no longer fails the whole project open** — template load is fail-open per entry (`html: ''` + `missingFile` flag, warning toast); pages render from their own composed content.
+- **Canvas edits on a non-page tab dirtied a phantom page** — `canvas:content-changed` now routes template tabs to `markTemplateDirty`.
+- **Delete/Duplicate/Edit-Tag/Wrap command paths bypassed GrapesJS lock flags** — explicit `removable`/`copyable`/`editable` guards in `component-actions.js` (context-menu items grey out too). Also hardens the existing library-item lock, which had the same bypass.
+
+### Changed
+- **Undo contract: canvas history is per VIEW-session** — the code→design rebuild (`rebuildCanvasFromCode`) is now fenced out of undo history and clears it, the same treatment the 2026-07-12 tab-swap fix applied. Undo can no longer restore a component tree the authoritative Monaco buffer doesn't describe; the cost is that hopping to Code view and back drops canvas undo history for that tab.
+- Template files default to `templates/<name>.gstrap-tpl` (was `.html`; `templates[]` has been empty in every real project, and manifests recording an explicit `file` keep it verbatim).
+- Crash-recovery snapshots now capture template-tab edits (design AND code view), carry `templates[].regions` / `pages[].regions`, and replay template propagation on restore.
+
+### Tests
+77 → 87 green (~3.6m). New `tests/e2e/templates.spec.js` (10 specs, round-trip/idempotency anchor first — `data-grpstr-region` + locks survive serialize → code→design rebuild → save → reopen, with byte-equal second serialize). `multi-page.spec.js` new-page selectors updated to the new dialog.
+
 ## [v0.0.2-alpha.13] — 2026-07-06 (patch — panel sync + splitter fixes, Electron 43, hygiene)
 
 Two nola1 bug reports (one being the long-open alpha.12 known follow-up) plus a user-requested hygiene sweep.

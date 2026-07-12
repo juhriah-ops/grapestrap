@@ -45,8 +45,13 @@ function refresh(host) {
   row.innerHTML = pageState.tabs.map((t, i) => {
     const active = i === pageState.activeIndex ? 'is-active' : ''
     const dirty = t.dirty ? ' is-dirty' : ''
-    const kind = t.kind === 'library' ? ' is-library' : ''
-    const badge = t.kind === 'library' ? `<span class="gstrap-tab-badge" title="Library item">lib</span>` : ''
+    // Badge literals are Wave 4 t() sweep targets (file has no t() import).
+    const kind = t.kind === 'library' ? ' is-library' : t.kind === 'template' ? ' is-template' : ''
+    const badge = t.kind === 'library'
+      ? `<span class="gstrap-tab-badge" title="Library item">lib</span>`
+      : t.kind === 'template'
+        ? `<span class="gstrap-tab-badge" title="Master template">tpl</span>`
+        : ''
     const label = t.label || t.pageName
     return `<div class="gstrap-tab ${active}${dirty}${kind}" data-tab="${escAttr(t.pageName)}">
               ${badge}

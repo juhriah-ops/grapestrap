@@ -26,6 +26,7 @@ import { getCanvasHtml } from '../editor/grapesjs-init.js'
 import { getCodeEditorValue } from '../editor/canvas-sync.js'
 import { isFullHtmlDocument, extractPageFromFullHtml } from '../../shared/page-html.js'
 import { updateHtml } from '../panels/library-items/propagate.js'
+import { extractRegions, composeFromTemplate } from '../panels/templates/propagate.js'
 import { showRecoveryDialog } from '../dialogs/recovery.js'
 import { log } from '../log.js'
 
@@ -254,6 +255,11 @@ function overlayActiveTab(projectCopy) {
       if (item) item.html = raw
       return
     }
+    if (tab.kind === 'template') {
+      const tpl = (projectCopy.templates || []).find(tp => tp.name === tab.pageName)
+      if (tpl) tpl.html = raw    // template tabs are body-only in Code view
+      return
+    }
     const page = (projectCopy.pages || []).find(p => p.name === tab.pageName)
     if (!page) return
     if (isFullHtmlDocument(raw)) {
@@ -271,6 +277,9 @@ function overlayActiveTab(projectCopy) {
   if (tab.kind === 'library') {
     const item = (projectCopy.libraryItems || []).find(it => it.id === tab.pageName)
     if (item) item.html = captured
+  } else if (tab.kind === 'template') {
+    const tpl = (projectCopy.templates || []).find(tp => tp.name === tab.pageName)
+    if (tpl) tpl.html = captured
   } else {
     const page = (projectCopy.pages || []).find(p => p.name === tab.pageName)
     if (page) page.html = captured
@@ -372,7 +381,7 @@ function overlaySnapshot(fresh, snapshot) {
   }
   for (const st of snap.templates || []) {
     const tpl = (fresh.templates || []).find(t => t.name === st.name)
-    if (tpl) { tpl.html = st.html; tpl.file = st.file || tpl.file }
+    if (tpl) { tpl.html = st.html; tpl.file = st.file || tpl.file; tpl.regions = st.regions ?? tpl.regions }
     else (fresh.templates = fresh.templates || []).push(st)
   }
   for (const si of snap.libraryItems || []) {
@@ -397,6 +406,24 @@ function overlaySnapshot(fresh, snapshot) {
     if (!item) continue
     for (const page of fresh.pages || []) {
       const updated = updateHtml(page.html || '', id, item.html ?? '')
+      if (updated !== page.html) {
+        page.html = updated
+        touchedPages.add(page.name)
+      }
+    }
+  }
+  // Same replay for templates: a template tab active at crash time never
+  // fanned out. Pure recomposition on the fresh object — no GrapesJS, and
+  // deliberately NOT propagateTemplate (that mutates projectState, which
+  // isn't set yet at this point in restore); mirror the library replay's
+  // pure-helper pattern.
+  for (const name of snapshot.dirty?.templates || []) {
+    const tpl = (fresh.templates || []).find(t => t.name === name)
+    if (!tpl) continue
+    for (const page of fresh.pages || []) {
+      if (page.templateName !== name) continue
+      const { regions } = extractRegions(page.html || '')
+      const updated = composeFromTemplate(tpl.html ?? '', regions)
       if (updated !== page.html) {
         page.html = updated
         touchedPages.add(page.name)

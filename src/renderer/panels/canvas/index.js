@@ -12,6 +12,7 @@ import { bindSync, onViewModeChange } from '../../editor/canvas-sync.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { propagateLibraryItem } from '../library-items/propagate.js'
+import { propagateTemplate, templateRegionsMeta } from '../templates/propagate.js'
 
 let monacoPair = null
 
@@ -79,6 +80,8 @@ export function renderCanvas(host) {
     if (!currentTabName || !projectState.current) return
     if (currentTabKind === 'library') {
       projectState.markLibraryDirty(currentTabName)
+    } else if (currentTabKind === 'template') {
+      projectState.markTemplateDirty(currentTabName)
     } else {
       projectState.markPageDirty(currentTabName)
     }
@@ -104,6 +107,19 @@ function swapToTab(tab) {
         // Skip if nothing actually changed to avoid spurious page dirties.
         if (prev !== captured) propagateLibraryItem(item.id, captured)
       }
+    } else if (currentTabKind === 'template') {
+      const tpl = projectState.getTemplate(currentTabName)
+      if (tpl) {
+        const prev = tpl.html
+        tpl.html = captured
+        // Template focus-out is the propagation moment: recompose every page
+        // built from this template around the new chrome (pages keep their
+        // own region content; orphan warnings are emitted by propagate.js).
+        if (prev !== captured) {
+          tpl.regions = templateRegionsMeta(captured)
+          propagateTemplate(tpl.name, captured)
+        }
+      }
     } else {
       const out = projectState.getPage(currentTabName)
       if (out) out.html = captured
@@ -115,6 +131,10 @@ function swapToTab(tab) {
     const item = projectState.current.libraryItems?.find(it => it.id === tab.pageName)
     if (!item) return
     nextHtml = item.html ?? ''
+  } else if (tab.kind === 'template') {
+    const tpl = projectState.getTemplate(tab.pageName)
+    if (!tpl) return
+    nextHtml = tpl.html ?? ''
   } else {
     const next = projectState.getPage(tab.pageName)
     if (!next) return

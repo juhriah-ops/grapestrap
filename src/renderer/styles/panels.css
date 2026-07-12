@@ -170,3 +170,14 @@
 .gstrap-canvas-host.is-split .gstrap-canvas-code {
   border-left: 1px solid var(--border);
 }
+
+/* Templates section header action (Wave 2 — master templates) */
+.gstrap-fm-section-action {
+  float: right;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}

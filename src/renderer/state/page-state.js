@@ -2,7 +2,7 @@
  * GrapeStrap — Per-tab page state
  *
  * Each open tab holds:
- *   - kind: 'page' | 'library'   (v0.0.2: library items open as tabs alongside pages)
+ *   - kind: 'page' | 'library' | 'template'   (v0.0.2 library items; v0.1.0 master templates)
  *   - pageName: unique tab key (page name for kind='page', library item id for kind='library')
  *   - viewMode: 'design' | 'code' | 'split'
  *   - device: 'Desktop' | 'Tablet' | 'Mobile'

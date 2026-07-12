@@ -94,7 +94,9 @@ function syncCanvasToCode() {
   const tab = pageState.active()
   const body = formatHtml(editor.getHtml())
   let html = body
-  if (tab?.kind !== 'library' && projectState.current) {
+  // Only true PAGE tabs compose the full document; library AND template tabs
+  // are body-only fragments by design (project-manager.js save comment).
+  if ((tab?.kind ?? 'page') === 'page' && projectState.current) {
     const page = projectState.current.pages?.find(p => p.name === tab?.pageName)
     if (page) html = composeFullPageHtml(body, page, projectState.current.manifest || {})
   }
@@ -127,7 +129,7 @@ export function rebuildCanvasFromCode() {
   // typed. Library tabs stay body-only.
   let bodyForCanvas = raw
   const tab = pageState.active()
-  if (tab?.kind !== 'library' && isFullHtmlDocument(raw)) {
+  if ((tab?.kind ?? 'page') === 'page' && isFullHtmlDocument(raw)) {
     const { body, head } = extractPageFromFullHtml(raw)
     bodyForCanvas = body
     if (projectState.current) {
@@ -140,13 +142,24 @@ export function rebuildCanvasFromCode() {
     }
   }
 
+  // Fence the rebuild out of undo history and clear it — the same treatment
+  // as the 2026-07-12 swapToTab fix (canvas/index.js). Contract: canvas undo
+  // history is per VIEW-session; undo must never restore a tree the
+  // authoritative Monaco buffer no longer describes. The sync:code-to-canvas
+  // emit stays INSIDE the stopped window so template-lock re-application
+  // (panels/templates/lock.js) is never recorded either.
+  // Spec: tests/e2e/templates.spec.js "undo contract".
+  const um = editor.UndoManager
   suppressCanvasToCode = true
+  um?.stop()
   try {
     editor.setComponents(bodyForCanvas)
     editor.setStyle(css)
     eventBus.emit('sync:code-to-canvas', { html: bodyForCanvas, css })
     log.debug('rebuilt canvas from code')
   } finally {
+    um?.start()
+    um?.clear()
     // Re-enable after one tick so GrapesJS update events from setComponents
     // don't immediately trigger a back-sync.
     setTimeout(() => { suppressCanvasToCode = false }, 0)

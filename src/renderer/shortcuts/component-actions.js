@@ -22,6 +22,7 @@ import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-
  */
 export function duplicateComponent(component) {
   if (!component) return null
+  if (component.get?.('copyable') === false) return null   // template chrome / library lock
   const parent = component.parent?.()
   if (!parent) return null
   const idx = parent.components().indexOf(component)
@@ -50,6 +51,7 @@ export function duplicateComponent(component) {
 
 export function deleteComponent(component) {
   if (!component) return false
+  if (component.get?.('removable') === false) return false  // template chrome / library lock
   const parent = component.parent?.()
   if (!parent) return false  // can't remove the wrapper
   component.remove()
@@ -68,6 +70,7 @@ export function copyComponentHtml(component) {
 
 export async function editComponentTag(component) {
   if (!component) return null
+  if (component.get?.('editable') === false) return null    // locked
   const initialText = formatComponentAsQuickTag(component)
   const parsed = await showQuickTagDialog({ initialText, mode: 'edit' })
   if (!parsed) return null
@@ -82,6 +85,7 @@ export async function editComponentTag(component) {
 
 export async function wrapComponentInTag(component) {
   if (!component) return null
+  if (component.get?.('editable') === false) return null    // locked
   const parsed = await showQuickTagDialog({ initialText: '<div>', mode: 'wrap' })
   if (!parsed) return null
   const outerHTML = component.toHTML?.() || ''
@@ -101,14 +105,17 @@ export async function wrapComponentInTag(component) {
  */
 export function buildComponentMenuItems(component) {
   const isRoot = !component?.parent?.()
+  const lockedEdit   = component?.get?.('editable')  === false
+  const lockedCopy   = component?.get?.('copyable')  === false
+  const lockedRemove = component?.get?.('removable') === false
   return [
-    { label: 'Edit Tag…',     accelerator: 'Ctrl+T',       action: () => editComponentTag(component),    disabled: !component },
-    { label: 'Wrap with Tag…', accelerator: 'Ctrl+Shift+W', action: () => wrapComponentInTag(component), disabled: !component || isRoot },
+    { label: 'Edit Tag…',     accelerator: 'Ctrl+T',       action: () => editComponentTag(component),    disabled: !component || lockedEdit },
+    { label: 'Wrap with Tag…', accelerator: 'Ctrl+Shift+W', action: () => wrapComponentInTag(component), disabled: !component || isRoot || lockedEdit },
     { separator: true },
-    { label: 'Duplicate',      accelerator: 'Ctrl+D',       action: () => duplicateComponent(component), disabled: !component || isRoot },
+    { label: 'Duplicate',      accelerator: 'Ctrl+D',       action: () => duplicateComponent(component), disabled: !component || isRoot || lockedCopy },
     { label: 'Copy HTML',      accelerator: 'Ctrl+C',       action: () => copyComponentHtml(component),  disabled: !component },
     { separator: true },
-    { label: 'Delete',         accelerator: 'Del',          action: () => deleteComponent(component),    disabled: !component || isRoot, danger: true }
+    { label: 'Delete',         accelerator: 'Del',          action: () => deleteComponent(component),    disabled: !component || isRoot || lockedRemove, danger: true }
   ]
 }
 

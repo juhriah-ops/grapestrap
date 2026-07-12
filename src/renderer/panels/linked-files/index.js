@@ -58,7 +58,8 @@ function debouncedPaint() {
 function paint() {
   if (!host) return
   const tab = pageState.active()
-  if (userHidden || !tab || tab.kind === 'library' || !projectState.current) {
+  // Library AND template tabs are bare body fragments — no head, no links.
+  if (userHidden || !tab || (tab.kind || 'page') !== 'page' || !projectState.current) {
     host.hidden = true
     host.innerHTML = ''
     return

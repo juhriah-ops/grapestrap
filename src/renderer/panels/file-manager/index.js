@@ -8,6 +8,17 @@
 import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
 import { eventBus } from '../../state/event-bus.js'
+import { showTextPrompt } from '../../dialogs/text-prompt.js'
+import { showContextMenu } from '../../dialogs/context-menu.js'
+import { createTemplate, deleteTemplate } from '../templates/manage.js'
+
+// UI_STRINGS — Wave 4 t() sweep target (this file doesn't import t() yet).
+const UI_STRINGS = {
+  templatesTitle: 'Templates',
+  newTemplate: 'New template…',
+  newTemplatePrompt: { title: 'New template', label: 'Template name', initialValue: 'master', okLabel: 'Create' },
+  deleteTemplate: 'Delete Template'
+}
 
 export function renderFileManager(host) {
   host.classList.add('gstrap-fm-host')
@@ -22,7 +33,30 @@ export function renderFileManager(host) {
       const name = pageEl.dataset.fmPage
       pageState.open(name)
     }
+    const tplEl = evt.target.closest('[data-fm-template]')
+    if (tplEl) {
+      const name = tplEl.dataset.fmTemplate
+      pageState.open(name, { kind: 'template', label: name })
+    }
   })
+
+  host.addEventListener('click', async evt => {
+    if (!evt.target.closest('[data-fm-new-template]')) return
+    const name = await showTextPrompt(UI_STRINGS.newTemplatePrompt)
+    if (name) createTemplate(name)     // validates + toasts + opens the tab
+  })
+
+  host.addEventListener('contextmenu', evt => {
+    const tplEl = evt.target.closest('[data-fm-template]')
+    if (!tplEl) return
+    evt.preventDefault()
+    const name = tplEl.dataset.fmTemplate
+    showContextMenu(evt.clientX, evt.clientY, [
+      { label: UI_STRINGS.deleteTemplate, danger: true, action: () => deleteTemplate(name) }
+    ])
+  })
+
+  eventBus.on('templates:changed', () => refresh(host))
 }
 
 function refresh(host) {
@@ -44,10 +78,21 @@ function refresh(host) {
     return `<li class="gstrap-fm-item${dirty}" data-fm-page="${escAttr(p.name)}">${escHtml(p.name)}.html</li>`
   }).join('')
 
+  const templates = (project.templates || []).map(t => {
+    const dirty = projectState.dirtyTemplates.has(t.name) ? ' is-dirty' : ''
+    return `<li class="gstrap-fm-item${dirty}" data-fm-template="${escAttr(t.name)}">${escHtml(t.name)}.gstrap-tpl</li>`
+  }).join('')
+
   host.innerHTML = `
     <div class="gstrap-fm-section">
       <div class="gstrap-fm-section-title">Pages</div>
       <ul class="gstrap-fm-list">${pages}</ul>
+    </div>
+    <div class="gstrap-fm-section">
+      <div class="gstrap-fm-section-title">${UI_STRINGS.templatesTitle}
+        <button class="gstrap-fm-section-action" data-fm-new-template title="${escAttr(UI_STRINGS.newTemplate)}">+</button>
+      </div>
+      <ul class="gstrap-fm-list">${templates}</ul>
     </div>
     <div class="gstrap-fm-section">
       <div class="gstrap-fm-section-title">Styles</div>

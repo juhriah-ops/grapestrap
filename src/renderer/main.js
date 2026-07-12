@@ -53,6 +53,10 @@ import { openPreferencesDialog } from './dialogs/preferences.js'
 import { showWelcomeIfFirstRun } from './dialogs/welcome.js'
 import { showContextMenu } from './dialogs/context-menu.js'
 import { buildComponentMenuItems } from './shortcuts/component-actions.js'
+import { wireTemplateLock } from './panels/templates/lock.js'
+import { buildTemplateMenuItems } from './panels/templates/context-items.js'
+import { createTemplate, deleteTemplate, createPage, detachActivePage } from './panels/templates/manage.js'
+import { propagateTemplate, extractRegions, composeFromTemplate } from './panels/templates/propagate.js'
 import { getCssEditor } from './panels/custom-css/index.js'
 import { log } from './log.js'
 
@@ -98,6 +102,7 @@ async function boot() {
   wireToasts()
   wireViewToggles()
   wireRecovery()
+  wireTemplateLock()
   eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
   // Help menu wiring — both items used to emit events nothing listened to.
@@ -130,7 +135,22 @@ async function boot() {
   //    user dismissal on first run, and we don't want context-menu to be
   //    silently broken until the welcome is closed.
   eventBus.on('canvas:context-menu', ({ x, y, component }) => {
-    showContextMenu(x, y, buildComponentMenuItems(component))
+    showContextMenu(x, y, [
+      ...buildComponentMenuItems(component),
+      ...buildTemplateMenuItems(component)
+    ])
+  })
+
+  // Fail-open warning (F1): loadProject keeps a template entry with
+  // missingFile=true when its .gstrap-tpl is unreadable — surface it.
+  eventBus.on('project:opened', project => {
+    const missing = (project?.templates || []).filter(tp => tp.missingFile).map(tp => tp.name)
+    if (missing.length) {
+      eventBus.emit('toast', {
+        type: 'warning',
+        message: t('tpl.toast.missing-file', { names: missing.join(', ') })
+      })
+    }
   })
 
   // 6. First-run welcome (blocks on user dismissal — must be after every
@@ -158,5 +178,10 @@ boot().catch(err => {
 // contextIsolation, not on hiding this object.
 window.__gstrap = {
   eventBus, projectState, pageState, pluginRegistry, getCssEditor, recoveryState,
-  i18n: { t, setLocale, getLocale, getAvailableLanguages, isReady }
+  i18n: { t, setLocale, getLocale, getAvailableLanguages, isReady },
+  // Wave 2 test surface — templates.spec.js drives these; also handy in devtools.
+  templates: {
+    createTemplate, deleteTemplate, createPage, detachActivePage,
+    propagateTemplate, extractRegions, composeFromTemplate
+  }
 }

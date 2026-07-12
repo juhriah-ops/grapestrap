@@ -55,11 +55,13 @@ test('Multi-page: file:new-page command → prompt → page created, tab opened,
   // and swallows pointer input until actually dismissed.
   await dismissWelcome(appWindow)
 
-  // Drive the REAL command path: menu-router cmdNewPage → text-prompt dialog.
+  // Drive the REAL command path: menu-router cmdNewPage → New Page dialog
+  // (Wave 2 replaced the bare text prompt with dialogs/new-page.js — name
+  // field + template select + inline validation).
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('command', 'file:new-page'))
   await appWindow.waitForSelector('.gstrap-prompt-card', { timeout: 3_000 })
-  await appWindow.fill('.gstrap-prompt-input', 'about')
-  await appWindow.click('.gstrap-prompt-actions [data-action="ok"]')
+  await appWindow.fill('[data-np-name]', 'about')
+  await appWindow.click('[data-np-ok]')
 
   // Page lands in the manifest, the tab opens focused, canvas shows its html.
   await appWindow.waitForFunction(

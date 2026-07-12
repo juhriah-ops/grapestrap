@@ -526,8 +526,17 @@ export async function loadProject(manifestPath) {
   )
   const templates = await Promise.all(
     (manifest.templates || []).map(async tpl => {
-      const html = await fsp.readFile(join(site, tpl.file), 'utf8')
-      return { ...tpl, html }
+      // Fail OPEN (Wave 2): a missing .gstrap-tpl must not block the whole
+      // project — pages hold their own composed content, so only propagation
+      // is impossible until the template is re-saved. The renderer toasts a
+      // warning off the missingFile flag (renderer/main.js project:opened).
+      try {
+        const html = await fsp.readFile(join(site, tpl.file), 'utf8')
+        return { ...tpl, html }
+      } catch (err) {
+        console.warn(`[grapestrap] template file unreadable: ${tpl.file} (${err?.code || err?.message})`)
+        return { ...tpl, html: '', missingFile: true }
+      }
     })
   )
   const libraryItems = await Promise.all(
@@ -588,7 +597,7 @@ export async function saveProject(project) {
     await writeAtomic(join(site, file), fullHtml)
   }
   for (const tpl of templates) {
-    const file = tpl.file || `templates/${tpl.name}.html`
+    const file = tpl.file || `templates/${tpl.name}.gstrap-tpl`
     await writeAtomic(join(site, file), tpl.html ?? '')
   }
   for (const item of libraryItems) {
@@ -607,7 +616,8 @@ export async function saveProject(project) {
     ...manifest,
     metadata: { ...manifest.metadata, modified: now, lastSavedAt: now },
     pages:        pages.map(({ html, ...p }) => ({ ...p, file: p.file || `pages/${p.name}.html` })),
-    templates:    templates.map(({ html, ...t }) => ({ ...t, file: t.file || `templates/${t.name}.html` })),
+    // missingFile is runtime state from the fail-open load path — never persist it.
+    templates:    templates.map(({ html, missingFile, ...t }) => ({ ...t, file: t.file || `templates/${t.name}.gstrap-tpl` })),
     libraryItems: libraryItems.map(({ html, ...l }) => ({ ...l, file: l.file || `library/${l.id}.html` })),
     snippets:     snippets
   }

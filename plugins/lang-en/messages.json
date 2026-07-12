@@ -70,5 +70,39 @@
   "welcome.title": "Welcome to GrapeStrap",
   "welcome.tagline": "The Dreamweaver-style visual editor for Bootstrap 5 on Linux.",
   "welcome.dismiss": "Don't show again",
-  "welcome.docs": "Open Docs"
+  "welcome.docs": "Open Docs",
+
+  "dialog.new-page.title": "New page",
+  "dialog.new-page.name-label": "Page name (no extension)",
+  "dialog.new-page.name-placeholder": "e.g. about",
+  "dialog.new-page.name-required": "Enter a page name.",
+  "dialog.new-page.template-label": "Master template",
+  "dialog.new-page.template-none": "None — standalone page",
+  "dialog.new-page.create": "Create",
+  "dialog.new-page.cancel": "Cancel",
+
+  "tpl.menu.make-region": "Make Editable Region…",
+  "tpl.menu.remove-region": "Remove Editable Region",
+  "tpl.menu.edit-master": "Edit Master Template \"{name}\"",
+  "tpl.menu.detach": "Detach from Template",
+
+  "tpl.dialog.make-region-title": "New editable region",
+  "tpl.dialog.make-region-label": "Region id",
+  "tpl.dialog.make-region-ok": "Mark Region",
+
+  "tpl.toast.no-project": "Open or create a project first.",
+  "tpl.toast.in-use": "Template is used by {count} page(s). Detach them first.",
+  "tpl.toast.detached": "Detached from template — this page is now a free copy.",
+  "tpl.toast.missing-file": "Template file(s) missing on disk: {names}. Pages open read-only-chrome as saved; re-save the template to regenerate.",
+  "tpl.toast.orphaned-regions": "Region content preserved in the manifest for removed region(s): {details}",
+
+  "tpl.error.bad-name": "Names must start with a letter or digit and use only letters, digits, - and _.",
+  "tpl.error.name-taken-page": "A page with this name already exists.",
+  "tpl.error.name-taken-template": "A template with this name already exists.",
+  "tpl.error.name-taken-library": "A library item with this id already exists.",
+  "tpl.error.no-such-template": "Template \"{name}\" was not found.",
+  "tpl.error.region-on-root": "The page root cannot be a region.",
+  "tpl.error.region-nested": "This element is already inside an editable region — regions cannot nest.",
+  "tpl.error.region-contains": "This element contains an editable region — regions cannot nest.",
+  "tpl.error.region-duplicate": "A region with id \"{id}\" already exists in this template."
 }

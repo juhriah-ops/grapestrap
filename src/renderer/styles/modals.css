@@ -154,3 +154,10 @@
   justify-content: flex-end;
   margin-top: 4px;
 }
+
+/* Inline validation error inside prompt-style dialogs (Wave 2 new-page) */
+.gstrap-prompt-error {
+  color: #f48771;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
