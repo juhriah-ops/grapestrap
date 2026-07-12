@@ -215,12 +215,7 @@ async function cmdSave() {
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.save(projectState.current)
   if (result) {
-    projectState.dirtyPages.clear()
-    projectState.dirtyTemplates.clear()
-    projectState.dirtyLibrary.clear()
-    projectState.globalCssDirty = false
-    projectState.dirtySnippets.clear()
-    projectState.manifestDirty = false
+    projectState.markAllClean()
     eventBus.emit('project:saved', result)
     eventBus.emit('toast', { type: 'success', message: 'Saved.' })
   }
@@ -239,12 +234,7 @@ async function cmdRefresh() {
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.save(projectState.current)
   if (result) {
-    projectState.dirtyPages.clear()
-    projectState.dirtyTemplates.clear()
-    projectState.dirtyLibrary.clear()
-    projectState.globalCssDirty = false
-    projectState.dirtySnippets.clear()
-    projectState.manifestDirty = false
+    projectState.markAllClean()
     eventBus.emit('project:saved', result)
   }
   // Re-sync everything that subscribes to these channels: globalCSS into

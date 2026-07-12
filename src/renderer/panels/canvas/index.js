@@ -122,7 +122,15 @@ function swapToTab(tab) {
   }
 
   loadingTabName = tab.pageName
+  // Fence the swap out of undo history: without this, GrapesJS records the
+  // setComponents reset, and undo on the incoming tab restores the OUTGOING
+  // page's component tree — which then saves under the wrong page file.
+  // History is per-tab-session: cleared on every swap.
+  const um = getEditor()?.UndoManager
+  um?.stop()
   loadHtmlIntoCanvas(nextHtml)
+  um?.start()
+  um?.clear()
   currentTabName = tab.pageName
   currentTabKind = tab.kind || 'page'
   // setComponents fires synchronously; release the load guard on the next tick

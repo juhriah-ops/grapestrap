@@ -67,6 +67,21 @@ class ProjectState {
   markManifestDirty()     { this.manifestDirty = true;     eventBus.emit('project:dirty-changed', this.snapshot()) }
   markManifestClean()     { this.manifestDirty = false;    eventBus.emit('project:dirty-changed', this.snapshot()) }
 
+  // Post-save reset. The save commands used to clear the six dirty fields
+  // directly, which skipped 'project:dirty-changed' — file-manager dots, tab
+  // markers, and the status bar all kept showing dirty until the next edit.
+  // Same bypass class as the snippets/library audit gap above: mutate through
+  // the methods so subscribers hear about it.
+  markAllClean() {
+    this.dirtyPages.clear()
+    this.dirtyTemplates.clear()
+    this.dirtyLibrary.clear()
+    this.dirtySnippets.clear()
+    this.globalCssDirty = false
+    this.manifestDirty = false
+    eventBus.emit('project:dirty-changed', this.snapshot())
+  }
+
   isDirty() {
     return this.dirtyPages.size > 0 ||
            this.dirtyTemplates.size > 0 ||
