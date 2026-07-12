@@ -45,6 +45,7 @@ import { renderBreakpointsBar } from './panels/breakpoints/index.js'
 import { wireViewToggles } from './panels/view-toggles.js'
 import { initWorkspaces, workspacesTestSurface } from './layout/workspaces.js'
 import { wirePreview, previewTestSurface } from './preview.js'
+import { initGitState, gitState } from './state/git-state.js'
 import { renderStatusBar } from './status-bar/status-bar.js'
 import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
@@ -113,6 +114,11 @@ async function boot() {
   // events into the refresh debounce, and reset preview state on project
   // switch. The server side lives in main's preview-server.js.
   wirePreview()
+  // Git status (Wave 3): cache main's git:status pushes and re-emit them on
+  // the eventBus with late-subscriber replay via gitState.latest. Wired
+  // before any project can open so no push is missed; rendering lives in
+  // file-manager (dots) + status-bar (branch cell).
+  initGitState()
   eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
   // Help menu wiring — both items used to emit events nothing listened to.
@@ -199,5 +205,8 @@ window.__gstrap = {
   workspaces: workspacesTestSurface,
   // Wave 3 test surface — preview.spec.js reads status() (url/port/cacheDir)
   // and drives refresh()/stop().
-  preview: previewTestSurface
+  preview: previewTestSurface,
+  // Wave 3 test surface — git-status.spec.js reads the latest pushed payload
+  // (refresh itself is driven through the public window.grapestrap.git bridge).
+  git: gitState
 }

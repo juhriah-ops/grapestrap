@@ -29,6 +29,7 @@ import {
   deleteWorkspace, renameWorkspace
 } from './workspace-store.js'
 import { startPreview, refreshPreview, stopPreview } from './preview-server.js'
+import { bindGitStatus, notifyChange as notifyGitChange, refreshNow as refreshGitStatus } from './git-status.js'
 
 let pluginRegistryRef = null
 
@@ -132,7 +133,12 @@ export function registerIpcHandlers({ pluginRegistry }) {
   })
 
   ipcMain.handle('project:save', async (_e, project) => {
-    return saveProject(project)
+    const result = await saveProject(project)
+    // Git-status nudge (V8): chokidar already reports the written files, so
+    // this is redundant-by-design — kept for latency and to survive a future
+    // watcher-ignore change. No-op when the project isn't a repo-rooted dir.
+    notifyGitChange()
+    return result
   })
 
   ipcMain.handle('project:save-as', async (_e, project) => {
@@ -280,6 +286,12 @@ export function registerIpcHandlers({ pluginRegistry }) {
   ipcMain.handle('preview:refresh', (_e, project)       => refreshPreview(project))
   ipcMain.handle('preview:stop',    ()                  => stopPreview())
 
+  // ─── Git status (Wave 3) ───────────────────────────────────────────────────
+  // Forces an immediate probe+status, skipping the debounce. Resolves with
+  // the wire payload, or null when no project is open — never throws across
+  // the bridge (F11). Pushes land on `git:status` like every other broadcast.
+  ipcMain.handle('git:refresh', () => refreshGitStatus())
+
   // ─── External shell actions ────────────────────────────────────────────────
   ipcMain.handle('shell:open-external', (_e, url) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)
@@ -359,6 +371,15 @@ async function bindProjectWatcher(manifestPath) {
   await setProjectRoot(projectDir, evt => {
     BrowserWindow.getAllWindows().forEach(w => {
       if (!w.isDestroyed()) w.webContents.send(`file:${evt.kind}`, evt.path)
+    })
+    // Git-status debounce rides the same watcher events — no second chokidar.
+    notifyGitChange()
+  })
+  // Re-bind the git-status service and push one immediate status so the
+  // branch cell paints on open without waiting for any file event.
+  await bindGitStatus(projectDir, payload => {
+    BrowserWindow.getAllWindows().forEach(w => {
+      if (!w.isDestroyed()) w.webContents.send('git:status', payload)
     })
   })
 }

@@ -35,6 +35,7 @@ import { applyDisplayProtocolFlags } from './platform/wayland.js'
 import { initLogger, log } from './logger.js'
 import { initPrefs } from './prefs.js'
 import { registerIpcHandlers } from './ipc-handlers.js'
+import { notifyChange as notifyGitChange } from './git-status.js'
 import { buildMenu } from './menus.js'
 import { discoverPlugins } from './plugin-loader.js'
 
@@ -153,6 +154,12 @@ app.on('second-instance', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+// Git-status focus refresh (Wave 3, V3): chokidar ignores dotdirs, so
+// terminal-side git operations fire no watcher events — re-probing on
+// "alt-tabbed back to the editor" bounds that staleness. No-op when no
+// project is bound.
+app.on('browser-window-focus', () => notifyGitChange())
 
 // Block creation of unexpected windows. Renderer requests for new windows go through
 // shell.openExternal via IPC; nothing else should ever spawn a BrowserWindow.

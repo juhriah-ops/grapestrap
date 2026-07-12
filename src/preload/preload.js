@@ -82,6 +82,12 @@ const grapestrap = {
     stop:    ()              => ipcRenderer.invoke('preview:stop')
   },
 
+  // ─── Git status (Wave 3) ───────────────────────────────────────────────────
+  git: {
+    refresh:  ()   => ipcRenderer.invoke('git:refresh'),
+    onStatus: (cb) => subscribe('git:status', cb)
+  },
+
   // ─── Native menu actions ───────────────────────────────────────────────────
   menu: {
     onAction: (cb) => subscribe('menu:action', cb),

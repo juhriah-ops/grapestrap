@@ -67,6 +67,17 @@
   color: var(--accent);
   margin-left: 4px;
 }
+/* Wave 3 git-status dot — ::before keyed on the data-git-state attribute
+   (state lives in data-*, not class names); the unsaved-dirty dot above
+   stays ::after on .is-dirty — different pseudo-element, different hook,
+   zero collision. No attribute = no dot (clean file or non-repo project). */
+.gstrap-fm-item[data-git-state]::before {
+  content: '●';
+  margin-right: 5px;
+  font-size: 8px;
+}
+.gstrap-fm-item[data-git-state="modified"]::before  { color: var(--warning); }
+.gstrap-fm-item[data-git-state="untracked"]::before { color: var(--info); }
 
 /* ── Properties / Custom CSS containers ───────────────────────────────────── */
 /* See note above the file-manager block for why we use height:100% +

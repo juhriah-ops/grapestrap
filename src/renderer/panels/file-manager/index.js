@@ -15,6 +15,7 @@
 
 import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
+import { gitState } from '../../state/git-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
 import { showContextMenu } from '../../dialogs/context-menu.js'
@@ -77,6 +78,7 @@ function wireFmEvents() {
   eventBus.on('project:closed',        () => refresh())
   eventBus.on('project:dirty-changed', () => refresh())
   eventBus.on('templates:changed',     () => refresh())
+  eventBus.on('git:status-changed',    () => refresh())
 }
 
 function refresh() {
@@ -95,14 +97,31 @@ function refresh() {
     return
   }
 
+  // Git dots (Wave 3): stamp data-git-state on rows whose project-relative
+  // path appears in the latest git:status payload. Untracked wins over
+  // modified (a new file is "new" even once staged); clean / non-repo rows
+  // get NO attribute — render nothing, not an empty value. Manifest paths
+  // (page.file / template.file) are site/-relative; git paths are
+  // project-relative because the repo root IS the project root (F6 guard).
+  const gs = gitState.latest
+  const changedSet = new Set(gs?.repo ? gs.changed : [])
+  const untrackedSet = new Set(gs?.repo ? gs.untracked : [])
+  const gitAttr = relPath => {
+    if (untrackedSet.has(relPath)) return ' data-git-state="untracked"'
+    if (changedSet.has(relPath)) return ' data-git-state="modified"'
+    return ''
+  }
+
   const pages = project.pages.map(p => {
     const dirty = projectState.dirtyPages.has(p.name) ? ' is-dirty' : ''
-    return `<li class="gstrap-fm-item${dirty}" data-fm-page="${escAttr(p.name)}">${escHtml(p.name)}.html</li>`
+    const git = gitAttr(`site/${p.file || `pages/${p.name}.html`}`)
+    return `<li class="gstrap-fm-item${dirty}"${git} data-fm-page="${escAttr(p.name)}">${escHtml(p.name)}.html</li>`
   }).join('')
 
   const templates = (project.templates || []).map(t => {
     const dirty = projectState.dirtyTemplates.has(t.name) ? ' is-dirty' : ''
-    return `<li class="gstrap-fm-item${dirty}" data-fm-template="${escAttr(t.name)}">${escHtml(t.name)}.gstrap-tpl</li>`
+    const git = gitAttr(`site/${t.file || `templates/${t.name}.gstrap-tpl`}`)
+    return `<li class="gstrap-fm-item${dirty}"${git} data-fm-template="${escAttr(t.name)}">${escHtml(t.name)}.gstrap-tpl</li>`
   }).join('')
 
   host.innerHTML = `
@@ -119,7 +138,7 @@ function refresh() {
     <div class="gstrap-fm-section">
       <div class="gstrap-fm-section-title">Styles</div>
       <ul class="gstrap-fm-list">
-        <li class="gstrap-fm-item${projectState.globalCssDirty ? ' is-dirty' : ''}">style.css</li>
+        <li class="gstrap-fm-item${projectState.globalCssDirty ? ' is-dirty' : ''}"${gitAttr('site/style.css')}>style.css</li>
       </ul>
     </div>
     <div class="gstrap-fm-section">

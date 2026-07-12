@@ -10,6 +10,7 @@
 
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
+import { gitState } from '../state/git-state.js'
 import { eventBus } from '../state/event-bus.js'
 import { findRegionId } from '../panels/templates/lock.js'
 
@@ -34,6 +35,7 @@ export function renderStatusBar(target) {
   eventBus.on('device:changed',         refresh)
   eventBus.on('canvas:selected',        component => { lastSelected = component; refresh() })
   eventBus.on('canvas:deselected',      () => { lastSelected = null; refresh() })
+  eventBus.on('git:status-changed',     refresh)
 }
 
 function refresh() {
@@ -47,6 +49,22 @@ function refresh() {
     const ext = tab.kind === 'template' ? '.gstrap-tpl' : '.html'
     parts.push(`<span class="gstrap-sb-cell">${escHtml(tab.pageName)}${ext}</span>`)
     parts.push(`<span class="gstrap-sb-cell">${escHtml(tab.device)}</span>`)
+  }
+
+  // Git branch cell (Wave 3) — pushed into parts[] ONLY for a repo-rooted
+  // project (never an empty cell; region-cell precedent). Arrows render only
+  // with an upstream AND a non-zero count (V4); detached shows simple-git's
+  // 'HEAD' plus a data-git-detached stamp (V5). Branch names + arrow glyphs
+  // are data, not prose — no t() strings here.
+  const git = gitState.latest
+  if (project && git?.repo) {
+    let text = escHtml(git.branch || 'HEAD')
+    if (git.tracking) {
+      if (git.ahead > 0) text += ` ↑${git.ahead}`
+      if (git.behind > 0) text += ` ↓${git.behind}`
+    }
+    const detached = git.detached ? ' data-git-detached=""' : ''
+    parts.push(`<span class="gstrap-sb-cell gstrap-sb-git" data-git-branch="${escHtml(git.branch || 'HEAD')}"${detached}>${text}</span>`)
   }
 
   // Region indicator — only on pages built from a master template (v4 §14
