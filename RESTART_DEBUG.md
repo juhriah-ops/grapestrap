@@ -8,17 +8,18 @@ Paste this into a fresh Claude session. Self-contained — assumes no memory of 
 
 You are picking up a GrapeStrap debug session. The user runs the app on nola1 (Linux workstation `jsmith@192.168.0.192`) and reports bugs from real-project testing. The most recent stretch shipped four patch releases — alpha.9 → alpha.12 — driven by a single evening of nola1 reports about the right-side panel column.
 
-State at session start (updated 2026-07-12 — Wave 0 of the v0.1.0 campaign complete):
+State at session start (updated 2026-07-12 — Waves 0 AND 1 of the v0.1.0 campaign complete):
 
 - Repo: `/home/numb1/projects/grapestrap`
 - Branch: `main`, clean tree
-- HEAD: `f70f9ef` (Wave 0 complete: spec split into 9 domain files + helpers.js, plugin-semver landmine defused, CI e2e enabled, coverage-hole specs). Last tag: `v0.0.2-alpha.13`; package.json is `0.1.0-rc.0` UNTAGGED on purpose — the rc ladder tags in Wave 6.
-- Specs: 68/68 green via `xvfb-run -a npx playwright test` (~2.7m). Shared helpers in `tests/e2e/helpers.js` (launch, openSeedProject, selectFirstByTag, dismissWelcome, EXPECTED_PLUGIN_COUNT).
-- Wave 0 also fixed two app bugs its specs surfaced: cross-tab undo leaked the previous page's tree (UndoManager fence in `swapToTab`, canvas/index.js) and save never cleared dirty dots (`projectState.markAllClean()`, menu-router cmdSave/cmdRefresh).
+- HEAD: `db846b8` (Wave 0: spec split into 9 domain files + helpers.js, plugin-semver landmine defused, CI e2e enabled, coverage-hole specs. Wave 1: crash recovery + i18n runtime core). Last tag: `v0.0.2-alpha.13`; package.json is `0.1.0-rc.0` UNTAGGED on purpose — the rc ladder tags in Wave 6.
+- Specs: 77/77 green via `xvfb-run -a npx playwright test` (~3.2m). Shared helpers in `tests/e2e/helpers.js` (launch, openSeedProject, selectFirstByTag, dismissWelcome, EXPECTED_PLUGIN_COUNT). Suite drives `dist/main/main.js` — `npm run build` REQUIRED before e2e after any src/ change.
+- Wave 0 fixed two app bugs its specs surfaced: cross-tab undo leaked the previous page's tree (UndoManager fence in `swapToTab`, canvas/index.js) and save never cleared dirty dots (`projectState.markAllClean()`).
+- Wave 1: `.gstrap.recovery` autosave snapshots + restore/discard dialog (`src/renderer/state/recovery.js`, `dialogs/recovery.js`, IPC `project:clear-recovery`); i18n runtime (`src/renderer/i18n.js`, pref `general.language`, `window.__gstrap.i18n`, one demo t() conversion — the sweep is Wave 4).
 - Origin: `github.com/juhriah-ops/grapestrap` — local is AHEAD; pushes are user-gated.
 - nola1: synced via tar pipe (no git/rsync there). Verify with `cat .git/refs/heads/main`.
 
-**The campaign roadmap is `GRAPESTRAP_BUILD_PLAN_v5.md`** (v4 stays canonical for feature specs only). Next: Wave 1 — crash recovery + i18n runtime core. Known product decision parked for Wave 2: undo-across-code-view-sync has no contract (see sandbox-artifacts/grapestrap/w0-coverage-specs/PLAN.md). Read the auto-memory entry at `~/.claude/projects/-home-numb1/memory/session_2026_05_05_grapestrap_alpha9_12.md` for the full architecture context (still canonical for the layout notes below).
+**The campaign roadmap is `GRAPESTRAP_BUILD_PLAN_v5.md`** (v4 stays canonical for feature specs only). Next: Wave 2 — Master Templates (integrates first, failing round-trip spec is deliverable #1), then drag-to-resize. Known product decision parked for Wave 2: undo-across-code-view-sync has no contract (see sandbox-artifacts/grapestrap/w0-coverage-specs/PLAN.md). Read the auto-memory entry at `~/.claude/projects/-home-numb1/memory/session_2026_05_05_grapestrap_alpha9_12.md` for the full architecture context (still canonical for the layout notes below).
 
 ## What landed alpha.9 → alpha.12 (in priority of "things you'll touch when debugging")
 
