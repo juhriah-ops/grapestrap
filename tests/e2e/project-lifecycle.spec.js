@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject } from './helpers.js'
+import { launch, openSeedProject, EXPECTED_PLUGIN_COUNT } from './helpers.js'
 
 /**
  * GrapeStrap — M1 smoke test
@@ -36,8 +36,8 @@ test('M1 smoke: open → edit → save → reopen', async () => {
 
     // Wait for plugin host to come up so canvas is ready to swap content.
     await appWindow.waitForFunction(
-      () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-      null, { timeout: 15_000 }
+      n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+      EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
     )
 
     // Drive project creation through the same IPC the renderer uses on File→New,
@@ -277,8 +277,8 @@ test('Project layout: .gstrap at root + site/ subdir for deployable web content'
 
   const { app: app2, appWindow: w2 } = await launch()
   await w2.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
   const errorMsg = await w2.evaluate(async (path) => {
     try { await window.grapestrap.project.open(path); return null }
@@ -399,8 +399,8 @@ test('Pages on disk: saved as full HTML with framework links in <head>', async (
 
   const { app: app2, appWindow: w2 } = await launch()
   await w2.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
   const reload = await w2.evaluate(async path => {
     const project = await window.grapestrap.project.open(path)

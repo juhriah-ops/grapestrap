@@ -7,6 +7,6 @@
   "license": "MIT",
   "type": "language",
   "main": "index.js",
-  "grapestrapVersion": ">=0.0.1 <0.1.0",
+  "grapestrapVersion": ">=0.0.1 <0.2.0",
   "permissions": []
 }

@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject } from './helpers.js'
+import { launch, openSeedProject, EXPECTED_PLUGIN_COUNT } from './helpers.js'
 
 test('Code view shows pretty-printed HTML, not the GrapesJS one-liner', async () => {
   // Regression for "HTML output is on one line — needs to be readable".
@@ -106,8 +106,8 @@ test('Toolbar Save / Code / Split work after File→New (cmdNewProject path, not
   const { app, appWindow } = await launch()
   // Wait for the renderer to fully boot: command listeners + plugins active.
   await appWindow.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
   await appWindow.waitForFunction(
     () => window.__gstrap.eventBus.listenerCount('command') > 0,

@@ -1,6 +1,6 @@
 {
   "name": "grapestrap",
-  "version": "0.0.2-alpha.13",
+  "version": "0.1.0-rc.0",
   "description": "Visual Bootstrap 5 editor for Linux. Dreamweaver alternative, MIT, no telemetry.",
   "main": "dist/main/main.js",
   "type": "module",
@@ -57,7 +57,7 @@
   "build": {
     "appId": "org.grapestrap.GrapeStrap",
     "productName": "GrapeStrap",
-    "copyright": "Copyright \u00a9 2026 GrapeStrap Contributors",
+    "copyright": "Copyright © 2026 GrapeStrap Contributors",
     "asar": true,
     "directories": {
       "output": "release"

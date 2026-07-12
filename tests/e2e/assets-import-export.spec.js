@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject, selectFirstByTag } from './helpers.js'
+import { launch, openSeedProject, selectFirstByTag, EXPECTED_PLUGIN_COUNT } from './helpers.js'
 
 test('Asset Manager: lists project assets, click-inserts an image into the canvas', async () => {
   // v0.0.2 patch — Asset Manager panel + base href preview. Verifies:
@@ -111,8 +111,8 @@ test('Import folder: scans HTML + assets and opens as a project', async () => {
 
   const { app, appWindow } = await launch()
   await appWindow.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
 
   // Bypass the dialog pickers by passing both paths through the IPC directly.
@@ -293,8 +293,8 @@ test('Import folder: preserves head <link>/<script> + arbitrary subdirs (css/, j
 
   const { app, appWindow } = await launch()
   await appWindow.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
 
   const project = await appWindow.evaluate(opts =>

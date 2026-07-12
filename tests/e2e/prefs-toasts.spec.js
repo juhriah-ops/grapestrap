@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject } from './helpers.js'
+import { launch, openSeedProject, EXPECTED_PLUGIN_COUNT } from './helpers.js'
 
 test('Toasts: save success renders a visible "Saved." toast card', async () => {
   // Reported on nola1 2026-05-03: "no indication of save but its saving."
@@ -85,8 +85,8 @@ test('Preferences: Shortcuts tab rebinds a command, persists, and takes effect i
   // (both happen inside boot() after the plugin host comes up). Wait for it
   // before firing the event.
   await appWindow.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
 
   // Open the preferences dialog.

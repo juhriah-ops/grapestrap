@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject, selectFirstByTag } from './helpers.js'
+import { launch, openSeedProject, selectFirstByTag, EXPECTED_PLUGIN_COUNT } from './helpers.js'
 
 test('Quick Tag Editor: Ctrl+T renames the selected element', async () => {
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-qt-'))
@@ -117,8 +117,8 @@ test('DOM tree mirrors canvas + click selects component', async () => {
 
   const { app, appWindow } = await launch()
   await appWindow.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
 
   // Create + open a project so the canvas has the seed index page loaded.
@@ -169,8 +169,8 @@ test('Right-click on DOM tree row opens context menu; Duplicate adds a sibling; 
 
   const { app, appWindow } = await launch()
   await appWindow.waitForFunction(
-    () => window.__gstrap?.pluginRegistry?.activated?.length === 5,
-    null, { timeout: 15_000 }
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
   )
 
   await appWindow.evaluate(async path => {
