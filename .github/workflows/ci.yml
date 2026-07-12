@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Lint + smoke test
+    name: Lint + build + e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,10 +16,28 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libnotify-dev \
+            libnss3 \
+            libxss1 \
+            libxtst6 \
+            xdg-utils \
+            libasound2-dev \
+            libsecret-1-dev \
+            xvfb
       - run: npm ci
       - run: npm run lint
-        continue-on-error: true
       - run: npm run build
-      # Playwright E2E once we wire it (post-M1 deliverable):
-      # - run: npx playwright install --with-deps chromium
-      # - run: xvfb-run --auto-servernum npm run test:e2e
+      - name: E2E suite (Playwright drives dist/main/main.js under Xvfb)
+        run: xvfb-run --auto-servernum npm run test:e2e
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
