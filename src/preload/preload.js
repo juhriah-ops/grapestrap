@@ -75,6 +75,13 @@ const grapestrap = {
     rename: (oldName, newName) => ipcRenderer.invoke('workspaces:rename', oldName, newName)
   },
 
+  // ─── Preview in browser (Wave 3) ───────────────────────────────────────────
+  preview: {
+    start:   (project, opts) => ipcRenderer.invoke('preview:start', project, opts),
+    refresh: (project)       => ipcRenderer.invoke('preview:refresh', project),
+    stop:    ()              => ipcRenderer.invoke('preview:stop')
+  },
+
   // ─── Native menu actions ───────────────────────────────────────────────────
   menu: {
     onAction: (cb) => subscribe('menu:action', cb),

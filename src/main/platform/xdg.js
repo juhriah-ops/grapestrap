@@ -40,6 +40,10 @@ export const xdg = {
   pluginsDir:       join(xdgPaths.config, 'plugins'),
   snippetsDir:      join(xdgPaths.config, 'snippets'),
   workspacesDir:    join(xdgPaths.state,  'workspaces'),
+  // Preview export caches, one <slug>/ per project (preview-server.js).
+  // Deliberately NOT in ensureXdgDirs() — created on demand by the export
+  // mkdir, so the key ships with its consumer rather than as an empty dir.
+  previewDir:       join(xdgPaths.cache,  'preview'),
   logsDir:          join(xdgPaths.data,   'logs'),
   pluginDataDir:    join(xdgPaths.data,   'plugin-data'),
   recoveryDir:      join(xdgPaths.data,   'recovery'),

@@ -44,6 +44,7 @@ import { renderLinkedFilesBar } from './panels/linked-files/index.js'
 import { renderBreakpointsBar } from './panels/breakpoints/index.js'
 import { wireViewToggles } from './panels/view-toggles.js'
 import { initWorkspaces, workspacesTestSurface } from './layout/workspaces.js'
+import { wirePreview, previewTestSurface } from './preview.js'
 import { renderStatusBar } from './status-bar/status-bar.js'
 import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
@@ -108,6 +109,10 @@ async function boot() {
   // into the native View → Workspace Layouts submenu. Fire-and-forget — the
   // submenu fills in when the list IPC round-trips.
   initWorkspaces()
+  // Preview in browser (Wave 3): funnel project:saved + external watcher
+  // events into the refresh debounce, and reset preview state on project
+  // switch. The server side lives in main's preview-server.js.
+  wirePreview()
   eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
   // Help menu wiring — both items used to emit events nothing listened to.
@@ -191,5 +196,8 @@ window.__gstrap = {
   },
   // Wave 3 test surface — workspaces.spec.js drives these (e2e never touches
   // native menus; they're not in the DOM).
-  workspaces: workspacesTestSurface
+  workspaces: workspacesTestSurface,
+  // Wave 3 test surface — preview.spec.js reads status() (url/port/cacheDir)
+  // and drives refresh()/stop().
+  preview: previewTestSurface
 }

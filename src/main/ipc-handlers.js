@@ -28,6 +28,7 @@ import {
   listWorkspaces, readWorkspace, writeWorkspace,
   deleteWorkspace, renameWorkspace
 } from './workspace-store.js'
+import { startPreview, refreshPreview, stopPreview } from './preview-server.js'
 
 let pluginRegistryRef = null
 
@@ -271,6 +272,14 @@ export function registerIpcHandlers({ pluginRegistry }) {
   ipcMain.handle('workspaces:delete', (_e, name)              => deleteWorkspace(name))
   ipcMain.handle('workspaces:rename', (_e, oldName, newName)  => renameWorkspace(oldName, newName))
 
+  // ─── Preview in browser (Wave 3) ───────────────────────────────────────────
+  // start throws on export/bind failure (renderer's handleCommand catch
+  // toasts it); refresh no-ops { ok:false } when no server is running so a
+  // stale renderer debounce can never throw; stop is idempotent.
+  ipcMain.handle('preview:start',   (_e, project, opts) => startPreview(project, opts))
+  ipcMain.handle('preview:refresh', (_e, project)       => refreshPreview(project))
+  ipcMain.handle('preview:stop',    ()                  => stopPreview())
+
   // ─── External shell actions ────────────────────────────────────────────────
   ipcMain.handle('shell:open-external', (_e, url) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)
@@ -342,6 +351,10 @@ async function pickExportDir() {
 }
 
 async function bindProjectWatcher(manifestPath) {
+  // Every project new/open/import funnels through here — the single seam
+  // where a running preview must die: it never outlives the project it
+  // serves (Wave 3, PLAN.md F12). No-op when no preview is running.
+  await stopPreview()
   const projectDir = manifestPath.replace(/[^/]+$/, '')
   await setProjectRoot(projectDir, evt => {
     BrowserWindow.getAllWindows().forEach(w => {

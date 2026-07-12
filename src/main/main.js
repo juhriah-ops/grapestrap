@@ -25,10 +25,12 @@
  */
 
 import { app, BrowserWindow, ipcMain, shell, protocol, net } from 'electron'
-import { join, dirname, resolve as resolvePath } from 'node:path'
+import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { ensureXdgDirs, xdg } from './platform/xdg.js'
+import { mimeForPath } from './platform/mime.js'
+import { resolveWithinDir } from './platform/safe-path.js'
 import { applyDisplayProtocolFlags } from './platform/wayland.js'
 import { initLogger, log } from './logger.js'
 import { initPrefs } from './prefs.js'
@@ -241,28 +243,9 @@ function createMainWindow() {
 // can therefore use relative imports (`./helpers.js`, `./messages.json`),
 // which the renderer's ES module loader resolves against the protocol URL.
 // Path-traversal is blocked: every resolved file path must stay within the
-// owning plugin's directory.
-
-const PLUGIN_MIME = {
-  '.js':   'text/javascript',
-  '.mjs':  'text/javascript',
-  '.json': 'application/json',
-  '.css':  'text/css',
-  '.html': 'text/html',
-  '.svg':  'image/svg+xml',
-  '.png':  'image/png',
-  '.jpg':  'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.woff':  'font/woff',
-  '.woff2': 'font/woff2'
-}
-
-function mimeForPath(p) {
-  const dot = p.lastIndexOf('.')
-  if (dot < 0) return 'application/octet-stream'
-  return PLUGIN_MIME[p.slice(dot).toLowerCase()] || 'application/octet-stream'
-}
+// owning plugin's directory. The MIME table and the containment check moved
+// to platform/mime.js + platform/safe-path.js in Wave 3 when the preview
+// server became their second consumer.
 
 function registerPluginProtocolHandler(registry) {
   protocol.handle('gstrap-plugin', async request => {
@@ -276,9 +259,8 @@ function registerPluginProtocolHandler(registry) {
     const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '')
     if (!rel) return new Response('No path', { status: 400 })
 
-    const target = resolvePath(plugin.dir, rel)
-    const root = resolvePath(plugin.dir)
-    if (target !== root && !target.startsWith(root + '/')) {
+    const target = resolveWithinDir(plugin.dir, rel)
+    if (!target) {
       log.warn(`gstrap-plugin: path traversal blocked: ${request.url}`)
       return new Response('Forbidden', { status: 403 })
     }

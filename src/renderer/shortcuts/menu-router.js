@@ -26,6 +26,7 @@ import { propagateLibraryItem } from '../panels/library-items/propagate.js'
 import { createPage, validateNewName } from '../panels/templates/manage.js'
 import { propagateTemplate, templateRegionsMeta, refreshPageRegionsSnapshot } from '../panels/templates/propagate.js'
 import { openPagePropertiesDialog } from '../dialogs/page-properties.js'
+import { cmdPreviewBrowser } from '../preview.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
 
@@ -33,7 +34,8 @@ import { log } from '../log.js'
 // truth in projectState (page html or library item html) so that whatever's
 // on screen is what gets persisted. Tab swaps already capture-on-switch; this
 // covers the case where the user edits then saves without switching tabs first.
-function flushActiveTabIntoProject() {
+// Exported: preview.js reuses cmdExport's exact flush-then-export contract.
+export function flushActiveTabIntoProject() {
   if (!projectState.current) return
   const tab = pageState.active()
   if (!tab) return
@@ -133,6 +135,7 @@ async function dispatchCommand(action, args = []) {
     case 'view:device-tablet': return cmdDevice('Tablet')
     case 'view:device-mobile': return cmdDevice('Mobile')
     case 'view:reset-layout':  return resetToDefaultLayout()
+    case 'view:preview-browser': return cmdPreviewBrowser()
 
     // Workspace layouts (Wave 3). apply carries the layout name as a menu
     // action arg; e2e drives the same paths via __gstrap.workspaces.
@@ -226,7 +229,7 @@ async function cmdNewPage() {
 // The early-return guards were correct (you can't save or switch view mode
 // without a project) but the silent-no-op UX read as broken buttons. Every
 // project-required command now toasts a warning explaining what to do.
-const NO_PROJECT_MSG = 'Open or create a project first.'
+export const NO_PROJECT_MSG = 'Open or create a project first.'
 
 async function cmdSave() {
   if (!projectState.current) {

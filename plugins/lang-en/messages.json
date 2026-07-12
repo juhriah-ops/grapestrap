@@ -122,6 +122,10 @@
   "workspace.toast.not-found": "Workspace layout \"{name}\" was not found on disk.",
   "workspace.toast.skipped": "Skipped unreadable workspace layout file(s): {files}",
 
+  "preview.no-browser": "No browser found — open {url} manually",
+  "preview.no-pages": "This project has no pages to preview.",
+  "preview.refresh-failed": "Preview refresh failed — the browser keeps the last good preview.",
+
   "tpl.error.bad-name": "Names must start with a letter or digit and use only letters, digits, - and _.",
   "tpl.error.name-taken-page": "A page with this name already exists.",
   "tpl.error.name-taken-template": "A template with this name already exists.",
