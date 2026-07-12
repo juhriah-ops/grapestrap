@@ -39,6 +39,7 @@ const grapestrap = {
     export:        (project, dir)   => ipcRenderer.invoke('project:export', project, dir),
     writeRecovery: (path, snapshot) => ipcRenderer.invoke('project:write-recovery', path, snapshot),
     readRecovery:  (path)           => ipcRenderer.invoke('project:read-recovery', path),
+    clearRecovery: (path)           => ipcRenderer.invoke('project:clear-recovery', path),
     recent:        ()               => ipcRenderer.invoke('project:recent'),
     addRecent:     (path, name)     => ipcRenderer.invoke('project:add-recent', path, name)
   },

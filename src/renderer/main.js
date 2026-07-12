@@ -34,6 +34,7 @@ import '@fortawesome/fontawesome-free/css/v4-shims.min.css'
 import { eventBus } from './state/event-bus.js'
 import { projectState } from './state/project-state.js'
 import { pageState } from './state/page-state.js'
+import { wireRecovery, checkRecoveryAtBoot, recoveryState } from './state/recovery.js'
 import { pluginRegistry, activateAllPlugins } from './plugin-host/registry.js'
 import { initGoldenLayout } from './layout/golden-layout-config.js'
 import { renderToolbar } from './panels/toolbar.js'
@@ -89,6 +90,7 @@ async function boot() {
   wireKeybindings()
   wireToasts()
   wireViewToggles()
+  wireRecovery()
   eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
   // Help menu wiring — both items used to emit events nothing listened to.
@@ -130,6 +132,12 @@ async function boot() {
 
   // 7. Empty state until project opens
   eventBus.emit('app:ready', { info })
+
+  // 8. Crash-recovery boot check — strictly AFTER the welcome dialog (which
+  //    awaits dismissal, so the two modal overlays can never stack) and
+  //    after app:ready so the empty state is painted behind the recovery
+  //    modal. Never throws; sets recoveryState.bootCheckDone when finished.
+  await checkRecoveryAtBoot()
 }
 
 boot().catch(err => {
@@ -141,4 +149,4 @@ boot().catch(err => {
 // the public API surface — plugins access state via `api.*` from buildApi(),
 // not through this. Containment relies on preload-bridge-only IPC + sandbox +
 // contextIsolation, not on hiding this object.
-window.__gstrap = { eventBus, projectState, pageState, pluginRegistry, getCssEditor }
+window.__gstrap = { eventBus, projectState, pageState, pluginRegistry, getCssEditor, recoveryState }

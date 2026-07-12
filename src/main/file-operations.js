@@ -101,7 +101,7 @@ export async function setProjectRoot(rootPath, changeHandler) {
     ignored: [
       /(^|[/\\])\../,                  // dotfiles / dirs
       /node_modules/,
-      /\.gstrap\.recovery$/
+      /\.gstrap\.recovery(\.tmp)?$/    // recovery snapshot + its atomic-write temp
     ],
     ignoreInitial: true,
     persistent: true,

@@ -21,7 +21,7 @@ import {
 } from './file-operations.js'
 import {
   createProject, loadProject, saveProject,
-  exportProject, writeRecovery, readRecovery,
+  exportProject, writeRecovery, readRecovery, clearRecovery,
   importDirectory
 } from './project-manager.js'
 
@@ -162,6 +162,12 @@ export function registerIpcHandlers({ pluginRegistry }) {
   })
   ipcMain.handle('project:read-recovery', async (_e, manifestPath) => {
     return readRecovery(manifestPath)
+  })
+  // read-recovery doubles as the "check" (snapshot or null); this is the
+  // delete half — save success clears in-process, but discard / went-clean
+  // need a renderer-reachable path.
+  ipcMain.handle('project:clear-recovery', async (_e, manifestPath) => {
+    return clearRecovery(manifestPath)
   })
 
   ipcMain.handle('project:recent', async () => {

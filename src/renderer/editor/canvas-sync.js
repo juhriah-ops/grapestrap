@@ -172,3 +172,14 @@ export function setActiveSide(side) {
 export function getActiveSide() {
   return activeSide
 }
+
+/**
+ * Non-destructive read of the Code-view Monaco buffer (full HTML document
+ * for page tabs, body fragment for library tabs — same shape the save flush
+ * sees). Used by the crash-recovery snapshot loop, which must capture
+ * Code-view edits without triggering a canvas rebuild. Returns null before
+ * bindSync() has run.
+ */
+export function getCodeEditorValue() {
+  return codeEditor ? codeEditor.getValue() : null
+}

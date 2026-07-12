@@ -615,7 +615,7 @@ export async function saveProject(project) {
   await writeAtomic(manifestPath, JSON.stringify(cleanManifest, null, 2))
 
   // Clear any recovery file — we just saved successfully
-  try { await fsp.rm(manifestPath + '.recovery', { force: true }) } catch {}
+  await clearRecovery(manifestPath)
 
   return { manifest: cleanManifest, lastSavedAt: now }
 }
@@ -630,9 +630,13 @@ async function writeAtomic(target, contents) {
 /**
  * Write recovery snapshot. Lightweight — full project state in one file.
  * Cleared on next successful save. Not the source of truth, just a crash net.
+ *
+ * Atomic (tmp + rename, Wave 1): the renderer rewrites this file on a timer,
+ * and a crash mid-write must not destroy the previous good snapshot — a
+ * truncated file here is precisely the moment the net is needed.
  */
 export async function writeRecovery(manifestPath, snapshot) {
-  await fsp.writeFile(manifestPath + '.recovery', JSON.stringify(snapshot), 'utf8')
+  await writeAtomic(manifestPath + '.recovery', JSON.stringify(snapshot))
 }
 
 export async function readRecovery(manifestPath) {
@@ -642,6 +646,14 @@ export async function readRecovery(manifestPath) {
   } catch {
     return null
   }
+}
+
+/**
+ * Delete the recovery snapshot (save succeeded, user discarded, or the
+ * project went clean without a save). Missing file is not an error.
+ */
+export async function clearRecovery(manifestPath) {
+  try { await fsp.rm(manifestPath + '.recovery', { force: true }) } catch {}
 }
 
 /**
