@@ -15,6 +15,7 @@ import { xdg } from './platform/xdg.js'
 const DEFAULTS = {
   general: {
     welcomeShown: false,
+    language: 'en',        // catalog code from a language plugin (@grapestrap/lang-en ships 'en')
     recentProjectsLimit: 10,
     confirmOnQuit: true,
     autosaveIntervalSeconds: 30

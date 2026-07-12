@@ -36,6 +36,7 @@ import { projectState } from './state/project-state.js'
 import { pageState } from './state/page-state.js'
 import { wireRecovery, checkRecoveryAtBoot, recoveryState } from './state/recovery.js'
 import { pluginRegistry, activateAllPlugins } from './plugin-host/registry.js'
+import { initI18n, t, setLocale, getLocale, getAvailableLanguages, isReady } from './i18n.js'
 import { initGoldenLayout } from './layout/golden-layout-config.js'
 import { renderToolbar } from './panels/toolbar.js'
 import { renderTabs } from './panels/tabs.js'
@@ -67,6 +68,12 @@ async function boot() {
   // 1. Activate plugins (loads them via dynamic import of their entry code)
   await activateAllPlugins()
   log.info(`activated ${pluginRegistry.activated.length} plugin(s)`)
+
+  // 1b. i18n — must follow plugin activation (catalogs come from language
+  //     plugins via api.registerLanguage) and precede every fixed-region
+  //     render so t() resolves from the first paint. Wave 1 wires the
+  //     runtime only; the retroactive t() extraction sweep is Wave 4.
+  await initI18n()
 
   // 2. Render fixed regions
   renderToolbar(document.getElementById('gstrap-toolbar'))
@@ -149,4 +156,7 @@ boot().catch(err => {
 // the public API surface — plugins access state via `api.*` from buildApi(),
 // not through this. Containment relies on preload-bridge-only IPC + sandbox +
 // contextIsolation, not on hiding this object.
-window.__gstrap = { eventBus, projectState, pageState, pluginRegistry, getCssEditor, recoveryState }
+window.__gstrap = {
+  eventBus, projectState, pageState, pluginRegistry, getCssEditor, recoveryState,
+  i18n: { t, setLocale, getLocale, getAvailableLanguages, isReady }
+}
