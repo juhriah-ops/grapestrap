@@ -58,6 +58,19 @@ const STACK_MIN_H = 120
 const SIDE_STACK_TABS = 3
 const PANEL_MIN_W = STACK_MIN_W / SIDE_STACK_TABS
 const PANEL_MIN_H = STACK_MIN_H / SIDE_STACK_TABS
+const CANVAS_MIN_W = 320
+const CANVAS_MIN_H = 240
+
+// Wave 3: workspaces.js re-stamps floors from these at every apply
+// (normalizeFloors — the ÷3 above generalised to ÷N per stack at apply time,
+// exactly what the comment above asks for when a stack gains/loses tabs).
+// Persisted minWidths in saved layouts are never trusted.
+export const LAYOUT_FLOORS = {
+  stackMinW: STACK_MIN_W,
+  stackMinH: STACK_MIN_H,
+  canvasMinW: CANVAS_MIN_W,
+  canvasMinH: CANVAS_MIN_H
+}
 
 const DEFAULT_CONFIG = {
   root: {
@@ -83,7 +96,7 @@ const DEFAULT_CONFIG = {
         width: 56,
         content: [
           { type: 'component', componentType: 'canvas', title: 'Canvas',
-            isClosable: false, minWidth: 320, minHeight: 240 }
+            isClosable: false, minWidth: CANVAS_MIN_W, minHeight: CANVAS_MIN_H }
         ]
       },
       // RIGHT STACK — DOM / Properties / Custom CSS as tabs (consolidated

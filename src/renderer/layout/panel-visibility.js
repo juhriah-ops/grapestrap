@@ -70,10 +70,20 @@ function findTabComponent(panelKey) {
 
 function activateAnyVisibleTab(stack) {
   if (!stack) return
-  const visibleTab = (stack.contentItems || []).find(item => {
+  const isVisible = item => {
     const cls = RIGHT_TAB_CLASSES[item.componentType]?.bodyClass
     return !cls || !document.body.classList.contains(cls)
-  })
+  }
+  // Only switch when the CURRENT active tab is hidden. Unconditionally
+  // jumping to the first visible tab clobbered (a) the user's active tab
+  // when hiding a different one and (b) a workspace's saved activeItemIndex
+  // right after apply (Wave 3 — applyVisibilityMap re-runs this path after
+  // every loadLayout).
+  const active = typeof stack.getActiveComponentItem === 'function'
+    ? stack.getActiveComponentItem()
+    : null
+  if (active && isVisible(active)) return
+  const visibleTab = (stack.contentItems || []).find(isVisible)
   if (visibleTab && typeof stack.setActiveContentItem === 'function') {
     try { stack.setActiveContentItem(visibleTab) } catch (_) { /* mid-transition */ }
   }
@@ -166,6 +176,27 @@ export function isRightTabHidden(componentType) {
   const def = RIGHT_TAB_CLASSES[componentType]
   if (!def) return false
   return document.body.classList.contains(def.bodyClass)
+}
+
+/**
+ * Wave 3 (workspace capture, F6): when the right stack is collapsed via the
+ * size-0 trick, the live GL geometry lies about the user's intended sizes.
+ * Returns the root row's child sizes with the pre-collapse snapshot swapped
+ * back in (percent numbers, root-row child order), or null when the stack
+ * isn't collapsed. Workspaces store expanded sizes only — collapse state is
+ * derived from `visibility` at apply time, never persisted as size-0 geometry.
+ */
+export function getRightStackRestoreSizes() {
+  const stack = findRightStack()
+  if (!stack) return null
+  const snapshot = stackSnapshots.get(stack)
+  if (!snapshot) return null
+  const parent = stack.parent
+  if (!parent || !Array.isArray(parent.contentItems)) return null
+  return parent.contentItems.map(item => {
+    const entry = snapshot.find(s => s.item === item)
+    return entry ? entry.size : item.size
+  })
 }
 
 /**

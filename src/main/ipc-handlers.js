@@ -24,6 +24,10 @@ import {
   exportProject, writeRecovery, readRecovery, clearRecovery,
   importDirectory
 } from './project-manager.js'
+import {
+  listWorkspaces, readWorkspace, writeWorkspace,
+  deleteWorkspace, renameWorkspace
+} from './workspace-store.js'
 
 let pluginRegistryRef = null
 
@@ -257,6 +261,15 @@ export function registerIpcHandlers({ pluginRegistry }) {
     }
     return out
   })
+
+  // ─── Workspace layouts (Wave 3) ────────────────────────────────────────────
+  // All validation (name charset, preset shadowing, slug collisions, shape)
+  // lives in workspace-store.js — main never trusts renderer input.
+  ipcMain.handle('workspaces:list',   ()                      => listWorkspaces())
+  ipcMain.handle('workspaces:read',   (_e, name)              => readWorkspace(name))
+  ipcMain.handle('workspaces:save',   (_e, payload)           => writeWorkspace(payload))
+  ipcMain.handle('workspaces:delete', (_e, name)              => deleteWorkspace(name))
+  ipcMain.handle('workspaces:rename', (_e, oldName, newName)  => renameWorkspace(oldName, newName))
 
   // ─── External shell actions ────────────────────────────────────────────────
   ipcMain.handle('shell:open-external', (_e, url) => {

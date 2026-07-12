@@ -11,10 +11,28 @@
 
 import { Menu, app } from 'electron'
 
-export function buildMenu({ onAction }) {
+export function buildMenu({ onAction, workspaceNames = [] }) {
   const isMac = process.platform === 'darwin'
 
   const send = (action, ...args) => () => onAction(action, ...args)
+
+  // View → Workspace Layouts (Wave 3). Native menus are static, so main.js
+  // rebuilds the whole menu whenever the renderer pushes a new name list via
+  // the one-way `menu:set-workspaces` IPC (boot + every save/delete/rename).
+  // Presets are code-built in the renderer (never files, never deletable);
+  // saved names apply through the same `workspace:apply <name>` action.
+  const workspaceSubmenu = [
+    { label: 'Designer', click: send('workspace:apply', 'Designer') },
+    { label: 'Coder',    click: send('workspace:apply', 'Coder') },
+    { label: 'Compact',  click: send('workspace:apply', 'Compact') },
+    ...(workspaceNames.length > 0
+      ? [{ type: 'separator' },
+         ...workspaceNames.map(name => ({ label: name, click: send('workspace:apply', name) }))]
+      : []),
+    { type: 'separator' },
+    { label: 'Save Current As…', click: send('workspace:save-as') },
+    { label: 'Manage Layouts…',  click: send('workspace:manage') }
+  ]
 
   const fileMenu = {
     label: '&File',
@@ -92,7 +110,7 @@ export function buildMenu({ onAction }) {
       { label: 'Preview in Browser', accelerator: 'CmdOrCtrl+F12', click: send('view:preview-browser') }, // v0.1.0
       { type: 'separator' },
       { label: 'Reset Layout',                                       click: send('view:reset-layout') },
-      { label: 'Workspace Layouts',                                  submenu: [{ label: '(coming in v0.1.0)', enabled: false }] },
+      { label: 'Workspace Layouts',                                  submenu: workspaceSubmenu },
       { type: 'separator' },
       { role: 'togglefullscreen' }
     ]

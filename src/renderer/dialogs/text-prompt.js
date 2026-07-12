@@ -9,11 +9,16 @@
  *
  * Returns a Promise<string | null>. Resolves null on Esc / Cancel /
  * backdrop click; resolves the trimmed input on Enter / OK.
+ *
+ * Optional `validate: (value) => string | null` (Wave 3, workspace save/
+ * rename): a returned message blocks submission and renders in an inline
+ * error line (same .gstrap-prompt-error contract as the new-page dialog);
+ * null accepts. Callers that don't pass it get the original behavior.
  */
 
 let activeDialog = null
 
-export function showTextPrompt({ title = 'Input', label = '', initialValue = '', placeholder = '', okLabel = 'OK' } = {}) {
+export function showTextPrompt({ title = 'Input', label = '', initialValue = '', placeholder = '', okLabel = 'OK', validate = null } = {}) {
   if (activeDialog) activeDialog.dismiss(null)
 
   const host = document.getElementById('gstrap-modals')
@@ -30,6 +35,7 @@ export function showTextPrompt({ title = 'Input', label = '', initialValue = '',
                spellcheck="false" autocomplete="off"
                value="${escAttr(initialValue)}"
                placeholder="${escAttr(placeholder)}">
+        <div class="gstrap-prompt-error" data-prompt-error hidden></div>
         <div class="gstrap-prompt-actions">
           <button class="gstrap-btn"               data-action="cancel">Cancel</button>
           <button class="gstrap-btn gstrap-btn-primary" data-action="ok">${escHtml(okLabel)}</button>
@@ -38,6 +44,7 @@ export function showTextPrompt({ title = 'Input', label = '', initialValue = '',
     `
     host.appendChild(overlay)
     const input = overlay.querySelector('.gstrap-prompt-input')
+    const errorEl = overlay.querySelector('[data-prompt-error]')
     input.focus()
     input.select()
 
@@ -47,15 +54,32 @@ export function showTextPrompt({ title = 'Input', label = '', initialValue = '',
       resolve(value)
     }
 
+    function submit() {
+      const value = input.value.trim() || null
+      if (value !== null && typeof validate === 'function') {
+        const problem = validate(value)
+        if (problem) {
+          errorEl.textContent = problem
+          errorEl.hidden = false
+          input.focus()
+          return
+        }
+      }
+      dismiss(value)
+    }
+
+    // Typing again clears the stale error (same contract as new-page.js).
+    input.addEventListener('input', () => { errorEl.hidden = true })
+
     overlay.addEventListener('click', evt => {
       if (evt.target === overlay) return dismiss(null)
       const action = evt.target.closest('[data-action]')?.dataset?.action
       if (action === 'cancel') dismiss(null)
-      else if (action === 'ok') dismiss(input.value.trim() || null)
+      else if (action === 'ok') submit()
     })
     input.addEventListener('keydown', evt => {
       if (evt.key === 'Escape') { evt.preventDefault(); dismiss(null) }
-      else if (evt.key === 'Enter') { evt.preventDefault(); dismiss(input.value.trim() || null) }
+      else if (evt.key === 'Enter') { evt.preventDefault(); submit() }
     })
 
     activeDialog = { dismiss }

@@ -13,7 +13,9 @@ import { eventBus } from '../state/event-bus.js'
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
-import { resetLayout } from '../layout/golden-layout-config.js'
+import {
+  resetToDefaultLayout, applyWorkspaceByName, saveWorkspaceAs, openWorkspaceManager
+} from '../layout/workspaces.js'
 import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
 import { rebuildCanvasFromCode } from '../editor/canvas-sync.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
@@ -73,18 +75,23 @@ function flushActiveTabIntoProject() {
 }
 
 export function wireMenuActions() {
-  window.grapestrap.menu.onAction(action => {
-    log.debug('menu action', action)
-    handleCommand(action)
+  // Args-transport fix (Wave 3): menus.js has sent per-item args since
+  // v0.0.1 (`insert:focus-tab <tab>`, now `workspace:apply <name>`) and
+  // preload's subscribe forwards them — but this handler used to drop them,
+  // so arg-carrying menu items silently did nothing. Thread them through.
+  // (Wiring insert:focus-tab itself is a follow-up, not Wave-3 scope.)
+  window.grapestrap.menu.onAction((action, ...args) => {
+    log.debug('menu action', action, args)
+    handleCommand(action, args)
   })
 
   // Toolbar/elsewhere also dispatch via this same path
   eventBus.on('command', cmd => handleCommand(cmd))
 }
 
-async function handleCommand(action) {
+async function handleCommand(action, args = []) {
   try {
-    return await dispatchCommand(action)
+    return await dispatchCommand(action, args)
   } catch (err) {
     // The eventBus's own try/catch swallows handler exceptions, which is how
     // the cmdNewProject window.prompt failure went silent. Catch here, log,
@@ -94,7 +101,7 @@ async function handleCommand(action) {
   }
 }
 
-async function dispatchCommand(action) {
+async function dispatchCommand(action, args = []) {
   // Plugin-registered command? prefer that
   const command = pluginRegistry.commands.get(action)
   if (command) return command.handler()
@@ -125,7 +132,14 @@ async function dispatchCommand(action) {
     case 'view:device-desktop':return cmdDevice('Desktop')
     case 'view:device-tablet': return cmdDevice('Tablet')
     case 'view:device-mobile': return cmdDevice('Mobile')
-    case 'view:reset-layout':  return resetLayout()
+    case 'view:reset-layout':  return resetToDefaultLayout()
+
+    // Workspace layouts (Wave 3). apply carries the layout name as a menu
+    // action arg; e2e drives the same paths via __gstrap.workspaces.
+    case 'workspace:apply':    return applyWorkspaceByName(args[0])
+    case 'workspace:save-as':  return saveWorkspaceAs()
+    case 'workspace:manage':   return openWorkspaceManager()
+
     case 'view:toggle-file-manager':
     case 'view:toggle-properties':
     case 'view:toggle-strip':

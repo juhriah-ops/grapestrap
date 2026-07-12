@@ -66,9 +66,22 @@ const grapestrap = {
     onDeleted: (cb) => subscribe('file:deleted', cb)
   },
 
+  // ─── Workspace layouts (Wave 3) ────────────────────────────────────────────
+  workspaces: {
+    list:   ()                 => ipcRenderer.invoke('workspaces:list'),
+    read:   (name)             => ipcRenderer.invoke('workspaces:read', name),
+    save:   (payload)          => ipcRenderer.invoke('workspaces:save', payload),
+    delete: (name)             => ipcRenderer.invoke('workspaces:delete', name),
+    rename: (oldName, newName) => ipcRenderer.invoke('workspaces:rename', oldName, newName)
+  },
+
   // ─── Native menu actions ───────────────────────────────────────────────────
   menu: {
-    onAction: (cb) => subscribe('menu:action', cb)
+    onAction: (cb) => subscribe('menu:action', cb),
+    // One-way push: renderer sends the saved-workspace name list so main can
+    // rebuild the View → Workspace Layouts submenu (names are display strings
+    // only on the main side — clicking one round-trips through validation).
+    setWorkspaces: (names) => ipcRenderer.send('menu:set-workspaces', names)
   },
 
   // ─── Shell ─────────────────────────────────────────────────────────────────

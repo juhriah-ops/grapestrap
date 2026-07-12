@@ -128,3 +128,73 @@ function persist(key, value) {
   })
   return persistChain
 }
+
+// Whole-map persist for workspace applies — one read/modify/write on the
+// same chain instead of eight round trips.
+function persistMap(map) {
+  persistChain = persistChain.then(async () => {
+    try {
+      const cur = (await window.grapestrap?.prefs?.get?.('view')) || {}
+      Object.assign(cur, map)
+      await window.grapestrap?.prefs?.set?.('view', cur)
+    } catch (err) {
+      log.warn('view-toggle persistMap failed:', err)
+    }
+  })
+  return persistChain
+}
+
+// ─── Workspace-layouts surface (Wave 3) ─────────────────────────────────────
+
+/**
+ * Current visibility as a { prefKey: boolean } map, read from DOM truth
+ * (hidden attrs + body classes), not from prefs — prefs writes are async and
+ * may lag a toggle. These prefKeys are exactly what a workspace's
+ * `visibility` block persists (PLAN.md §2.2).
+ */
+export function getVisibilityMap() {
+  const map = {}
+  for (const def of Object.values(FIXED_REGIONS)) {
+    const el = document.getElementById(def.id)
+    map[def.prefKey] = el ? !el.hidden : def.defaultVisible
+  }
+  for (const def of Object.values(LEFT_STACK_TABS)) {
+    map[def.prefKey] = !document.body.classList.contains(def.bodyClass)
+  }
+  for (const def of Object.values(RIGHT_STACK_TABS)) {
+    map[def.prefKey] = !isRightTabHidden(def.panelKey)
+  }
+  return map
+}
+
+/**
+ * Drive all three visibility mechanisms from a { prefKey: boolean } map
+ * (missing keys default to visible), then persist once. This is the
+ * workspace-apply path (PLAN.md §3.3 step 4) — it MUST run after every GL
+ * loadLayout because panel-visibility keys its collapse snapshots in a
+ * WeakMap on ContentItems, and loadLayout creates all-new items, orphaning
+ * any snapshot. Re-running the initial-visibility path rebuilds collapse
+ * state from body-class truth against the new items. No new hide/show
+ * mechanism — wraps the exact three surfaces wireViewToggles boots with.
+ */
+export function applyVisibilityMap(map) {
+  const resolved = {}
+  for (const def of Object.values(FIXED_REGIONS)) {
+    const visible = map[def.prefKey] ?? true
+    resolved[def.prefKey] = visible
+    setFixedVisible(def.id, visible)
+  }
+  for (const def of Object.values(LEFT_STACK_TABS)) {
+    const visible = map[def.prefKey] ?? true
+    resolved[def.prefKey] = visible
+    document.body.classList.toggle(def.bodyClass, !visible)
+  }
+  const rightMap = {}
+  for (const def of Object.values(RIGHT_STACK_TABS)) {
+    const visible = map[def.prefKey] ?? true
+    resolved[def.prefKey] = visible
+    rightMap[def.panelKey] = visible
+  }
+  applyInitialRightTabVisibility(rightMap)
+  persistMap(resolved)
+}

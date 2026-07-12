@@ -43,6 +43,7 @@ import { renderTabs } from './panels/tabs.js'
 import { renderLinkedFilesBar } from './panels/linked-files/index.js'
 import { renderBreakpointsBar } from './panels/breakpoints/index.js'
 import { wireViewToggles } from './panels/view-toggles.js'
+import { initWorkspaces, workspacesTestSurface } from './layout/workspaces.js'
 import { renderStatusBar } from './status-bar/status-bar.js'
 import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
@@ -103,6 +104,10 @@ async function boot() {
   wireViewToggles()
   wireRecovery()
   wireTemplateLock()
+  // Workspace layouts (Wave 3): seed the saved-name cache and push the list
+  // into the native View → Workspace Layouts submenu. Fire-and-forget — the
+  // submenu fills in when the list IPC round-trips.
+  initWorkspaces()
   eventBus.on('dialog:preferences', () => openPreferencesDialog())
 
   // Help menu wiring — both items used to emit events nothing listened to.
@@ -183,5 +188,8 @@ window.__gstrap = {
   templates: {
     createTemplate, deleteTemplate, createPage, detachActivePage,
     propagateTemplate, extractRegions, composeFromTemplate
-  }
+  },
+  // Wave 3 test surface — workspaces.spec.js drives these (e2e never touches
+  // native menus; they're not in the DOM).
+  workspaces: workspacesTestSurface
 }

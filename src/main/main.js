@@ -24,7 +24,7 @@
  *   - Ctrl+Shift+R is enabled only with --dev flag for development reload
  */
 
-import { app, BrowserWindow, shell, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, protocol, net } from 'electron'
 import { join, dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -111,12 +111,26 @@ app.whenReady().then(async () => {
   registerPluginProtocolHandler(pluginRegistry)
   registerIpcHandlers({ pluginRegistry })
 
-  buildMenu({
-    onAction: (action, ...args) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('menu:action', action, ...args)
-      }
+  // Native menus are static — the whole menu is rebuilt whenever the saved-
+  // workspace name list changes (Wave 3). The renderer pushes names at boot
+  // and after every save/delete/rename via the one-way `menu:set-workspaces`
+  // IPC below.
+  const menuAction = (action, ...args) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('menu:action', action, ...args)
     }
+  }
+  const rebuildMenu = (workspaceNames = []) => buildMenu({ onAction: menuAction, workspaceNames })
+  rebuildMenu()
+
+  ipcMain.on('menu:set-workspaces', (_event, names) => {
+    // Names are display strings only on this side (F7): no fs paths are ever
+    // derived from them here — a menu click sends the name back through the
+    // renderer, and workspace-store.js re-validates like any other apply.
+    const safe = Array.isArray(names)
+      ? names.filter(n => typeof n === 'string' && n.length > 0 && n.length <= 41).slice(0, 50)
+      : []
+    rebuildMenu(safe)
   })
 
   createMainWindow()
