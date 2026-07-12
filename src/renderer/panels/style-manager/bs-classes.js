@@ -35,6 +35,16 @@ export function colPattern(bp = '') {
   return new RegExp(`^col-${bp}(?:-(?:auto|1[0-2]|[1-9]))?$`)
 }
 
+/**
+ * Matches ANY column class at ANY breakpoint: col, col-7, col-md-auto,
+ * col-xxl-12... Used for "is this a Bootstrap column at all" checks
+ * (drag-resize handle eligibility; same test the Columns sub-panel and the
+ * breakpoint bar chips perform inline today).
+ */
+export function colAnyPattern() {
+  return /^col(?:-(?:sm|md|lg|xl|xxl))?(?:-(?:auto|1[0-2]|[1-9]))?$/
+}
+
 // Quick-split presets. Each preset is { label, sizes: [n,n,...] } where the
 // sizes array describes the columns left-to-right. Sums to 12 (or under, with
 // auto fillers) — the BS grid wraps at >12 which we don't want from a preset.

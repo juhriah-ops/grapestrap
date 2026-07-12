@@ -19,6 +19,7 @@ import { pluginRegistry } from '../plugin-host/registry.js'
 import { eventBus } from '../state/event-bus.js'
 import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
+import { initDragResize } from './drag-resize.js'
 import { log } from '../log.js'
 
 // Framework assets (Bootstrap, Bootstrap Icons, Font Awesome) are NOT loaded
@@ -185,6 +186,9 @@ export function initGrapesJS(container) {
 
   // Bind editor to plugin registry so plugins can access it via api.editor
   pluginRegistry.setBound('editor', editor)
+  // Drag-to-resize handles with Bootstrap class snapping (Wave 2). Single
+  // hook point — all selection/drag wiring lives in drag-resize.js.
+  initDragResize(editor)
   eventBus.emit('canvas:ready', editor)
 
   // Project globalCSS lives in projectState; mirror it into the canvas iframe

@@ -6,7 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the next milestone (master templates, Linux polish, public launch). Deferred from the 2026-07-06 hygiene sweep: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
+Working toward `v0.1.0` per `GRAPESTRAP_BUILD_PLAN_v5.md` (waves; v4 stays canonical for feature specs). Deferred from the 2026-07-06 hygiene sweep: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
+
+### Added (Wave 2 — Drag-to-resize with class snapping, 2026-07-12)
+- **Drag-to-resize** (BUILD_PLAN v5 Wave 2, the Dreamweaver-parity marquee): drag handles on the selected component snap to Bootstrap classes instead of writing pixel CSS. Columns (direct children of `.row` with a col class) get a side grip that quantizes to `col-{bp}-1..12` against the row's 12-column grid; images get corner grips snapping to `w-25/50/75/100`; everything else ≥32px gets margin (outer) and padding (inner) edge strips snapping to the BS5 spacing scale `0..5` with logical sides (`t/b/s/e`). Ghost outline + live class badge (e.g. `col-md-7`) previews the snap target during the drag; release applies via the Style Manager's `applyGroup()` — one Backbone write, ONE undo entry; Escape/deselect/tab-swap/frame-reload cancels without writing.
+- **Breakpoint-aware writes**: a drag while the canvas is narrowed to Tablet/Mobile writes the bp-scoped class (`col-md-N`), leaving the base class intact — new `activeBreakpointId()`/`deviceWidthPx()` exports on the breakpoints panel. Drag math is iframe-native (the breakpoint slider narrows the frame with pure CSS width; zoom stays 1).
+- GrapesJS's stock image pixel-resizer is disabled (`resizable:false` via type extension — dblclick→Asset Manager verified intact); Templates-locked components get no handles.
 
 ### Added (Wave 2 — Master Templates, 2026-07-12)
 - **Master templates** (BUILD_PLAN v4 §14, v5 Wave 2). A template is a body-only chrome fragment saved as `site/templates/<name>.gstrap-tpl`, with editable regions marked by `data-grpstr-region="<id>"` (optional `data-grpstr-region-label`). Pages created from a template store the FULLY COMPOSED body in `page.html` — pages on disk stay standalone/deployable and export needs zero template resolution (`.gstrap-tpl` files never reach an export). New modules: `panels/templates/propagate.js` (pure region extract/compose + template→pages propagation), `lock.js` (chrome lock walk, re-applied on frame load / `component:add` / code-sync rebuild), `manage.js` (create/delete template, create page, detach, make/remove region), `context-items.js`; `dialogs/new-page.js`.
@@ -26,7 +31,7 @@ Working toward `v0.1.0`. See `GRAPESTRAP_BUILD_PLAN_v4.md` § Phase 3 for the ne
 - Crash-recovery snapshots now capture template-tab edits (design AND code view), carry `templates[].regions` / `pages[].regions`, and replay template propagation on restore.
 
 ### Tests
-77 → 87 green (~3.6m). New `tests/e2e/templates.spec.js` (10 specs, round-trip/idempotency anchor first — `data-grpstr-region` + locks survive serialize → code→design rebuild → save → reopen, with byte-equal second serialize). `multi-page.spec.js` new-page selectors updated to the new dialog.
+77 → 93 green (~3.8m). New `tests/e2e/templates.spec.js` (10 specs, round-trip/idempotency anchor first — `data-grpstr-region` + locks survive serialize → code→design rebuild → save → reopen, with byte-equal second serialize) and `tests/e2e/drag-resize.spec.js` (6 real-mouse specs: col snap at base + bp-scoped, one-undo/one-redo, image width, margin edge, ghost/badge visibility). `multi-page.spec.js` new-page selectors updated to the new dialog.
 
 ## [v0.0.2-alpha.13] — 2026-07-06 (patch — panel sync + splitter fixes, Electron 43, hygiene)
 

@@ -14,6 +14,8 @@
  *     (d-none / d-md-block / col-lg-4 / etc.) with click-to-toggle for
  *     the visibility classes at the current breakpoint — so a designer
  *     can hide/show an element at a given size without leaving the bar.
+ *   - activeBreakpointId() export — the bp the canvas is editing at
+ *     (slider width → device width → base); consumed by drag-resize.
  *
  * Width application: directly on `editor.Canvas.getFrameEl()`'s inline
  * style + the parent `.gjs-cv-canvas` if present (GrapesJS centers the
@@ -189,6 +191,29 @@ function bpForWidth(w) {
     if (w >= bp.min) active = bp
   }
   return active
+}
+
+/**
+ * The breakpoint the canvas is currently EDITING AT — consumed by
+ * drag-resize so a Tablet-width drag writes col-md-N, not col-N.
+ *   - slider width set → threshold lookup on that width
+ *   - else a View-menu device width (Desktop's '' → base)
+ *   - else '' (fill = base; mobile-first classes apply everywhere)
+ * Returns one of '', 'sm', 'md', 'lg', 'xl', 'xxl'.
+ */
+export function activeBreakpointId() {
+  const w = currentWidth || deviceWidthPx()
+  return w ? bpForWidth(w).id : ''
+}
+
+/** Width in px of the GrapesJS device selected via the View menu, or 0 when
+ *  it has none (Desktop) / no editor yet. */
+function deviceWidthPx() {
+  const editor = getEditor()
+  const dm = editor?.Devices || editor?.DeviceManager
+  const name = editor?.getDevice?.()
+  const w = parseInt(dm?.get?.(name)?.get?.('width') || '', 10)
+  return Number.isFinite(w) ? w : 0
 }
 
 function canvasInnerWidth() {

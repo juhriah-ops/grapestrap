@@ -1,0 +1,82 @@
+/**
+ * GrapeStrap — Drag-to-resize canvas overlay styles
+ *
+ * PATH: src/renderer/editor/drag-resize-canvas.css
+ * ROLE: Appearance for the drag-resize handles, ghost outline and class
+ *       badge. Imported ?raw by drag-resize.js and injected into the canvas
+ *       IFRAME head as <style data-grapestrap-dragresize> — parent-document
+ *       stylesheets cannot reach iframe content. Geometry (top/left/width/
+ *       height) is data-driven and set per-element by drag-resize.js
+ *       layoutHandles()/paintGhost(); everything visual lives here.
+ * DEPENDS: drag-resize.js (class + data-dragr-kind contract)
+ * CREATED: 2026-07-12
+ */
+
+/* Overlay root parks on documentElement (outside the GrapesJS wrapper body);
+   children position in iframe document coords. */
+.gstrap-dragr-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 2147483000;
+}
+
+.gstrap-dragr-handle {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+  user-select: none;
+  touch-action: none; /* required for pointer-capture drags */
+}
+
+/* Width grip — column / image right-edge handle. */
+.gstrap-dragr-grip {
+  cursor: ew-resize;
+  border-radius: 3px;
+  background: rgba(13, 110, 253, 0.55);
+  border: 1px solid rgba(13, 110, 253, 0.9);
+  z-index: 1; /* wins over the padding-e strip it overlaps at edge center */
+}
+.gstrap-dragr-grip:hover {
+  background: rgba(13, 110, 253, 0.85);
+}
+
+/* Margin / padding edge strips — invisible until hover so the selection
+   stays uncluttered; the cursor + tint communicate the affordance. */
+.gstrap-dragr-strip {
+  cursor: ns-resize;
+  background: transparent;
+}
+.gstrap-dragr-strip-x {
+  cursor: ew-resize;
+}
+.gstrap-dragr-strip-margin:hover {
+  background: rgba(255, 152, 0, 0.45);
+}
+.gstrap-dragr-strip-padding:hover {
+  background: rgba(25, 135, 84, 0.45);
+}
+
+/* Ghost — the snapped target box/strip previewed during a drag. */
+.gstrap-dragr-ghost {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(13, 110, 253, 0.18);
+  border: 1px dashed rgba(13, 110, 253, 0.8);
+  box-sizing: border-box;
+}
+
+/* Badge — live snap-target class name (e.g. "col-md-7") near the pointer. */
+.gstrap-dragr-badge {
+  position: absolute;
+  pointer-events: none;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: rgba(28, 40, 51, 0.92);
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
