@@ -22,7 +22,7 @@
     "build:appimage": "npm run build && electron-builder --linux AppImage",
     "build:rpm": "npm run build && electron-builder --linux rpm",
     "build:tarball": "npm run build && electron-builder --linux tar.gz",
-    "build:linux": "npm run build && electron-builder --linux deb AppImage tar.gz",
+    "build:linux": "npm run build && electron-builder --linux deb rpm AppImage tar.gz",
     "test:e2e": "playwright test",
     "lint": "eslint src/ plugins/ tests/"
   },
@@ -65,6 +65,14 @@
     "directories": {
       "output": "release"
     },
+    "fileAssociations": [
+      {
+        "ext": "gstrap",
+        "name": "GrapeStrap Project",
+        "description": "GrapeStrap project",
+        "mimeType": "application/x-grapestrap"
+      }
+    ],
     "linux": {
       "target": [
         "deb",
@@ -72,20 +80,13 @@
         "AppImage",
         "tar.gz"
       ],
-      "category": "Development",
-      "icon": "assets/icons/icon.png",
+      "category": "Development;WebDevelopment",
+      "icon": "assets/icons",
       "synopsis": "Dreamweaver-style visual editor for Bootstrap 5",
       "description": "GrapeStrap is a desktop visual editor for building static Bootstrap 5 websites. Class-first styling, Dreamweaver-faithful workflow, plugin-extensible, no telemetry.",
-      "mimeTypes": [
-        "application/x-grapestrap"
-      ],
       "desktop": {
         "entry": {
-          "Name": "GrapeStrap",
-          "Comment": "Visual Bootstrap 5 editor for Linux",
-          "Categories": "Development;WebDevelopment;",
           "Keywords": "html;css;bootstrap;web;editor;dreamweaver;visual;",
-          "MimeType": "application/x-grapestrap;",
           "StartupWMClass": "GrapeStrap"
         }
       }

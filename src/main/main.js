@@ -186,7 +186,7 @@ function createMainWindow() {
     show: false,
     backgroundColor: '#1e1e1e',
     title: 'GrapeStrap',
-    icon: join(app.getAppPath(), 'assets', 'icons', 'icon.png'),
+    icon: join(app.getAppPath(), 'assets', 'icons', '512x512.png'),
     webPreferences: {
       preload: join(__dirname, '..', 'preload', 'preload.mjs'),
       sandbox: true,
