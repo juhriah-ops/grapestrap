@@ -200,3 +200,30 @@
   font-size: 13px;
   margin-top: 12px;
 }
+
+/* ── About modal (dialogs/about.js) ────────────────────────────────────── */
+.gstrap-about-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0 0 16px 0;
+}
+.gstrap-about-meta dt {
+  color: var(--text-2);
+  font-size: 13px;
+}
+.gstrap-about-meta dd {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 13px;
+}
+.gstrap-about-meta a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.gstrap-about-meta a:hover {
+  text-decoration: underline;
+}
+.gstrap-about-pledge {
+  font-weight: 600;
+}

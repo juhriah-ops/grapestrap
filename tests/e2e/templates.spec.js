@@ -312,6 +312,14 @@ test('create template: file-manager "+ New Template" → prompt → template tab
     expect(chromeInTplMode.draggable).not.toBe(false)
     expect(chromeInTplMode.copyable).not.toBe(false)
   }
+  // Wave 5 chrome-dim: template-editing tabs never dim — regions exist in
+  // the DOM here too, so this pins the class gate (not just the selectors).
+  const dimInTplMode = await appWindow.evaluate(() => {
+    const ed = window.__gstrap?.pluginRegistry?.bound?.editor
+    const doc = ed?.Canvas?.getFrameEl?.()?.contentDocument
+    return doc ? doc.documentElement.classList.contains('gstrap-tpl-locked') : null
+  })
+  expect(dimInTplMode).toBe(false)
 
   // Save flushes the template tab and writes the fragment + manifest meta.
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('command', 'file:save'))
@@ -490,6 +498,23 @@ test('lock enforcement: chrome refuses delete/duplicate through the command path
   })
   expect(chromeState).toEqual({ footers: 1 })   // not deleted, not duplicated
 
+  // Wave 5 chrome-dim: on a templated PAGE the canvas root carries the lock
+  // class and topmost chrome is visually dimmed; region content is not.
+  // (Runs before the region-child delete below — .tpl-default must exist.)
+  const dimState = await appWindow.evaluate(() => {
+    const ed = window.__gstrap?.pluginRegistry?.bound?.editor
+    const doc = ed?.Canvas?.getFrameEl?.()?.contentDocument
+    if (!doc?.defaultView) return null
+    const header = doc.querySelector('header.tpl-chrome')
+    const regionChild = doc.querySelector('[data-grpstr-region="content"] .tpl-default')
+    return {
+      rootClass: doc.documentElement.classList.contains('gstrap-tpl-locked'),
+      headerOpacity: header ? doc.defaultView.getComputedStyle(header).opacity : null,
+      regionChildOpacity: regionChild ? doc.defaultView.getComputedStyle(regionChild).opacity : null
+    }
+  })
+  expect(dimState).toEqual({ rootClass: true, headerOpacity: '0.6', regionChildOpacity: '1' })
+
   // Region child: delete goes through.
   await appWindow.evaluate(() => {
     const ed = window.__gstrap.pluginRegistry.bound.editor
@@ -547,6 +572,14 @@ test('detach: page becomes a free copy — attrs stripped, locks cleared, propag
   const headerLocks = await appWindow.evaluate(lockStateOf('header'))
   expect(headerLocks?.editable).not.toBe(false)
   expect(headerLocks?.removable).not.toBe(false)
+
+  // Wave 5 chrome-dim: detach clears the canvas-root lock class too.
+  const dimGone = await appWindow.evaluate(() => {
+    const ed = window.__gstrap?.pluginRegistry?.bound?.editor
+    const doc = ed?.Canvas?.getFrameEl?.()?.contentDocument
+    return doc ? !doc.documentElement.classList.contains('gstrap-tpl-locked') : null
+  })
+  expect(dimGone).toBe(true)
 
   // Future propagation must skip the detached page.
   await appWindow.evaluate(() => {

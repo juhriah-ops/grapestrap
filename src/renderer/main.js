@@ -53,6 +53,7 @@ import { wireMenuActions } from './shortcuts/menu-router.js'
 import { wireKeybindings } from './shortcuts/keybindings.js'
 import { wireToasts } from './dialogs/toasts.js'
 import { openPreferencesDialog } from './dialogs/preferences.js'
+import { showAboutDialog } from './dialogs/about.js'
 import { showWelcomeIfFirstRun } from './dialogs/welcome.js'
 import { showContextMenu } from './dialogs/context-menu.js'
 import { buildComponentMenuItems } from './shortcuts/component-actions.js'
@@ -123,14 +124,10 @@ async function boot() {
 
   // Help menu wiring — both items used to emit events nothing listened to.
   // dialog:shortcuts opens Preferences (Shortcuts tab is the default view).
-  // dialog:about toasts version + repo link for v0.0.2; richer modal in v0.0.3.
+  // dialog:about opens the About modal (Wave 5 — replaced the v0.0.2 toast);
+  // version comes from the app:info payload fetched at boot, never hardcoded.
   eventBus.on('dialog:shortcuts', () => openPreferencesDialog())
-  eventBus.on('dialog:about', () => {
-    eventBus.emit('toast', {
-      type: 'info',
-      message: t('toast.about', { version: info.version })
-    })
-  })
+  eventBus.on('dialog:about', () => showAboutDialog(info))
 
   // Linked-files chip → focus the Custom CSS panel. The toast in linked-files
   // claimed the panel was opened but nothing actually surfaced it; this

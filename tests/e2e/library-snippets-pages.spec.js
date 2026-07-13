@@ -364,16 +364,20 @@ test('Audit fixes: dirty-state for snippets/library-delete, orphan menu wiring, 
   })
   expect(await appWindow.evaluate(() => window.__gstrap.projectState.isDirty())).toBe(true)
 
-  // ── 3. dialog:about emits an info toast (was orphan) ───────────────────
-  const toasts = []
-  await appWindow.exposeFunction('__captureAud', t => { toasts.push(t) })
-  await appWindow.evaluate(() => {
-    window.__gstrap.eventBus.on('toast', t => window.__captureAud(t))
-  })
+  // ── 3. dialog:about opens the About modal (Wave 5 — replaced the toast) ─
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('dialog:about'))
-  await appWindow.waitForTimeout(100)
-  const aboutToast = toasts.find(t => t?.type === 'info' && /GrapeStrap/.test(t.message || ''))
-  expect(aboutToast).toBeTruthy()
+  await appWindow.waitForFunction(
+    () => (document.querySelector('.gstrap-about [data-about-version]')?.textContent || '') !== '',
+    null, { timeout: 3_000 }
+  )
+  // Synthetic click — the welcome overlay was never pointer-dismissed here.
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-about [data-action="dismiss"]')?.click()
+  })
+  await appWindow.waitForFunction(
+    () => !document.querySelector('.gstrap-about'),
+    null, { timeout: 3_000 }
+  )
 
   // ── 4. dialog:shortcuts opens the Preferences dialog ───────────────────
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('dialog:shortcuts'))

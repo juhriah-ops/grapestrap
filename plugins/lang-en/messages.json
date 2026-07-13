@@ -92,7 +92,6 @@
   "toast.saved-as": "Saved as new file.",
   "toast.cannot-duplicate": "This element cannot be duplicated (root or locked).",
   "toast.cannot-delete": "This element cannot be deleted (root or locked).",
-  "toast.about": "GrapeStrap {version} — Linux-native Bootstrap 5 editor. github.com/juhriah-ops/grapestrap",
 
   "action.cancel": "Cancel",
   "action.edit": "Edit",
@@ -448,6 +447,13 @@
   "dialog.new-project.starter-blank": "Blank — empty index page",
   "dialog.new-project.create": "Create…",
   "dialog.new-project.cancel": "Cancel",
+
+  "dialog.about.title": "About GrapeStrap",
+  "dialog.about.version-label": "Version",
+  "dialog.about.license-label": "License",
+  "dialog.about.repo-label": "Source",
+  "dialog.about.pledge": "GrapeStrap collects no data and sends no telemetry — ever.",
+  "dialog.about.close": "Close",
 
   "starter.landing.label": "Landing Page",
   "starter.portfolio.label": "Portfolio",

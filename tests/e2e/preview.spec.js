@@ -103,6 +103,11 @@ test('preview start: served HTML gets the SSE snippet, assets and disk stay pris
   const { app, appWindow } = await launch({ GRAPESTRAP_PREVIEW_CMD: STUB_BROWSER })
   await openSeedProject(appWindow, join(projectDir, 'pv.gstrap'))
 
+  // Seed a .php file under site/assets/ BEFORE start (start wipes the cache
+  // then exports; exportProject copies site/assets/ verbatim) — probed below.
+  await fsp.writeFile(join(projectDir, 'site', 'assets', 'probe.php'),
+    '<?php echo "php-mime-probe"; ?>', 'utf8')
+
   const status = await startPreview(appWindow)
   expect(status.running).toBe(true)
   expect(status.url).toContain('http://127.0.0.1:')
@@ -122,6 +127,14 @@ test('preview start: served HTML gets the SSE snippet, assets and disk stay pris
   expect(css.status).toBe(200)
   expect(css.headers['content-type']).toBe('text/css')
   expect(css.body).not.toContain('/__gstrap/sse')
+
+  // .php serves as source text (Wave 5 — was application/octet-stream,
+  // which made browsers download it). No SSE injection: not text/html.
+  const php = await request(`${status.url}/assets/probe.php`)
+  expect(php.status).toBe(200)
+  expect(php.headers['content-type']).toBe('text/plain')
+  expect(php.body).toContain('php-mime-probe')
+  expect(php.body).not.toContain('/__gstrap/sse')
 
   // Injection is serve-time only — the exported file on disk is pristine.
   const onDisk = await fsp.readFile(join(status.cacheDir, 'index.html'), 'utf8')

@@ -56,6 +56,14 @@ export function wireTemplateLock() {
   // happens inside rebuildCanvasFromCode's undo fence (canvas-sync.js), so
   // these writes can never become undo steps.
   eventBus.on('sync:code-to-canvas', () => relockTemplateChrome(getEditor()))
+  // Chrome-dim visual (Wave 5): the lock flags themselves live only on
+  // Backbone models, invisible in the canvas — the dim class is the one
+  // DOM-visible marker and needs syncing on every tab swap (component:add
+  // locking covers the flags but never touches the canvas root) and on GL
+  // re-parents that skip canvas:frame:load (same seam grapesjs-init.js
+  // resyncs <base>/globalCSS on).
+  eventBus.on('tab:focused', () => syncChromeDim(getEditor(), !!activeTemplateName()))
+  eventBus.on('canvas:gl-state-changed', () => syncChromeDim(getEditor(), !!activeTemplateName()))
 }
 
 function attachLockHandlers(editor) {
@@ -76,7 +84,10 @@ function activeTemplateName() {
 
 /** Full-tree lock pass. Safe no-op on non-templated tabs / missing editor. */
 export function relockTemplateChrome(editor) {
-  if (!editor || !activeTemplateName()) return
+  if (!editor) return
+  const locked = !!activeTemplateName()
+  syncChromeDim(editor, locked)
+  if (!locked) return
   const wrapper = editor.getWrapper?.()
   if (!wrapper) return
   withUndoPaused(editor, () => {
@@ -90,6 +101,7 @@ export function relockTemplateChrome(editor) {
 export function unlockAll(editor) {
   const wrapper = editor?.getWrapper?.()
   if (!wrapper) return
+  syncChromeDim(editor, false)
   withUndoPaused(editor, () => {
     wrapper.set('droppable', true)
     walkChildren(wrapper, c => {
@@ -100,6 +112,46 @@ export function unlockAll(editor) {
       c.set('droppable', true)
     })
   })
+}
+
+// ─── Chrome-dim visual (Wave 5 polish) ──────────────────────────────────────
+//
+// Locked template chrome had no visual cue — the flags above are Backbone
+// model state that never reaches the canvas DOM. The only template marker
+// that DOES exist in the canvas is REGION_ATTR on region elements, so the
+// dim is pure CSS keyed on it, gated by one class on the canvas <html>
+// (outside GrapesJS's managed body — never serialized, never re-rendered).
+//
+// Selector logic: dim exactly the "topmost" chrome subtrees — elements that
+// are not a region, contain no region, and whose parent is the body or an
+// element that does contain a region. The two rules select disjoint
+// subtrees, so the opacity never compounds through nesting. Content inside
+// a region is untouched (its ancestors either contain the region — excluded
+// by :not(:has()) — or sit inside it, and regions don't nest, per
+// propagate.js's top-level-regions walk). Visual only: no behavior change,
+// no model writes, no undo interaction.
+const DIM_CLASS = 'gstrap-tpl-locked'
+const DIM_STYLE_ATTR = 'data-grapestrap-tpl-lock-css'
+const DIM_CSS = `
+html.${DIM_CLASS} body > *:not([${REGION_ATTR}]):not(:has([${REGION_ATTR}])),
+html.${DIM_CLASS} body :has([${REGION_ATTR}]) > *:not([${REGION_ATTR}]):not(:has([${REGION_ATTR}])) {
+  opacity: 0.6;
+}
+`
+
+/** Toggle the chrome-dim class (+ inject its stylesheet once per canvas doc). */
+function syncChromeDim(editor, locked) {
+  // Canvas.getDocument() stays null until later than canvas:frame:load —
+  // getFrameEl().contentDocument is the reliable form (see drag-resize.js).
+  const doc = editor?.Canvas?.getFrameEl?.()?.contentDocument
+  if (!doc?.documentElement) return
+  if (locked && !doc.querySelector(`style[${DIM_STYLE_ATTR}]`)) {
+    const tag = doc.createElement('style')
+    tag.setAttribute(DIM_STYLE_ATTR, '')
+    tag.textContent = DIM_CSS
+    doc.head.appendChild(tag)
+  }
+  doc.documentElement.classList.toggle(DIM_CLASS, locked)
 }
 
 function lockOne(component) {

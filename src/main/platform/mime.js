@@ -43,6 +43,11 @@ const MIME_TYPES = {
   '.ogg':  'video/ogg',
   '.mov':  'video/quicktime',
   '.txt':  'text/plain',
+  // .php served as source text (Wave 5): the preview server can't execute
+  // PHP, and the octet-stream fallback made browsers download the file.
+  // text/plain shows the source inline instead — honest about what a
+  // static preview can do with a .php page.
+  '.php':  'text/plain',
   '.xml':  'application/xml',
   '.pdf':  'application/pdf'
 }
