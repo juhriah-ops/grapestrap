@@ -13,16 +13,10 @@ import { pageState } from '../state/page-state.js'
 import { gitState } from '../state/git-state.js'
 import { eventBus } from '../state/event-bus.js'
 import { findRegionId } from '../panels/templates/lock.js'
+import { t } from '../i18n.js'
 
 let host = null
 let lastSelected = null   // component from canvas:selected; cleared on deselect / tab change
-
-// UI_STRINGS — Wave 4 t() sweep target (this file doesn't import t() yet).
-const UI_STRINGS = {
-  regionInside: (id, tpl) => `Region: ${id} (${tpl})`,
-  regionOutside: tpl => `Locked — template "${tpl}"`,
-  regionNone: tpl => `Template: ${tpl}`
-}
 
 export function renderStatusBar(target) {
   host = target
@@ -44,7 +38,7 @@ function refresh() {
   const tab = pageState.active()
 
   const parts = []
-  parts.push(`<span class="gstrap-sb-cell">${project ? escHtml(project.manifest.metadata.name) : 'No project'}</span>`)
+  parts.push(`<span class="gstrap-sb-cell">${escHtml(project ? project.manifest.metadata.name : t('statusbar.no-project'))}</span>`)
   if (tab) {
     const ext = tab.kind === 'template' ? '.gstrap-tpl' : '.html'
     parts.push(`<span class="gstrap-sb-cell">${escHtml(tab.pageName)}${ext}</span>`)
@@ -74,18 +68,18 @@ function refresh() {
     const page = projectState.getPage(tab.pageName)
     if (page?.templateName) {
       let state = 'none'
-      let text = UI_STRINGS.regionNone(page.templateName)
+      let text = t('statusbar.region-none', { tpl: page.templateName })
       if (lastSelected) {
         const regionId = findRegionId(lastSelected, { includeSelf: true })
-        if (regionId) { state = 'inside';  text = UI_STRINGS.regionInside(regionId, page.templateName) }
-        else          { state = 'outside'; text = UI_STRINGS.regionOutside(page.templateName) }
+        if (regionId) { state = 'inside';  text = t('statusbar.region-inside', { id: regionId, tpl: page.templateName }) }
+        else          { state = 'outside'; text = t('statusbar.region-outside', { tpl: page.templateName }) }
       }
       parts.push(`<span class="gstrap-sb-cell gstrap-sb-region" data-region-state="${state}">${escHtml(text)}</span>`)
     }
   }
   if (project) {
     const dirty = projectState.isDirty()
-    parts.push(`<span class="gstrap-sb-cell">${dirty ? '● Unsaved' : '✓ Saved'}</span>`)
+    parts.push(`<span class="gstrap-sb-cell">${escHtml(dirty ? t('statusbar.unsaved') : t('statusbar.saved'))}</span>`)
   }
 
   host.innerHTML = parts.join('')

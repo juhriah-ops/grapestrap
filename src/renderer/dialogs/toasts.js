@@ -17,6 +17,7 @@
  */
 
 import { eventBus } from '../state/event-bus.js'
+import { t } from '../i18n.js'
 
 const TIMEOUTS = {
   success: 1800,
@@ -45,7 +46,7 @@ function show(payload) {
   card.innerHTML = `
     <span class="gstrap-toast-icon" aria-hidden="true">${iconFor(type)}</span>
     <span class="gstrap-toast-msg"></span>
-    <button class="gstrap-toast-x" aria-label="Dismiss">×</button>
+    <button class="gstrap-toast-x" aria-label="${escAttr(t('toast.dismiss'))}">×</button>
   `
   card.querySelector('.gstrap-toast-msg').textContent = message
   host.appendChild(card)
@@ -75,3 +76,5 @@ function iconFor(type) {
     default:        return 'i'
   }
 }
+
+function escAttr(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]) }

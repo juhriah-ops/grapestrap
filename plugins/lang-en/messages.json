@@ -54,6 +54,27 @@
   "panel.custom-css": "Custom CSS",
   "panel.dom-tree": "DOM",
 
+  "toolbar.new": "New",
+  "toolbar.open": "Open",
+  "toolbar.save": "Save",
+  "toolbar.refresh-title": "Save everything to disk + re-sync canvas with all assets",
+  "toolbar.undo": "Undo",
+  "toolbar.redo": "Redo",
+  "toolbar.design": "Design",
+  "toolbar.code": "Code",
+  "toolbar.split": "Split",
+  "toolbar.preview": "Preview",
+  "toolbar.preview-title": "Preview in Browser",
+
+  "statusbar.no-project": "No project",
+  "statusbar.unsaved": "● Unsaved",
+  "statusbar.saved": "✓ Saved",
+  "statusbar.region-inside": "Region: {id} ({tpl})",
+  "statusbar.region-outside": "Locked — template \"{tpl}\"",
+  "statusbar.region-none": "Template: {tpl}",
+
+  "toast.dismiss": "Dismiss",
+
   "device.desktop": "Desktop",
   "device.tablet": "Tablet",
   "device.mobile": "Mobile",
