@@ -3,7 +3,11 @@
  *
  * PATH: tests/e2e/i18n.spec.js
  * ROLE: Wave 1 i18n specs — catalog resolution, missing-key fallback,
- *       interpolation, locale switch + pref persistence, save-toast UI probe
+ *       interpolation, locale switch + pref persistence, save-toast UI probe.
+ *       Wave 4 sweep probes — swept renderer strings render from an injected
+ *       catalog (plain + interpolated + missing-key en fallback, all in
+ *       visible DOM) and the native menu resolves its labels from the
+ *       lang-en messages.json read from disk in the main process.
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-07-12
  */
@@ -152,4 +156,78 @@ test('i18n: save toast renders through t() after a locale switch (demo conversio
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+// ── Wave 4 sweep probes ──────────────────────────────────────────────────────
+
+test('i18n sweep: swept toasts render from an injected catalog — plain, interpolated, and en fallback', async () => {
+  // One locale switch, three toast probes, all landing in visible DOM:
+  //   1. toast.no-project (swept in Wave 4, menu-router noProjectMsg()) —
+  //      plain string from the xx catalog.
+  //   2. toast.command-not-wired — {cmd} interpolation from the xx catalog.
+  //   3. toast.select-element — ABSENT from xx, must fall back to the
+  //      English catalog value in the DOM (missing-key chain end-to-end).
+  const { app, appWindow } = await launch()
+  await waitForI18nReady(appWindow)
+
+  await appWindow.evaluate(async () => {
+    window.__gstrap.eventBus.emit('plugin:language-registered', {
+      plugin: '@i18n-spec/lang-xx',
+      language: {
+        code: 'xx',
+        name: 'Spec Test',
+        messages: {
+          'toast.no-project': 'XX kein Projekt.',
+          'toast.command-not-wired': 'XX nicht verdrahtet: {cmd}!'
+        }
+      }
+    })
+    await window.__gstrap.i18n.setLocale('xx')
+  })
+
+  const toastText = async expected => {
+    const toast = appWindow.locator('.gstrap-toast-msg', { hasText: expected })
+    await toast.waitFor({ state: 'visible', timeout: 3_000 })
+    return (await toast.first().textContent())?.trim()
+  }
+
+  // 1. Plain swept string (no project open → cmdSave warns).
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('command', 'file:save'))
+  expect(await toastText('XX kein Projekt.')).toBe('XX kein Projekt.')
+
+  // 2. Interpolated swept string (unknown command → not-wired warning).
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('command', 'i18nspec:bogus'))
+  expect(await toastText('XX nicht verdrahtet: i18nspec:bogus!'))
+    .toBe('XX nicht verdrahtet: i18nspec:bogus!')
+
+  // 3. Key missing in xx → English value renders (edit:duplicate without a
+  //    selection or project → toast.select-element).
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('command', 'edit:duplicate'))
+  expect(await toastText('Select an element first.')).toBe('Select an element first.')
+
+  await app.close()
+})
+
+test('i18n sweep: native menu labels resolve from the on-disk lang-en catalog (main process)', async () => {
+  // menus.js labels go through menu-i18n.js, which reads
+  // plugins/lang-en/messages.json straight from disk (main can't use the
+  // renderer i18next). Raw keys leaking into the menu — a missing/broken
+  // catalog — would show up here as 'menu.file' instead of '&File'.
+  const { app } = await launch()
+
+  const labels = await app.evaluate(({ Menu }) => {
+    const menu = Menu.getApplicationMenu()
+    if (!menu) return null
+    return {
+      top: menu.items.map(i => i.label),
+      file: menu.items.find(i => i.label === '&File')?.submenu?.items.map(i => i.label) || []
+    }
+  })
+  expect(labels).not.toBeNull()
+  expect(labels.top).toEqual(['&File', '&Edit', '&View', '&Insert', '&Help'])
+  expect(labels.file).toContain('Import Folder…')   // key only in the catalog since Wave 4
+  expect(labels.file).toContain('Save As…')
+  expect(labels.file.some(l => l.startsWith('menu.'))).toBe(false) // no raw keys
+
+  await app.close()
 })
