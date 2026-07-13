@@ -7,7 +7,8 @@
  *       module handles the actual content sync between them per the locked
  *       policy.
  * DEPENDS: editor/grapesjs-init.js, editor/monaco-init.js, editor/canvas-sync.js,
- *          state/project-state.js, state/event-bus.js
+ *          editor/file-tabs.js, state/project-state.js, state/page-state.js,
+ *          state/event-bus.js
  * CREATED: 2026-05-02 (breadcrumb header added with the Wave 3 rewrite)
  *
  * Wave 3 idempotency contract: GL's loadLayout (workspace apply, Reset Layout)
@@ -24,7 +25,9 @@
 import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml, getEditor } from '../../editor/grapesjs-init.js'
 import { createMonacoPair, bindMonacoToRegistry, relayoutAllMonaco } from '../../editor/monaco-init.js'
 import { bindSync, onViewModeChange } from '../../editor/canvas-sync.js'
+import { mountFileTabHost, activateFileTab, isFileTab } from '../../editor/file-tabs.js'
 import { projectState } from '../../state/project-state.js'
+import { pageState } from '../../state/page-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { propagateLibraryItem } from '../library-items/propagate.js'
 import { propagateTemplate, templateRegionsMeta } from '../templates/propagate.js'
@@ -73,17 +76,23 @@ export function renderCanvas(host) {
     <div class="gstrap-canvas-code"   data-region="canvas-code" hidden>
       <div class="gstrap-monaco-host" data-region="monaco-html"></div>
       <div class="gstrap-monaco-host" data-region="monaco-css" hidden></div>
+      <div class="gstrap-monaco-host" data-region="monaco-file" hidden></div>
     </div>
   `
   host.appendChild(persistentRoot)
   const designSlot = persistentRoot.querySelector('[data-region="canvas-design"]')
   const htmlSlot   = persistentRoot.querySelector('[data-region="monaco-html"]')
   const cssSlot    = persistentRoot.querySelector('[data-region="monaco-css"]')
+  const fileSlot   = persistentRoot.querySelector('[data-region="monaco-file"]')
 
   initGrapesJS(designSlot)
   monacoPair = createMonacoPair(htmlSlot, cssSlot)
   bindMonacoToRegistry()
   bindSync({ htmlMonaco: monacoPair.htmlEditor, cssMonaco: monacoPair.cssEditor })
+  // File-tab lane (Wave 4): the slot is handed over once; the editor inside
+  // it is created lazily on the first kind:'file' tab so monaco.getEditors()
+  // keeps its two-editor shape for everything canvas-backed.
+  mountFileTabHost(fileSlot)
 
   // GL splitter drags don't change the gstrap-main host, so the GL host RO
   // doesn't fire — but the canvas container DOES resize. Watch it directly
@@ -116,6 +125,14 @@ function wireCanvasEvents() {
   eventsWired = true
 
   eventBus.on('viewmode:changed', ({ tab, mode, prev }) => {
+    // File tabs are code-only: coerce any attempt to leave code view right
+    // back, and never route the attempt through applyViewMode — its
+    // onViewModeChange(code→design) would rebuildCanvasFromCode() from the
+    // html Monaco's stale page content while a file tab is showing.
+    if (isFileTab(tab)) {
+      if (mode !== 'code') pageState.setViewMode(tab.pageName, 'code')
+      return
+    }
     // `prev` is the mode the tab was in before this change. Reading
     // `tab.viewMode` here would always equal `mode` because pageState mutates
     // the tab before emitting — that's how the code→design rebuild was
@@ -130,6 +147,10 @@ function wireCanvasEvents() {
       loadingTabName = 'about:blank'
       loadHtmlIntoCanvas('')
       loadingTabName = null
+      // Last-tab-closed case: no follow-up tab:focused arrives to fix the
+      // chrome, so put the html slot / design pane back ourselves.
+      if (currentTabKind === 'file') setFileTabChrome(false)
+      currentTabKind = null
     }
   })
   eventBus.on('project:closed', () => {
@@ -137,12 +158,17 @@ function wireCanvasEvents() {
     loadingTabName = 'about:blank'
     loadHtmlIntoCanvas('')
     loadingTabName = null
+    if (currentTabKind === 'file') setFileTabChrome(false)
+    currentTabKind = null
   })
 
   // Real user edits dirty-flag the active tab. Programmatic loads don't.
   eventBus.on('canvas:content-changed', () => {
     if (loadingTabName) return
     if (!currentTabName || !projectState.current) return
+    // File tabs never own canvas content — a stray GrapesJS event while the
+    // (hidden) canvas still holds the previous page must not dirty anything.
+    if (currentTabKind === 'file') return
     if (currentTabKind === 'library') {
       projectState.markLibraryDirty(currentTabName)
     } else if (currentTabKind === 'template') {
@@ -159,8 +185,11 @@ function swapToTab(tab) {
 
   // Capture outgoing content back into projectState (preserves unsaved edits
   // across tab switches; markPageDirty / markLibraryDirty already fired
-  // during the edits themselves).
-  if (currentTabName) {
+  // during the edits themselves). File tabs are excluded on BOTH sides of a
+  // swap: their buffer IS their Monaco model (nothing to capture), and while
+  // one is focused the hidden canvas still holds the previous page — whose
+  // edits were already captured when that page lost focus.
+  if (currentTabName && currentTabKind !== 'file') {
     const captured = getCanvasHtml()
     if (currentTabKind === 'library') {
       const item = projectState.current.libraryItems?.find(it => it.id === currentTabName)
@@ -189,6 +218,24 @@ function swapToTab(tab) {
       const out = projectState.getPage(currentTabName)
       if (out) out.html = captured
     }
+  }
+
+  // Incoming file tab: no canvas involvement at all — attach its model in
+  // the file slot and swap the chrome to code-only. The canvas keeps the
+  // previous page's (already captured) content, hidden.
+  if (isFileTab(tab)) {
+    activateFileTab(tab)
+    setFileTabChrome(true)
+    currentTabName = tab.pageName
+    currentTabKind = 'file'
+    return
+  }
+  // Leaving a file tab for a canvas-backed one: restore the html slot and
+  // the incoming tab's view-mode chrome directly — NOT via applyViewMode,
+  // whose code→design hook would rebuildCanvasFromCode() from the stale
+  // html Monaco and pollute the incoming page (head extraction included).
+  if (currentTabKind === 'file') {
+    setFileTabChrome(false, tab.viewMode)
   }
 
   let nextHtml = ''
@@ -221,6 +268,35 @@ function swapToTab(tab) {
   // setComponents fires synchronously; release the load guard on the next tick
   // to cover any straggler events fired in microtasks.
   queueMicrotask(() => { loadingTabName = null })
+}
+
+// Toggle the code region between its two occupants: the html Monaco (page /
+// template / library tabs) and the file Monaco (kind:'file' tabs). Entering a
+// file tab forces code-only chrome; leaving restores the incoming tab's own
+// view mode. Split state is re-derived so is-split can't leak across kinds.
+function setFileTabChrome(active, restoreMode = 'design') {
+  if (!persistentRoot) return
+  const design   = persistentRoot.querySelector('[data-region="canvas-design"]')
+  const code     = persistentRoot.querySelector('[data-region="canvas-code"]')
+  const htmlHost = persistentRoot.querySelector('[data-region="monaco-html"]')
+  const fileHost = persistentRoot.querySelector('[data-region="monaco-file"]')
+  if (!design || !code || !htmlHost || !fileHost) return
+
+  htmlHost.hidden = active
+  fileHost.hidden = !active
+
+  const mode = active ? 'code' : restoreMode
+  splitActive = (mode === 'split')
+  persistentRoot.parentElement?.classList.toggle('is-split', splitActive)
+  design.hidden = (mode === 'code')
+  code.hidden   = (mode === 'design')
+
+  // Same paint-stable measure pass applyViewMode does — an editor first shown
+  // while sized 0 needs an explicit layout once visible.
+  requestAnimationFrame(() => {
+    relayoutAllMonaco()
+    try { getEditor()?.refresh?.() } catch (_) { /* GrapesJS not ready */ }
+  })
 }
 
 function installCanvasResizeWatcher(watchTarget) {

@@ -29,6 +29,12 @@ import 'monaco-editor/esm/vs/basic-languages/html/html.contribution.js'
 import 'monaco-editor/esm/vs/basic-languages/css/css.contribution.js'
 import 'monaco-editor/esm/vs/language/html/monaco.contribution.js'
 import 'monaco-editor/esm/vs/language/css/monaco.contribution.js'
+// PHP (Wave 4) is Monarch-tokenizer-only — monaco ships no vs/language/php
+// worker, so unlike html/css there is no service import to pair with this and
+// the MonacoEnvironment default branch (editorWorker) already covers it.
+// Registers extensions .php/.php4/.php5/.phtml/.ctp, which is what lets
+// createModel(value, undefined, uri) infer 'php' for file tabs (file-tabs.js).
+import 'monaco-editor/esm/vs/basic-languages/php/php.contribution.js'
 
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { log } from '../log.js'
@@ -132,6 +138,17 @@ export function createMonacoPair(htmlContainer, cssContainer, { html = '', css =
   registerForRelayout(cssEditor)
 
   return { htmlEditor, cssEditor, htmlModel, cssModel }
+}
+
+// Single standalone editor with the house options, no model attached yet.
+// Used by the file-tab lane (editor/file-tabs.js) so its editor config can
+// never drift from the html/css pair's. Deliberately NOT created eagerly
+// anywhere — specs index monaco.editor.getEditors() by position/language and
+// must keep seeing exactly two editors until a file tab actually opens.
+export function createMonacoSingle(container) {
+  const editor = monaco.editor.create(container, { ...COMMON_OPTIONS, model: null })
+  registerForRelayout(editor)
+  return editor
 }
 
 export function bindMonacoToRegistry() {

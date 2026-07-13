@@ -39,6 +39,12 @@ export function flushActiveTabIntoProject() {
   if (!projectState.current) return
   const tab = pageState.active()
   if (!tab) return
+  // File tabs (Wave 4) never round-trip through the canvas: their buffer is
+  // their own Monaco model, flushed to disk by editor/file-tabs.js on
+  // project:saved. Bail BEFORE the code-view rebuild below — a file tab is
+  // always viewMode 'code', and rebuildCanvasFromCode() here would resurrect
+  // the html Monaco's stale page content into the hidden canvas.
+  if (tab.kind === 'file') return
   // If the user is editing in Code view (or split view, where code may have
   // last focus), the canvas component tree is stale — Monaco edits don't
   // propagate to GrapesJS until view-mode switch back to design. Rebuild now

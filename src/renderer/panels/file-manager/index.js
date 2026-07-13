@@ -2,7 +2,11 @@
  * GrapeStrap — File manager panel
  *
  * Three sections in v0.0.1: Pages, Assets, Styles. Templates and Library
- * sections appear in v0.0.2/v0.1.0 as those features ship.
+ * sections appear in v0.0.2/v0.1.0 as those features ship. Wave 4 adds a
+ * Site Files section — code files living under site/ that aren't canvas
+ * material (.php only for now); dblclick opens them as code-only file tabs
+ * (editor/file-tabs.js). The section renders only when the scan finds any,
+ * so php-less projects keep the exact pre-Wave-4 DOM.
  *
  * Wave 3 idempotency contract: GL's loadLayout (workspace apply, Reset
  * Layout) re-invokes this factory with a fresh host element. Event
@@ -20,8 +24,11 @@ import { eventBus } from '../../state/event-bus.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
 import { showContextMenu } from '../../dialogs/context-menu.js'
 import { createTemplate, deleteTemplate } from '../templates/manage.js'
+import { isFileDirty } from '../../editor/file-tabs.js'
+import { t } from '../../i18n.js'
 
-// UI_STRINGS — Wave 4 t() sweep target (this file doesn't import t() yet).
+// UI_STRINGS — Wave 4 t() sweep target (pre-existing strings stay literal
+// until the sweep lands; strings ADDED in Wave 4 go through t() directly).
 const UI_STRINGS = {
   templatesTitle: 'Templates',
   newTemplate: 'New template…',
@@ -29,8 +36,15 @@ const UI_STRINGS = {
   deleteTemplate: 'Delete Template'
 }
 
+// Site Files scan (Wave 4): .php under site/, recursive. assets/ is skipped —
+// it's the bundled framework tree and can't contain user php worth listing.
+const SITE_SCAN_SKIP_DIRS = new Set(['assets'])
+const SITE_SCAN_MAX_DEPTH = 4
+
 let hostEl = null
 let eventsWired = false
+let sitePhpFiles = []          // site-relative paths, sorted
+let siteRescanTimer = null
 
 export function renderFileManager(host) {
   hostEl = host
@@ -47,6 +61,14 @@ export function renderFileManager(host) {
     if (tplEl) {
       const name = tplEl.dataset.fmTemplate
       pageState.open(name, { kind: 'template', label: name })
+    }
+    const fileEl = evt.target.closest('[data-fm-file]')
+    if (fileEl) {
+      const relPath = fileEl.dataset.fmFile
+      // Code-only tab; the label is the basename, the tab key the full
+      // site-relative path (unique across nested dirs, can't collide with
+      // extensionless page/template names).
+      pageState.open(relPath, { kind: 'file', label: relPath.split('/').pop(), viewMode: 'code' })
     }
   })
 
@@ -74,11 +96,56 @@ export function renderFileManager(host) {
 function wireFmEvents() {
   if (eventsWired) return
   eventsWired = true
-  eventBus.on('project:opened',        () => refresh())
-  eventBus.on('project:closed',        () => refresh())
+  eventBus.on('project:opened',        () => { refresh(); rescanSiteFiles() })
+  eventBus.on('project:closed',        () => { sitePhpFiles = []; refresh() })
   eventBus.on('project:dirty-changed', () => refresh())
   eventBus.on('templates:changed',     () => refresh())
   eventBus.on('git:status-changed',    () => refresh())
+  // Site Files stay live with the disk: the main-process chokidar watcher
+  // already forwards add/delete per project file — react only to .php paths,
+  // debounced (chokidar can burst on a folder drop).
+  const phpWatch = p => { if (typeof p === 'string' && p.toLowerCase().endsWith('.php')) queueSiteRescan() }
+  window.grapestrap.watcher.onAdded(phpWatch)
+  window.grapestrap.watcher.onDeleted(phpWatch)
+}
+
+function queueSiteRescan() {
+  clearTimeout(siteRescanTimer)
+  siteRescanTimer = setTimeout(rescanSiteFiles, 300)
+}
+
+// Walk site/ via the file:list IPC collecting .php paths. Depth-capped, skips
+// dotdirs + assets/. Repaints only when the list actually changed, so the
+// common no-php project never re-renders from this path.
+async function rescanSiteFiles() {
+  const project = projectState.current
+  if (!project) return
+  const found = []
+  async function walk(rel, depth) {
+    if (depth > SITE_SCAN_MAX_DEPTH) return
+    let entries = []
+    try {
+      entries = await window.grapestrap.file.list(rel ? `site/${rel}` : 'site')
+    } catch {
+      return // dir vanished mid-scan or no project — nothing to list
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue
+      const childRel = rel ? `${rel}/${e.name}` : e.name
+      if (e.type === 'dir') {
+        if (!SITE_SCAN_SKIP_DIRS.has(e.name)) await walk(childRel, depth + 1)
+      } else if (e.type === 'file' && e.name.toLowerCase().endsWith('.php')) {
+        found.push(childRel)
+      }
+    }
+  }
+  await walk('', 0)
+  if (projectState.current !== project) return // project swapped mid-scan
+  found.sort()
+  if (found.join('\n') !== sitePhpFiles.join('\n')) {
+    sitePhpFiles = found
+    refresh()
+  }
 }
 
 function refresh() {
@@ -124,6 +191,12 @@ function refresh() {
     return `<li class="gstrap-fm-item${dirty}"${git} data-fm-template="${escAttr(t.name)}">${escHtml(t.name)}.gstrap-tpl</li>`
   }).join('')
 
+  const siteFiles = sitePhpFiles.map(p => {
+    const dirty = isFileDirty(p) ? ' is-dirty' : ''
+    const git = gitAttr(`site/${p}`)
+    return `<li class="gstrap-fm-item${dirty}"${git} data-fm-file="${escAttr(p)}">${escHtml(p)}</li>`
+  }).join('')
+
   host.innerHTML = `
     <div class="gstrap-fm-section">
       <div class="gstrap-fm-section-title">Pages</div>
@@ -141,6 +214,11 @@ function refresh() {
         <li class="gstrap-fm-item${projectState.globalCssDirty ? ' is-dirty' : ''}"${gitAttr('site/style.css')}>style.css</li>
       </ul>
     </div>
+    ${sitePhpFiles.length === 0 ? '' : `
+    <div class="gstrap-fm-section">
+      <div class="gstrap-fm-section-title">${escHtml(t('fm.site-files'))}</div>
+      <ul class="gstrap-fm-list">${siteFiles}</ul>
+    </div>`}
     <div class="gstrap-fm-section">
       <div class="gstrap-fm-section-title">Assets</div>
       <ul class="gstrap-fm-list">

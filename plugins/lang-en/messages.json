@@ -67,6 +67,10 @@
   "toast.export-success": "Exported {count} page(s) to {dir}",
   "toast.command-not-wired": "Command \"{cmd}\" not yet wired in v0.0.1.",
 
+  "fm.site-files": "Site Files",
+  "file.toast.read-failed": "Could not read {path}: {error}",
+  "file.toast.write-failed": "Could not save {path}: {error}",
+
   "welcome.title": "Welcome to GrapeStrap",
   "welcome.tagline": "The Dreamweaver-style visual editor for Bootstrap 5 on Linux.",
   "welcome.dismiss": "Don't show again",

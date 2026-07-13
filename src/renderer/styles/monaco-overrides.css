@@ -11,3 +11,11 @@
 .gstrap-monaco-host .monaco-editor-background {
   background: var(--bg-1) !important;
 }
+
+/* PHP include/require target strings (Wave 4, editor/php-decorations.js):
+   inline decoration marking the quoted file a php statement pulls in.
+   Visual affordance only — no navigation is wired to it. */
+.gstrap-php-include-target {
+  text-decoration: underline dotted var(--accent);
+  text-underline-offset: 3px;
+}
