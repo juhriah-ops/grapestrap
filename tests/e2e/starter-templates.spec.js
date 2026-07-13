@@ -135,6 +135,7 @@ test('Landing starter: master + composed page on disk, manifest round-trips, chr
   expect(reopened.starter).toBe('landing')
 
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('Portfolio starter: glightbox vendored in-project, head-linked round-trip, export clean', async () => {
@@ -201,6 +202,8 @@ test('Portfolio starter: glightbox vendored in-project, head-linked round-trip, 
   expect(offenders).toEqual([])
 
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+  await fsp.rm(outDir, { recursive: true, force: true })
 })
 
 test('Blog starter: two templated pages; template edit propagates chrome to both', async () => {
@@ -239,6 +242,7 @@ test('Blog starter: two templated pages; template edit propagates chrome to both
   ])
 
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('blank path unchanged: templateId omitted produces today\'s blank project (regression pin)', async () => {
@@ -258,6 +262,7 @@ test('blank path unchanged: templateId omitted produces today\'s blank project (
   expect(pageOnDisk).toContain('Welcome to your new GrapeStrap project')
 
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('unknown starter id fails open to a blank project (no throw)', async () => {
@@ -273,6 +278,7 @@ test('unknown starter id fails open to a blank project (no throw)', async () => 
   expect(await fileExists(join(projectDir, 'site', 'templates'))).toBe(false)
 
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('New Project dialog: starter select populated, Blank default, Esc cancels', async () => {

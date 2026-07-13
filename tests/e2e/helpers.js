@@ -19,7 +19,7 @@ const repoRoot = join(__dirname, '..', '..')
 // proceed. Keep in sync with plugins/*/grapestrap.json (5 as of v0.1.0).
 export const EXPECTED_PLUGIN_COUNT = 5
 
-export async function launch(extraEnv = {}) {
+export async function launch(extraEnv = {}, { keepXdg = false } = {}) {
   // Isolate XDG dirs per launch so prefs (esp. prefs.view set by toggle
   // specs) don't leak between tests. Prior runs would persist
   // propertiesPanelVisible:false to ~/.config/GrapeStrap and break every
@@ -36,6 +36,19 @@ export async function launch(extraEnv = {}) {
       ...extraEnv
     }
   })
+  // Delete the per-launch XDG scratch when the app closes (spec app.close()
+  // AND playwright's kill-on-teardown both emit 'close'). Without this every
+  // launch leaked ~10-30MB of Chromium cache into the OS tmpdir — a full
+  // 124-spec run filled the 3.9G tmpfs on .212 (2026-07-12, during the Wave 4
+  // sweep) and Electron then failed to boot for every later spec.
+  // keepXdg opts out for relaunch specs (recovery, workspace-persistence)
+  // that reopen a second session against the FIRST session's XDG root —
+  // those specs own the rm themselves.
+  if (!keepXdg) {
+    app.on('close', () => {
+      fsp.rm(xdgRoot, { recursive: true, force: true }).catch(() => {})
+    })
+  }
   const appWindow = await app.firstWindow()
   await appWindow.waitForFunction(() => window.__gstrap?.eventBus, null, { timeout: 30_000 })
   return { app, appWindow, xdgRoot }

@@ -75,7 +75,9 @@ test('Recovery: dirty project + SIGKILL → relaunch offers restore → edit ret
   const projectPath = join(projectDir, 'recov1.gstrap')
   const recoveryPath = projectPath + '.recovery'
   let app2 = null
-  const { app, appWindow, xdgRoot } = await launch()
+  // keepXdg: session 2 relaunches against this XDG root; the finally
+  // block below owns the rm.
+  const { app, appWindow, xdgRoot } = await launch({}, { keepXdg: true })
   try {
     await dismissWelcome(appWindow)   // also persists welcomeShown for session 2
     await seedDirtyProject(appWindow, projectPath)
@@ -115,7 +117,9 @@ test('Recovery: discard clears the snapshot and leaves the empty state', async (
   const projectPath = join(projectDir, 'recov2.gstrap')
   const recoveryPath = projectPath + '.recovery'
   let app2 = null
-  const { app, appWindow, xdgRoot } = await launch()
+  // keepXdg: session 2 relaunches against this XDG root; the finally
+  // block below owns the rm.
+  const { app, appWindow, xdgRoot } = await launch({}, { keepXdg: true })
   try {
     await dismissWelcome(appWindow)
     await seedDirtyProject(appWindow, projectPath)
@@ -150,7 +154,9 @@ test('Recovery: save clears the snapshot — no recovery dialog on next launch',
   const projectPath = join(projectDir, 'recov3.gstrap')
   const recoveryPath = projectPath + '.recovery'
   let app2 = null
-  const { app, appWindow, xdgRoot } = await launch()
+  // keepXdg: session 2 relaunches against this XDG root; the finally
+  // block below owns the rm.
+  const { app, appWindow, xdgRoot } = await launch({}, { keepXdg: true })
   try {
     await dismissWelcome(appWindow)
     await seedDirtyProject(appWindow, projectPath)

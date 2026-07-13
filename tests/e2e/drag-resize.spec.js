@@ -128,6 +128,7 @@ test('drag-resize: column drag at desktop fill snaps to base col-9', async () =>
   })
   expect(sibling).toContain('col-6')
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('drag-resize: same drag at a narrowed breakpoint writes col-md-9 and keeps base col-6', async () => {
@@ -151,6 +152,7 @@ test('drag-resize: same drag at a narrowed breakpoint writes col-md-9 and keeps 
   expect(classes).toContain('col-md-9')
   expect(classes).toContain('col-6') // base breakpoint class must survive
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('drag-resize: ONE undo restores the exact pre-drag class set', async () => {
@@ -178,6 +180,7 @@ test('drag-resize: ONE undo restores the exact pre-drag class set', async () => 
   await appWindow.evaluate(() => window.__gstrap.pluginRegistry.bound.editor.UndoManager.redo())
   expect(await selectedClasses(appWindow)).toContain('col-9')
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('drag-resize: image right-edge drag snaps w-50 to w-100', async () => {
@@ -213,6 +216,7 @@ test('drag-resize: image right-edge drag snaps w-50 to w-100', async () => {
   expect(classes).toContain('w-100')
   expect(classes).not.toContain('w-50')
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('drag-resize: top margin strip drag writes mt-3', async () => {
@@ -236,6 +240,7 @@ test('drag-resize: top margin strip drag writes mt-3', async () => {
   expect(classes).toContain('mt-3')
   expect(classes).toEqual(expect.arrayContaining(['display-5', 'fw-bold'])) // untouched
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
 test('drag-resize: ghost outline and class badge visible mid-drag, gone after release', async () => {
@@ -281,4 +286,5 @@ test('drag-resize: ghost outline and class badge visible mid-drag, gone after re
   expect(after.ghost).toBe(false)
   expect(after.badge).toBe(false)
   await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })

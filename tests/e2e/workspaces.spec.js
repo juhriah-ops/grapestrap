@@ -207,7 +207,9 @@ test('workspace geometry round-trips through save, reset, apply', async () => {
 
 // ─── Spec 4 — relaunch persistence (pinned XDG_STATE_HOME) ───────────────────
 test('saved workspaces persist across app relaunch', async () => {
-  const first = await launch()
+  // keepXdg: the second session below reuses first.xdgRoot/state — this
+  // test owns the rm at the end.
+  const first = await launch({}, { keepXdg: true })
   const savedState = join(first.xdgRoot, 'state')
   // launch() only waits for the event bus — capture needs GL initialised.
   await first.appWindow.waitForFunction(
@@ -228,6 +230,7 @@ test('saved workspaces persist across app relaunch', async () => {
   const applied = await second.appWindow.evaluate(() => window.__gstrap.workspaces.apply('test-b'))
   expect(applied?.ok).toBe(true)
   await second.app.close()
+  await fsp.rm(first.xdgRoot, { recursive: true, force: true })
 })
 
 // ─── Spec 5 — presets (Compact hides chrome + widens canvas; Designer restores) ─
