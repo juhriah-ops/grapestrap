@@ -1,6 +1,6 @@
 ---
 name: Plugin submission
-about: Submit a plugin for the curated list at grapestrap.org/plugins
+about: Submit a plugin for the curated plugin list (planned post-v0.1.0)
 labels: plugin-submission
 ---
 
@@ -34,4 +34,4 @@ If your plugin requests any permissions in the manifest, justify each one. If it
 
 ## Code of Conduct
 
-By submitting, you agree to abide by the [Contributor Covenant](https://github.com/grapestrap/grapestrap/blob/main/.github/CODE_OF_CONDUCT.md). Plugins that violate it will be removed from the curated list.
+By submitting, you agree to abide by the [Contributor Covenant](https://github.com/juhriah-ops/grapestrap/blob/main/.github/CODE_OF_CONDUCT.md). Plugins that violate it will be removed from the curated list.

@@ -257,7 +257,7 @@ What we do instead:
 - **Project-pinned plugins** skip the prompt — the project is the trust boundary. If you opened the project, you trust it.
 - The **Preferences > Plugins** page shows installed plugins, their manifests, load logs, and lets the user disable or uninstall.
 - **No auto-install, no auto-update.** We never reach out and pull plugin code without the user explicitly asking.
-- The **curated list** at `grapestrap.org/plugins` is community-submitted and reviewed before listing.
+- The **curated plugin list** (planned post-v0.1.0) is community-submitted and reviewed before listing.
 
 ### Files
 

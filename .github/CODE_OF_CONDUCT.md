@@ -11,7 +11,7 @@ This Code applies to all project spaces — GitHub issues and pull requests, the
 
 ## Reporting
 
-Concerns can be raised by emailing the maintainers at `conduct@grapestrap.org` or by filing a confidential issue. Reports are reviewed by the BDFL during the v0.x phase; once a steering committee is in place (planned post-v1.0), reports go to the committee.
+Raise concerns by opening an issue at [github.com/juhriah-ops/grapestrap/issues](https://github.com/juhriah-ops/grapestrap/issues). For concerns that should not be discussed publicly, use GitHub's built-in "Report content" / "Report abuse" option on the content or account in question — note that those reports go to GitHub, not to the maintainers. A private maintainer contact channel will be added here when one exists. Reports are reviewed by the BDFL during the v0.x phase; once a steering committee is in place (planned post-v1.0), reports go to the committee.
 
 ## Enforcement
 

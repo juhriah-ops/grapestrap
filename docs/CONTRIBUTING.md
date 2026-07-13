@@ -28,7 +28,7 @@ This document explains how to contribute, what we expect, and where to ask quest
 
 GrapeStrap follows the [Contributor Covenant 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/), adopted from day 1. The full text lives at `.github/CODE_OF_CONDUCT.md` in the repository.
 
-Treat people well. Disagree on technical merit, not on identity. If someone violates the Code of Conduct, contact the maintainers privately at the email address listed in the CoC file. All reports are handled confidentially.
+Treat people well. Disagree on technical merit, not on identity. If someone violates the Code of Conduct, use the reporting path described in the CoC file.
 
 This applies to every project space: GitHub issues and pull requests, Matrix and Discussions, plugin submissions, translation discussions, and any in-person event held under the GrapeStrap banner.
 
@@ -39,11 +39,11 @@ This applies to every project space: GitHub issues and pull requests, Matrix and
 | Question type                         | Best place                                              |
 |---------------------------------------|---------------------------------------------------------|
 | Quick chat, real-time help            | Matrix room (planned for v0.1.0 launch)                 |
-| Longer-form questions, design ideas   | [GitHub Discussions](https://github.com/grapestrap/grapestrap/discussions) |
-| Bug reports                           | [GitHub Issues](https://github.com/grapestrap/grapestrap/issues) |
+| Longer-form questions, design ideas   | [GitHub Discussions](https://github.com/juhriah-ops/grapestrap/discussions) |
+| Bug reports                           | [GitHub Issues](https://github.com/juhriah-ops/grapestrap/issues) |
 | Plugin questions                      | GitHub Discussions, "Plugins" category                  |
 | Translation questions                 | GitHub Discussions, "i18n" category                     |
-| Security disclosures                  | Private email (see Code of Conduct file)                |
+| Security disclosures                  | GitHub private vulnerability reporting (see [SECURITY.md](../SECURITY.md))                |
 
 Don't open an issue to ask a question. Discussions exist for that, and they're indexed for future contributors.
 
@@ -101,7 +101,7 @@ Set up a development environment per the [Building from source](./INSTALL.md#bui
    ```bash
    git clone git@github.com:<your-user>/grapestrap.git
    cd grapestrap
-   git remote add upstream https://github.com/grapestrap/grapestrap.git
+   git remote add upstream https://github.com/juhriah-ops/grapestrap.git
    ```
 4. **Create a branch** off `main` (see [Branch naming](#branch-naming)).
 5. **Make your changes.**
@@ -113,7 +113,7 @@ Set up a development environment per the [Building from source](./INSTALL.md#bui
    The Playwright smoke test gates v0.0.1 functionality. Don't break it.
 7. **Commit** following the conventions below.
 8. **Push** to your fork.
-9. **Open a pull request** against `grapestrap/grapestrap:main`.
+9. **Open a pull request** against `juhriah-ops/grapestrap:main`.
 
 ### What to expect
 
@@ -212,7 +212,7 @@ GrapeStrap is built on a plugin API from day 1, and we very much want your plugi
 If you've written a plugin:
 
 - **Don't put it in this repo.** Plugins live in their own repos (typically `npm` packages under your own scope, e.g. `@yourname/blocks-bulma`).
-- **Submit it to the curated marketplace** at `grapestrap.org/plugins` once that exists (planned alongside v0.1.0 launch). Until then, post it in [Discussions](https://github.com/grapestrap/grapestrap/discussions) under the "Plugins" category and people will find it.
+- **Submit it for the curated plugin list** — the list is planned post-v0.1.0 and does not exist yet. Until it does, post your plugin in [Discussions](https://github.com/juhriah-ops/grapestrap/discussions) under the "Plugins" category and people will find it.
 - **Open a `plugin_submission` issue** (`.github/ISSUE_TEMPLATE/plugin_submission.md`) for inclusion in the curated list.
 
 The full plugin authoring guide is [PLUGIN-DEVELOPMENT.md](./PLUGIN-DEVELOPMENT.md).
@@ -227,7 +227,7 @@ Translations are precious. The Linux community translates fast, and we want ever
 
 The translation process will be fully documented at `docs/translations/` once the i18n runtime ships in v0.1.0. Until then:
 
-1. Open a [Discussion](https://github.com/grapestrap/grapestrap/discussions) under "i18n" announcing the language you want to add.
+1. Open a [Discussion](https://github.com/juhriah-ops/grapestrap/discussions) under "i18n" announcing the language you want to add.
 2. Wait for the v0.1.0 i18n scaffold (planned, near-term).
 3. We'll publish a translator guide and a starter `messages.json` template.
 
@@ -243,7 +243,7 @@ Documentation PRs are welcome and reviewed quickly.
 
 - Fix typos, broken links, factual errors in any `docs/` file or root-level `.md` — open the PR directly, no issue needed.
 - Larger doc rewrites (a new section, restructuring) — open an issue first to align on scope.
-- Screenshots and demo videos — drop them in [Discussions](https://github.com/grapestrap/grapestrap/discussions). If we want to use them in the docs site or marketing, we'll ask.
+- Screenshots and demo videos — drop them in [Discussions](https://github.com/juhriah-ops/grapestrap/discussions). If we want to use them in the docs site or marketing, we'll ask.
 
 We use plain GitHub-flavored Markdown. No emojis in docs (this is a project convention, not a personal preference). Links between docs use **relative paths** so they work in repo browsing, packaged docs, and the eventual website.
 

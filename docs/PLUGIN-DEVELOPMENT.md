@@ -644,7 +644,7 @@ npm init                          # to create package.json
 npm publish --access public       # under your npm scope
 ```
 
-Then submit it to the curated marketplace via [GitHub issue template](https://github.com/grapestrap/grapestrap/issues/new?template=plugin_submission.md). See [Distribution](#distribution).
+Then submit it for the curated plugin list via the [GitHub issue template](https://github.com/juhriah-ops/grapestrap/issues/new?template=plugin_submission.md). See [Distribution](#distribution).
 
 ---
 
@@ -734,13 +734,13 @@ npm publish --access public
 
 **3. In a project.** Drop the plugin folder into `<project>/.grapestrap/plugins/`. Commit it to the project's repo. Anyone who clones the project gets the plugin without separate install.
 
-### Curated marketplace
+### Curated plugin list
 
-The grapestrap.org plugin marketplace is a **curated list** — community submissions reviewed by maintainers before listing. To submit:
+The curated plugin list (planned post-v0.1.0 — it does not exist yet) is exactly that: a **curated list** of community submissions, reviewed by maintainers before listing. To submit:
 
 1. Open a `plugin_submission` issue in the main repo (`.github/ISSUE_TEMPLATE/plugin_submission.md`). The template asks for the plugin's name, repo URL, npm URL, license, description, and whether you're the author.
 2. A maintainer reviews the plugin's code, manifest, and license for compliance with the [Trust model](#trust-model) below.
-3. Listed plugins appear at `grapestrap.org/plugins`. Listing does not imply endorsement — it indicates a maintainer has skimmed it for obvious problems.
+3. Accepted plugins will appear on the curated list once it launches. Listing does not imply endorsement — it indicates a maintainer has skimmed it for obvious problems.
 
 We list plugins that:
 
