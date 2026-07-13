@@ -23,16 +23,18 @@
 
 import { eventBus } from '../state/event-bus.js'
 import { DEFAULT_BINDINGS, formatCombo, resolveBindings } from '../shortcuts/default-bindings.js'
+import { t } from '../i18n.js'
+import { codeMarkup } from '../i18n-html.js'
 
 let overlay = null
 let overrides = {}
 let editingCommand = null
 
 const TABS = [
-  { id: 'shortcuts', label: 'Shortcuts' },
-  { id: 'general',   label: 'General'   },
-  { id: 'editor',    label: 'Editor'    },
-  { id: 'plugins',   label: 'Plugins'   }
+  { id: 'shortcuts', labelKey: 'prefs.tab.shortcuts' },
+  { id: 'general',   labelKey: 'prefs.tab.general'   },
+  { id: 'editor',    labelKey: 'prefs.tab.editor'    },
+  { id: 'plugins',   labelKey: 'prefs.tab.plugins'   }
 ]
 
 let activeTab = 'shortcuts'
@@ -79,14 +81,14 @@ function paint() {
   overlay.innerHTML = `
     <div class="gstrap-prefs-card" role="dialog" aria-modal="true">
       <div class="gstrap-prefs-header">
-        <span class="gstrap-prefs-title">Preferences</span>
-        <button class="gstrap-prefs-close" data-prefs-action="close" title="Close">✕</button>
+        <span class="gstrap-prefs-title">${escHtml(t('prefs.title'))}</span>
+        <button class="gstrap-prefs-close" data-prefs-action="close" title="${escAttr(t('action.close'))}">✕</button>
       </div>
       <div class="gstrap-prefs-body">
         <div class="gstrap-prefs-tabs">
-          ${TABS.map(t => `
-            <button class="gstrap-prefs-tab ${t.id === activeTab ? 'is-active' : ''}"
-                    data-prefs-tab="${t.id}">${t.label}</button>
+          ${TABS.map(tab => `
+            <button class="gstrap-prefs-tab ${tab.id === activeTab ? 'is-active' : ''}"
+                    data-prefs-tab="${tab.id}">${escHtml(t(tab.labelKey))}</button>
           `).join('')}
         </div>
         <div class="gstrap-prefs-pane">
@@ -104,11 +106,11 @@ function paintShortcutsPane() {
 
   return `
     <div class="gstrap-prefs-toolbar">
-      <button class="gstrap-prefs-btn" data-prefs-action="reset-all">Reset all</button>
+      <button class="gstrap-prefs-btn" data-prefs-action="reset-all">${escHtml(t('prefs.reset-all'))}</button>
     </div>
     <table class="gstrap-prefs-shortcuts">
       <thead>
-        <tr><th>Action</th><th>Shortcut</th><th></th></tr>
+        <tr><th>${escHtml(t('prefs.header-action'))}</th><th>${escHtml(t('prefs.header-shortcut'))}</th><th></th></tr>
       </thead>
       <tbody>
         ${DEFAULT_BINDINGS.map(def => paintRow(def, byCommand[def.command])).join('')}
@@ -123,19 +125,19 @@ function paintRow(def, active) {
   const conflict = isEditing ? null : findConflict(def.command, active)
   return `
     <tr data-prefs-row="${def.command}" class="${overridden ? 'is-overridden' : ''} ${conflict ? 'is-conflict' : ''}">
-      <td class="gstrap-prefs-row-label">${escHtml(def.label)}</td>
+      <td class="gstrap-prefs-row-label">${escHtml(t(`shortcut.${def.command}`, { defaultValue: def.label }))}</td>
       <td class="gstrap-prefs-row-combo">
         ${isEditing
-          ? `<span class="gstrap-prefs-combo-capturing">Press a combo… (Esc cancels)</span>`
+          ? `<span class="gstrap-prefs-combo-capturing">${escHtml(t('prefs.press-combo'))}</span>`
           : `<code class="gstrap-prefs-combo">${escHtml(formatCombo(active))}</code>`}
-        ${conflict ? `<span class="gstrap-prefs-conflict">conflicts with ${escHtml(conflict)}</span>` : ''}
+        ${conflict ? `<span class="gstrap-prefs-conflict">${escHtml(t('prefs.conflicts-with', { command: conflict }))}</span>` : ''}
       </td>
       <td class="gstrap-prefs-row-actions">
         ${isEditing
-          ? `<button class="gstrap-prefs-btn" data-prefs-action="cancel-edit">Cancel</button>`
+          ? `<button class="gstrap-prefs-btn" data-prefs-action="cancel-edit">${escHtml(t('action.cancel'))}</button>`
           : `
-            <button class="gstrap-prefs-btn" data-prefs-action="edit"  data-prefs-command="${escAttr(def.command)}">Edit</button>
-            ${overridden ? `<button class="gstrap-prefs-btn" data-prefs-action="reset" data-prefs-command="${escAttr(def.command)}">Reset</button>` : ''}
+            <button class="gstrap-prefs-btn" data-prefs-action="edit"  data-prefs-command="${escAttr(def.command)}">${escHtml(t('action.edit'))}</button>
+            ${overridden ? `<button class="gstrap-prefs-btn" data-prefs-action="reset" data-prefs-command="${escAttr(def.command)}">${escHtml(t('prefs.reset'))}</button>` : ''}
           `}
       </td>
     </tr>
@@ -143,10 +145,11 @@ function paintRow(def, active) {
 }
 
 function paintStubPane(tab) {
+  // The <strong> wraps the tab id (data) — the prose around it is split into
+  // prefix/suffix keys so the emphasis markup survives translation.
   return `
     <div class="gstrap-prefs-stub">
-      <p>The <strong>${escHtml(tab)}</strong> tab is scaffolded for v0.0.3. For now, edit
-      <code>$XDG_CONFIG_HOME/GrapeStrap/preferences.json</code> directly.</p>
+      <p>${escHtml(t('prefs.stub-prefix'))} <strong>${escHtml(tab)}</strong> ${codeMarkup(t('prefs.stub-suffix'))}</p>
     </div>
   `
 }
@@ -215,7 +218,7 @@ async function persistOverrides() {
     // is visible — in-memory state still works for the session.
     eventBus.emit('toast', {
       type: 'error',
-      message: `Couldn't save shortcut prefs: ${err?.message || err}. Bindings work for this session only.`
+      message: t('prefs.toast.save-failed', { error: err?.message || err })
     })
   }
   eventBus.emit('shortcuts:user-changed', overrides)

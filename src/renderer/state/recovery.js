@@ -29,19 +29,7 @@ import { updateHtml } from '../panels/library-items/propagate.js'
 import { extractRegions, composeFromTemplate } from '../panels/templates/propagate.js'
 import { showRecoveryDialog } from '../dialogs/recovery.js'
 import { log } from '../log.js'
-
-// ─── User-facing strings ─────────────────────────────────────────────────────
-// i18n NOTE (Wave 1 rule): every user-visible string in this module lives in
-// this block so the Wave 4 t() extraction sweep can convert it mechanically.
-// The i18n runtime (src/renderer/i18n.js) is being built in parallel and may
-// land after this file — do not scatter literals below this block.
-const UI_STRINGS = {
-  restoredToast: when => `Recovered unsaved changes from ${when}. Save to keep them.`,
-  staleToast: 'Recovery snapshot was older than the last save — discarded.',
-  restoreFailedToast: msg => `Could not restore unsaved changes: ${msg}`,
-  snapshotFailedToast: 'Crash-recovery snapshots are failing — check disk space. See the log for details.',
-  unknownTime: 'an earlier session'
-}
+import { t } from '../i18n.js'
 
 const SNAPSHOT_SCHEMA_VERSION = 1
 const DEFAULT_INTERVAL_SECONDS = 30
@@ -202,7 +190,7 @@ async function tick() {
       log.error('recovery: snapshot write failed:', err)
       if (!warnedWriteFailure) {
         warnedWriteFailure = true   // one toast per project session; log has the rest
-        eventBus.emit('toast', { type: 'warning', message: UI_STRINGS.snapshotFailedToast })
+        eventBus.emit('toast', { type: 'warning', message: t('recovery.toast.snapshot-failed') })
       }
     } finally {
       writing = false
@@ -333,7 +321,7 @@ async function restoreSnapshot(manifestPath, snapshot) {
     if (Number.isFinite(lastSavedAt) && Number.isFinite(snapAt) && lastSavedAt > snapAt) {
       log.warn('recovery: snapshot predates last save — discarded:', manifestPath)
       await window.grapestrap.project.clearRecovery(manifestPath)
-      eventBus.emit('toast', { type: 'warning', message: UI_STRINGS.staleToast })
+      eventBus.emit('toast', { type: 'warning', message: t('recovery.toast.stale') })
       openIntoUi(fresh, null)
       return
     }
@@ -343,13 +331,13 @@ async function restoreSnapshot(manifestPath, snapshot) {
     remarkDirty(snapshot, touchedPages)
 
     const when = formatWhen(snapshot.savedAt)
-    eventBus.emit('toast', { type: 'success', message: UI_STRINGS.restoredToast(when) })
+    eventBus.emit('toast', { type: 'success', message: t('recovery.toast.restored', { when }) })
     log.info('recovery: snapshot restored into project state:', manifestPath)
   } catch (err) {
     log.error('recovery: restore failed:', err)
     eventBus.emit('toast', {
       type: 'error',
-      message: UI_STRINGS.restoreFailedToast(err?.message || String(err))
+      message: t('recovery.toast.restore-failed', { error: err?.message || String(err) })
     })
     // Recovery file deliberately kept — the JSON is hand-salvageable.
   } finally {
@@ -487,5 +475,5 @@ function firstRestoredPageName(fresh, snapshot) {
 
 function formatWhen(iso) {
   const t = Date.parse(iso || '')
-  return Number.isFinite(t) ? new Date(t).toLocaleString() : UI_STRINGS.unknownTime
+  return Number.isFinite(t) ? new Date(t).toLocaleString() : t('recovery.unknown-time')
 }

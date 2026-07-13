@@ -63,6 +63,10 @@ export async function activateAllPlugins() {
     } catch (err) {
       log.error(`Plugin activation failed: ${summary.name}`, err)
       pluginRegistry.failed.push({ summary, error: err.message })
+      // Deliberately NOT t() (Wave 4 sweep): this fires during
+      // activateAllPlugins(), BEFORE initI18n() — the catalog that failed to
+      // load may be the language pack itself, and pre-init t() would render
+      // a raw key. Same pre-i18n boot surface as trust-prompt.js.
       eventBus.emit('toast', {
         type: 'error',
         message: `Plugin "${summary.name}" failed to load: ${err.message}`

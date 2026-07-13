@@ -22,7 +22,7 @@
 import { eventBus } from './state/event-bus.js'
 import { projectState } from './state/project-state.js'
 import { pageState } from './state/page-state.js'
-import { flushActiveTabIntoProject, NO_PROJECT_MSG } from './shortcuts/menu-router.js'
+import { flushActiveTabIntoProject, noProjectMsg } from './shortcuts/menu-router.js'
 import { t } from './i18n.js'
 import { log } from './log.js'
 
@@ -42,7 +42,7 @@ let debounceTimer = null
 export async function cmdPreviewBrowser() {
   const project = projectState.current
   if (!project) {
-    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
   // Preview the active tab when it's a page; template/library tabs aren't
   // exported, so fall back to the project's first page.

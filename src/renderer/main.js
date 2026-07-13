@@ -128,7 +128,7 @@ async function boot() {
   eventBus.on('dialog:about', () => {
     eventBus.emit('toast', {
       type: 'info',
-      message: `GrapeStrap ${info.version} — Linux-native Bootstrap 5 editor. github.com/juhriah-ops/grapestrap`
+      message: t('toast.about', { version: info.version })
     })
   })
 

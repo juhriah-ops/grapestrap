@@ -9,31 +9,11 @@
  *       all restore/discard logic lives in state/recovery.js.
  *       Button actions are 'restore'/'discard' — deliberately NOT 'dismiss',
  *       so the e2e dismissWelcome helper's selector can never click here.
- * DEPENDS: none (DOM only; caller supplies the snapshot)
+ * DEPENDS: i18n.js (DOM otherwise; caller supplies the snapshot)
  * CREATED: 2026-07-12
  */
 
-// ─── User-facing strings ─────────────────────────────────────────────────────
-// i18n NOTE (Wave 1 rule): every user-visible string in this dialog lives in
-// this block so the Wave 4 t() extraction sweep can convert it mechanically.
-// The i18n runtime (src/renderer/i18n.js) is being built in parallel and may
-// land after this file — do not scatter literals below this block.
-const UI_STRINGS = {
-  title: 'Recover unsaved changes?',
-  intro: name => `GrapeStrap did not shut down cleanly. Unsaved changes for “${name}” were snapshotted before it closed.`,
-  introNoName: 'GrapeStrap did not shut down cleanly. Unsaved changes were snapshotted before it closed.',
-  snapshotTime: when => `Snapshot taken ${when}.`,
-  itemsLabel: 'Unsaved at the time:',
-  pagesItem: n => `${n} page${n === 1 ? '' : 's'}`,
-  templatesItem: n => `${n} template${n === 1 ? '' : 's'}`,
-  libraryItem: n => `${n} library item${n === 1 ? '' : 's'}`,
-  snippetsItem: 'snippets',
-  cssItem: 'project CSS',
-  manifestItem: 'project settings',
-  restoreHint: 'Restored changes stay in the editor until you save them.',
-  restore: 'Restore changes',
-  discard: 'Discard'
-}
+import { t } from '../i18n.js'
 
 /**
  * Show the recovery prompt for a validated snapshot envelope.
@@ -59,19 +39,19 @@ export function showRecoveryDialog(snapshot) {
   dlg.className = 'gstrap-modal-overlay'
   dlg.innerHTML = `
     <div class="gstrap-modal" role="dialog" aria-labelledby="recovery-title">
-      <h2 id="recovery-title">${esc(UI_STRINGS.title)}</h2>
-      <p>${name ? esc(UI_STRINGS.intro(name)) : esc(UI_STRINGS.introNoName)}</p>
-      <p>${esc(UI_STRINGS.snapshotTime(when))}</p>
+      <h2 id="recovery-title">${esc(t('recovery.title'))}</h2>
+      <p>${esc(name ? t('recovery.intro', { name }) : t('recovery.intro-no-name'))}</p>
+      <p>${esc(t('recovery.snapshot-time', { when }))}</p>
       ${items.length ? `
-      <h3>${esc(UI_STRINGS.itemsLabel)}</h3>
+      <h3>${esc(t('recovery.items-label'))}</h3>
       <ul>
         ${items.map(item => `<li>${esc(item)}</li>`).join('')}
       </ul>` : ''}
-      <p>${esc(UI_STRINGS.restoreHint)}</p>
+      <p>${esc(t('recovery.restore-hint'))}</p>
 
       <div class="gstrap-modal-actions">
-        <button class="gstrap-btn" data-action="discard">${esc(UI_STRINGS.discard)}</button>
-        <button class="gstrap-btn gstrap-btn-primary" data-action="restore">${esc(UI_STRINGS.restore)}</button>
+        <button class="gstrap-btn" data-action="discard">${esc(t('recovery.discard'))}</button>
+        <button class="gstrap-btn gstrap-btn-primary" data-action="restore">${esc(t('recovery.restore'))}</button>
       </div>
     </div>
   `
@@ -94,12 +74,12 @@ export function showRecoveryDialog(snapshot) {
 function summarizeDirty(dirty) {
   if (!dirty || typeof dirty !== 'object') return []
   const items = []
-  if (dirty.pages?.length) items.push(UI_STRINGS.pagesItem(dirty.pages.length))
-  if (dirty.templates?.length) items.push(UI_STRINGS.templatesItem(dirty.templates.length))
-  if (dirty.library?.length) items.push(UI_STRINGS.libraryItem(dirty.library.length))
-  if (dirty.snippets?.length) items.push(UI_STRINGS.snippetsItem)
-  if (dirty.globalCss) items.push(UI_STRINGS.cssItem)
-  if (dirty.manifest) items.push(UI_STRINGS.manifestItem)
+  if (dirty.pages?.length) items.push(t('recovery.pages-item', { count: dirty.pages.length }))
+  if (dirty.templates?.length) items.push(t('recovery.templates-item', { count: dirty.templates.length }))
+  if (dirty.library?.length) items.push(t('recovery.library-item', { count: dirty.library.length }))
+  if (dirty.snippets?.length) items.push(t('recovery.snippets-item'))
+  if (dirty.globalCss) items.push(t('recovery.css-item'))
+  if (dirty.manifest) items.push(t('recovery.manifest-item'))
   return items
 }
 

@@ -16,6 +16,8 @@
  * Structured editing of attributes already lives in the Properties panel.
  */
 
+import { t } from '../i18n.js'
+
 let activeDialog = null
 
 export function showQuickTagDialog({ initialText, mode = 'edit', anchor = null } = {}) {
@@ -31,11 +33,11 @@ export function showQuickTagDialog({ initialText, mode = 'edit', anchor = null }
     overlay.className = 'gstrap-quick-tag-overlay'
     overlay.innerHTML = `
       <div class="gstrap-quick-tag-card" data-mode="${mode}">
-        <div class="gstrap-quick-tag-mode">${mode === 'wrap' ? 'Wrap with Tag' : 'Quick Tag Editor'}</div>
+        <div class="gstrap-quick-tag-mode">${escHtml(mode === 'wrap' ? t('qt.wrap-title') : t('qt.edit-title'))}</div>
         <input class="gstrap-quick-tag-input" type="text"
                spellcheck="false" autocomplete="off"
                value="${escAttr(initialText)}">
-        <div class="gstrap-quick-tag-hint">Enter to apply · Esc to cancel</div>
+        <div class="gstrap-quick-tag-hint">${escHtml(t('qt.hint'))}</div>
       </div>
     `
     host.appendChild(overlay)
@@ -76,11 +78,11 @@ export function showQuickTagDialog({ initialText, mode = 'edit', anchor = null }
  */
 export function parseQuickTag(text) {
   let s = String(text || '').trim()
-  if (!s) throw new Error('Empty tag')
+  if (!s) throw new Error(t('qt.error.empty'))
   s = s.replace(/^</, '').replace(/\/?\s*>?$/, '').trim()
 
   const tagMatch = s.match(/^([a-zA-Z][a-zA-Z0-9-]*)/)
-  if (!tagMatch) throw new Error('Tag name expected')
+  if (!tagMatch) throw new Error(t('qt.error.tag-expected'))
   const tag = tagMatch[1].toLowerCase()
   const rest = s.slice(tag.length).trim()
 
@@ -130,4 +132,8 @@ function flashError(input, message) {
 function escAttr(s) {
   return String(s).replace(/[&<>"]/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }

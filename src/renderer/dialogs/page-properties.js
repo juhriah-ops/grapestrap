@@ -26,6 +26,8 @@
 import { eventBus } from '../state/event-bus.js'
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
+import { t } from '../i18n.js'
+import { codeMarkup } from '../i18n-html.js'
 
 let overlay = null
 let activeTab = 'general'
@@ -33,24 +35,24 @@ let workingPage = null
 let workingMeta = null
 
 const TABS = [
-  { id: 'general', label: 'General' },
-  { id: 'favicon', label: 'Favicon' },
-  { id: 'meta',    label: 'Meta'    }
+  { id: 'general', labelKey: 'pp.tab.general' },
+  { id: 'favicon', labelKey: 'pp.tab.favicon' },
+  { id: 'meta',    labelKey: 'pp.tab.meta'    }
 ]
 
 export function openPagePropertiesDialog() {
   if (overlay) return
   if (!projectState.current) {
-    eventBus.emit('toast', { type: 'warning', message: 'Open a project first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.open-project-first') })
     return
   }
   const tab = pageState.active()
   if (!tab) {
-    eventBus.emit('toast', { type: 'warning', message: 'Open a page tab first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('pp.toast.no-page-tab') })
     return
   }
   if (tab.kind === 'library') {
-    eventBus.emit('toast', { type: 'warning', message: 'Library items don\'t carry head metadata. Switch to a page tab.' })
+    eventBus.emit('toast', { type: 'warning', message: t('pp.toast.library-no-head') })
     return
   }
   const page = projectState.current.pages.find(p => p.name === tab.pageName)
@@ -110,14 +112,14 @@ function paint() {
   overlay.innerHTML = `
     <div class="gstrap-prefs-card" role="dialog" aria-modal="true">
       <div class="gstrap-prefs-header">
-        <span class="gstrap-prefs-title">Page Properties</span>
-        <button class="gstrap-prefs-close" data-pp-action="close" title="Close">✕</button>
+        <span class="gstrap-prefs-title">${escHtml(t('pp.title'))}</span>
+        <button class="gstrap-prefs-close" data-pp-action="close" title="${escAttr(t('action.close'))}">✕</button>
       </div>
       <div class="gstrap-prefs-body">
         <div class="gstrap-prefs-tabs">
-          ${TABS.map(t => `
-            <button class="gstrap-prefs-tab ${t.id === activeTab ? 'is-active' : ''}"
-                    data-pp-tab="${t.id}">${t.label}</button>
+          ${TABS.map(tab => `
+            <button class="gstrap-prefs-tab ${tab.id === activeTab ? 'is-active' : ''}"
+                    data-pp-tab="${tab.id}">${escHtml(t(tab.labelKey))}</button>
           `).join('')}
         </div>
         <div class="gstrap-prefs-pane">
@@ -127,8 +129,8 @@ function paint() {
         </div>
       </div>
       <div class="gstrap-pp-footer">
-        <button class="gstrap-prefs-btn" data-pp-action="cancel">Cancel</button>
-        <button class="gstrap-prefs-btn gstrap-pp-primary" data-pp-action="save">Save</button>
+        <button class="gstrap-prefs-btn" data-pp-action="cancel">${escHtml(t('action.cancel'))}</button>
+        <button class="gstrap-prefs-btn gstrap-pp-primary" data-pp-action="save">${escHtml(t('action.save'))}</button>
       </div>
     </div>
   `
@@ -137,17 +139,17 @@ function paint() {
 function paneGeneral() {
   return `
     <div class="gstrap-pp-row">
-      <label class="gstrap-pp-label">Page title</label>
+      <label class="gstrap-pp-label">${escHtml(t('pp.page-title'))}</label>
       <input type="text" class="gstrap-pp-input" data-pp-field="title"
              value="${escAttr(workingPage.title)}"
              placeholder="${escAttr(pageState.active()?.pageName || '')}">
-      <span class="gstrap-pp-hint">Becomes <code>&lt;title&gt;</code> in the exported HTML.</span>
+      <span class="gstrap-pp-hint">${codeMarkup(t('pp.page-title-hint'))}</span>
     </div>
     <div class="gstrap-pp-row">
-      <label class="gstrap-pp-label">Description</label>
+      <label class="gstrap-pp-label">${escHtml(t('pp.description'))}</label>
       <textarea class="gstrap-pp-input gstrap-pp-textarea" data-pp-field="description"
-                rows="3" placeholder="A short summary used by search engines + social cards.">${escHtml(workingPage.description)}</textarea>
-      <span class="gstrap-pp-hint">Becomes <code>&lt;meta name="description"&gt;</code>.</span>
+                rows="3" placeholder="${escAttr(t('pp.description-placeholder'))}">${escHtml(workingPage.description)}</textarea>
+      <span class="gstrap-pp-hint">${codeMarkup(t('pp.description-hint'))}</span>
     </div>
   `
 }
@@ -160,23 +162,23 @@ function paneFavicon() {
   const pageFavicon    = workingPage.favicon
   return `
     <div class="gstrap-pp-row">
-      <label class="gstrap-pp-label">Project favicon</label>
+      <label class="gstrap-pp-label">${escHtml(t('pp.project-favicon'))}</label>
       <div class="gstrap-pp-favicon">
         ${projectFavicon
           ? `<div class="gstrap-pp-fav-current">
               ${imagePreview(projectFavicon)}
               <code>${escHtml(projectFavicon)}</code>
-              <button class="gstrap-prefs-btn" data-pp-action="clear-project-favicon">Clear</button>
+              <button class="gstrap-prefs-btn" data-pp-action="clear-project-favicon">${escHtml(t('action.clear'))}</button>
              </div>`
-          : `<div class="gstrap-pp-fav-empty">No favicon set. Drop an icon into the Assets panel, then pick it below.</div>`}
+          : `<div class="gstrap-pp-fav-empty">${escHtml(t('pp.no-favicon'))}</div>`}
       </div>
-      <span class="gstrap-pp-hint">Applies to every page. Per-page override below.</span>
+      <span class="gstrap-pp-hint">${escHtml(t('pp.favicon-hint'))}</span>
     </div>
 
     <div class="gstrap-pp-row">
-      <label class="gstrap-pp-label">Pick from project images</label>
+      <label class="gstrap-pp-label">${escHtml(t('pp.pick-from-images'))}</label>
       ${icoCandidates.length === 0
-        ? `<div class="gstrap-pp-fav-empty">Drop a .ico, .png, .svg, or .webp file into the Assets panel and reopen this dialog.</div>`
+        ? `<div class="gstrap-pp-fav-empty">${escHtml(t('pp.no-icon-candidates'))}</div>`
         : `<div class="gstrap-pp-fav-grid">
             ${icoCandidates.map(p => `
               <button class="gstrap-pp-fav-tile ${projectFavicon === p ? 'is-active' : ''}"
@@ -189,11 +191,11 @@ function paneFavicon() {
     </div>
 
     <div class="gstrap-pp-row">
-      <label class="gstrap-pp-label">This page only</label>
+      <label class="gstrap-pp-label">${escHtml(t('pp.page-only'))}</label>
       <input type="text" class="gstrap-pp-input" data-pp-field="favicon"
              value="${escAttr(pageFavicon)}"
-             placeholder="(inherits project favicon)">
-      <span class="gstrap-pp-hint">Path relative to the site root. Leave blank to inherit.</span>
+             placeholder="${escAttr(t('pp.inherits-placeholder'))}">
+      <span class="gstrap-pp-hint">${escHtml(t('pp.page-favicon-hint'))}</span>
     </div>
   `
 }
@@ -201,26 +203,26 @@ function paneFavicon() {
 function paneMeta() {
   return `
     <div class="gstrap-pp-row">
-      <label class="gstrap-pp-label">Custom meta tags</label>
+      <label class="gstrap-pp-label">${escHtml(t('pp.custom-meta'))}</label>
       <table class="gstrap-pp-meta-table">
-        <thead><tr><th>Name</th><th>Content</th><th></th></tr></thead>
+        <thead><tr><th>${escHtml(t('pp.meta-name'))}</th><th>${escHtml(t('pp.meta-content'))}</th><th></th></tr></thead>
         <tbody>
           ${(workingPage.customMeta || []).map((m, i) => `
             <tr>
               <td><input type="text" class="gstrap-pp-input" data-pp-field="meta.name" data-pp-index="${i}"
-                         value="${escAttr(m.name || '')}" placeholder="keywords"></td>
+                         value="${escAttr(m.name || '')}" placeholder="${escAttr(t('pp.meta-name-placeholder'))}"></td>
               <td><input type="text" class="gstrap-pp-input" data-pp-field="meta.content" data-pp-index="${i}"
-                         value="${escAttr(m.content || '')}" placeholder="bootstrap, demo"></td>
+                         value="${escAttr(m.content || '')}" placeholder="${escAttr(t('pp.meta-content-placeholder'))}"></td>
               <td><button class="gstrap-prefs-btn" data-pp-action="meta-remove" data-pp-arg="${i}">×</button></td>
             </tr>
           `).join('')}
           ${workingPage.customMeta.length === 0 ? `
-            <tr><td colspan="3" class="gstrap-pp-fav-empty">No custom meta tags. Click "Add" to add one.</td></tr>
+            <tr><td colspan="3" class="gstrap-pp-fav-empty">${escHtml(t('pp.no-meta'))}</td></tr>
           ` : ''}
         </tbody>
       </table>
-      <button class="gstrap-prefs-btn" data-pp-action="meta-add">+ Add meta tag</button>
-      <span class="gstrap-pp-hint">Common: <code>keywords</code>, <code>robots</code>, <code>og:title</code>, <code>twitter:card</code>.</span>
+      <button class="gstrap-prefs-btn" data-pp-action="meta-add">${escHtml(t('pp.add-meta'))}</button>
+      <span class="gstrap-pp-hint">${codeMarkup(t('pp.meta-hint'))}</span>
     </div>
   `
 }
@@ -286,7 +288,7 @@ function saveAndClose() {
   // isn't actually a page change. Mark manifest dirty so isDirty() reports
   // the unsaved metadata even if no page-specific field changed.
   projectState.markManifestDirty()
-  eventBus.emit('toast', { type: 'success', message: 'Page properties updated. Save the project to persist.' })
+  eventBus.emit('toast', { type: 'success', message: t('pp.toast.updated') })
   close()
 }
 

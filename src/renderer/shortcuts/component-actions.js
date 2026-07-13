@@ -14,6 +14,7 @@
 import { eventBus } from '../state/event-bus.js'
 import { getEditor } from '../editor/grapesjs-init.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
+import { t } from '../i18n.js'
 
 /**
  * Duplicate a component immediately after itself, select the copy, mark dirty.
@@ -109,13 +110,13 @@ export function buildComponentMenuItems(component) {
   const lockedCopy   = component?.get?.('copyable')  === false
   const lockedRemove = component?.get?.('removable') === false
   return [
-    { label: 'Edit Tag…',     accelerator: 'Ctrl+T',       action: () => editComponentTag(component),    disabled: !component || lockedEdit },
-    { label: 'Wrap with Tag…', accelerator: 'Ctrl+Shift+W', action: () => wrapComponentInTag(component), disabled: !component || isRoot || lockedEdit },
+    { label: t('ctx.edit-tag'),  accelerator: 'Ctrl+T',       action: () => editComponentTag(component),    disabled: !component || lockedEdit },
+    { label: t('ctx.wrap-tag'),  accelerator: 'Ctrl+Shift+W', action: () => wrapComponentInTag(component), disabled: !component || isRoot || lockedEdit },
     { separator: true },
-    { label: 'Duplicate',      accelerator: 'Ctrl+D',       action: () => duplicateComponent(component), disabled: !component || isRoot || lockedCopy },
-    { label: 'Copy HTML',      accelerator: 'Ctrl+C',       action: () => copyComponentHtml(component),  disabled: !component },
+    { label: t('ctx.duplicate'), accelerator: 'Ctrl+D',       action: () => duplicateComponent(component), disabled: !component || isRoot || lockedCopy },
+    { label: t('ctx.copy-html'), accelerator: 'Ctrl+C',       action: () => copyComponentHtml(component),  disabled: !component },
     { separator: true },
-    { label: 'Delete',         accelerator: 'Del',          action: () => deleteComponent(component),    disabled: !component || isRoot || lockedRemove, danger: true }
+    { label: t('action.delete'), accelerator: 'Del',          action: () => deleteComponent(component),    disabled: !component || isRoot || lockedRemove, danger: true }
   ]
 }
 

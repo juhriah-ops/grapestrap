@@ -105,7 +105,7 @@ async function handleCommand(action, args = []) {
     // the cmdNewProject window.prompt failure went silent. Catch here, log,
     // toast — never silently eat a command error.
     log.error(`command "${action}" threw:`, err)
-    eventBus.emit('toast', { type: 'error', message: `${action}: ${err?.message || err}` })
+    eventBus.emit('toast', { type: 'error', message: t('toast.command-failed', { action, error: err?.message || err }) })
   }
 }
 
@@ -166,7 +166,7 @@ async function dispatchCommand(action, args = []) {
 
     default:
       log.warn(`unhandled command: ${action}`)
-      eventBus.emit('toast', { type: 'warning', message: `Command "${action}" not yet wired in v0.0.1.` })
+      eventBus.emit('toast', { type: 'warning', message: t('toast.command-not-wired', { cmd: action }) })
   }
 }
 
@@ -208,13 +208,16 @@ async function cmdImportFolder() {
     await window.grapestrap.project.addRecent(project.manifestPath, project.manifest.metadata.name)
     eventBus.emit('toast', {
       type: 'success',
-      message: `Imported ${project.pages.length} page(s) from ${project.manifest.metadata.importedFrom || 'folder'}.`
+      message: t('toast.import-success', {
+        count: project.pages.length,
+        source: project.manifest.metadata.importedFrom || 'folder'
+      })
     })
   }
 }
 
 async function cmdNewPage() {
-  if (!projectState.current) return eventBus.emit('toast', { type: 'warning', message: 'Open a project first.' })
+  if (!projectState.current) return eventBus.emit('toast', { type: 'warning', message: t('toast.open-project-first') })
   // Dialog validates inline (duplicate names — Wave 0 bug #6 — and unsafe
   // charsets); page creation/composition lives in templates/manage.js so the
   // dialog stays a dumb collector.
@@ -231,11 +234,13 @@ async function cmdNewPage() {
 // The early-return guards were correct (you can't save or switch view mode
 // without a project) but the silent-no-op UX read as broken buttons. Every
 // project-required command now toasts a warning explaining what to do.
-export const NO_PROJECT_MSG = 'Open or create a project first.'
+// (Wave 4 sweep: the message itself moved to the catalog as toast.no-project;
+// resolve at emit time so a late locale switch reaches later toasts.)
+export const noProjectMsg = () => t('toast.no-project')
 
 async function cmdSave() {
   if (!projectState.current) {
-    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.save(projectState.current)
@@ -256,7 +261,7 @@ async function cmdSave() {
 // assets actually save."
 async function cmdRefresh() {
   if (!projectState.current) {
-    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.save(projectState.current)
@@ -275,18 +280,18 @@ async function cmdRefresh() {
     const ed = window.__gstrap?.pluginRegistry?.bound?.editor
     ed?.refresh?.()
   } catch { /* GrapesJS not ready */ }
-  eventBus.emit('toast', { type: 'success', message: 'Refreshed.' })
+  eventBus.emit('toast', { type: 'success', message: t('toast.refreshed') })
 }
 
 async function cmdSaveAs() {
   if (!projectState.current) {
-    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.saveAs(projectState.current)
   if (result) {
     eventBus.emit('project:saved', result)
-    eventBus.emit('toast', { type: 'success', message: 'Saved as new file.' })
+    eventBus.emit('toast', { type: 'success', message: t('toast.saved-as') })
   }
 }
 
@@ -297,45 +302,45 @@ async function cmdCloseTab() {
 
 async function cmdExport() {
   if (!projectState.current) {
-    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
   flushActiveTabIntoProject()
   const result = await window.grapestrap.project.export(projectState.current)
   if (result) {
-    eventBus.emit('toast', { type: 'success', message: `Exported ${result.pageCount} page(s) to ${result.outputDir}` })
+    eventBus.emit('toast', { type: 'success', message: t('toast.export-success', { count: result.pageCount, dir: result.outputDir }) })
   }
 }
 
 function cmdUndo() {
   const um = pluginRegistry.bound.editor?.UndoManager
-  if (!um) return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  if (!um) return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   um.undo()
 }
 function cmdRedo() {
   const um = pluginRegistry.bound.editor?.UndoManager
-  if (!um) return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+  if (!um) return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   um.redo()
 }
 
 function cmdDuplicate() {
   const sel = getEditor()?.getSelected?.()
-  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: t('toast.select-element') })
   if (!duplicateComponent(sel)) {
-    eventBus.emit('toast', { type: 'warning', message: 'This element cannot be duplicated (root or locked).' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.cannot-duplicate') })
   }
 }
 function cmdDelete() {
   const sel = getEditor()?.getSelected?.()
-  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: t('toast.select-element') })
   if (!deleteComponent(sel)) {
-    eventBus.emit('toast', { type: 'warning', message: 'This element cannot be deleted (root or locked).' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.cannot-delete') })
   }
 }
 
 async function cmdQuickTag() {
   const editor = getEditor()
   const sel = editor?.getSelected?.()
-  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: t('toast.select-element') })
   const initialText = formatComponentAsQuickTag(sel)
   const parsed = await showQuickTagDialog({ initialText, mode: 'edit' })
   if (!parsed) return
@@ -345,7 +350,7 @@ async function cmdQuickTag() {
 async function cmdWrapTag() {
   const editor = getEditor()
   const sel = editor?.getSelected?.()
-  if (!sel) return eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+  if (!sel) return eventBus.emit('toast', { type: 'warning', message: t('toast.select-element') })
   const parsed = await showQuickTagDialog({ initialText: '<div>', mode: 'wrap' })
   if (!parsed) return
   applyTagWrap(editor, sel, parsed)
@@ -392,14 +397,14 @@ function selectFirst(editor, replaced) {
 function cmdViewMode(mode) {
   const tab = pageState.active()
   if (!tab) {
-    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
   pageState.setViewMode(tab.pageName, mode)
 }
 function cmdDevice(device) {
   const tab = pageState.active()
   if (!tab) {
-    return eventBus.emit('toast', { type: 'warning', message: NO_PROJECT_MSG })
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
   pageState.setDevice(tab.pageName, device)
   pluginRegistry.bound.editor?.setDevice(device)

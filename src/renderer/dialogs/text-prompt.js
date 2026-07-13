@@ -16,9 +16,11 @@
  * null accepts. Callers that don't pass it get the original behavior.
  */
 
+import { t } from '../i18n.js'
+
 let activeDialog = null
 
-export function showTextPrompt({ title = 'Input', label = '', initialValue = '', placeholder = '', okLabel = 'OK', validate = null } = {}) {
+export function showTextPrompt({ title = t('prompt.default-title'), label = '', initialValue = '', placeholder = '', okLabel = t('prompt.default-ok'), validate = null } = {}) {
   if (activeDialog) activeDialog.dismiss(null)
 
   const host = document.getElementById('gstrap-modals')

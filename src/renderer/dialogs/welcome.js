@@ -11,6 +11,9 @@
  * "Don't show again" sets it to true.
  */
 
+import { t } from '../i18n.js'
+import { codeMarkup } from '../i18n-html.js'
+
 export async function showWelcomeIfFirstRun() {
   const shown = await window.grapestrap.prefs.get('general.welcomeShown')
   if (shown) return
@@ -19,26 +22,26 @@ export async function showWelcomeIfFirstRun() {
   dlg.className = 'gstrap-modal-overlay'
   dlg.innerHTML = `
     <div class="gstrap-modal" role="dialog" aria-labelledby="welcome-title">
-      <h2 id="welcome-title">Welcome to GrapeStrap</h2>
-      <p>The Dreamweaver-style visual editor for Bootstrap 5 on Linux.</p>
+      <h2 id="welcome-title">${codeMarkup(t('welcome.title'))}</h2>
+      <p>${codeMarkup(t('welcome.tagline'))}</p>
 
-      <h3>A few things to know</h3>
+      <h3>${codeMarkup(t('welcome.things-to-know'))}</h3>
       <ul>
-        <li><strong>Class-first styling.</strong> GrapeStrap edits Bootstrap classes, not inline styles. Reach for spacing/text/background panels instead of custom CSS for most things.</li>
-        <li><strong>Design ↔ Code sync is one-way-live.</strong> Edits in Design view flow to Code view continuously. Edits in Code view rebuild the canvas only when you switch back to Design — and selection resets. This is intentional.</li>
-        <li><strong>No telemetry.</strong> GrapeStrap never phones home.</li>
+        <li><strong>${codeMarkup(t('welcome.point-classes-title'))}</strong> ${codeMarkup(t('welcome.point-classes-body'))}</li>
+        <li><strong>${codeMarkup(t('welcome.point-sync-title'))}</strong> ${codeMarkup(t('welcome.point-sync-body'))}</li>
+        <li><strong>${codeMarkup(t('welcome.point-telemetry-title'))}</strong> ${codeMarkup(t('welcome.point-telemetry-body'))}</li>
       </ul>
 
-      <h3>Where things live</h3>
+      <h3>${codeMarkup(t('welcome.where-things-live'))}</h3>
       <ul>
-        <li>Preferences: <code>$XDG_CONFIG_HOME/GrapeStrap/preferences.json</code></li>
-        <li>Plugins: <code>$XDG_CONFIG_HOME/GrapeStrap/plugins/</code></li>
-        <li>Logs: <code>$XDG_DATA_HOME/GrapeStrap/logs/</code></li>
+        <li>${codeMarkup(t('welcome.paths-prefs'))} <code>$XDG_CONFIG_HOME/GrapeStrap/preferences.json</code></li>
+        <li>${codeMarkup(t('welcome.paths-plugins'))} <code>$XDG_CONFIG_HOME/GrapeStrap/plugins/</code></li>
+        <li>${codeMarkup(t('welcome.paths-logs'))} <code>$XDG_DATA_HOME/GrapeStrap/logs/</code></li>
       </ul>
 
       <div class="gstrap-modal-actions">
-        <button class="gstrap-btn" data-action="docs">Open Docs</button>
-        <button class="gstrap-btn gstrap-btn-primary" data-action="dismiss">Don't show again</button>
+        <button class="gstrap-btn" data-action="docs">${codeMarkup(t('welcome.docs'))}</button>
+        <button class="gstrap-btn gstrap-btn-primary" data-action="dismiss">${codeMarkup(t('welcome.dismiss'))}</button>
       </div>
     </div>
   `
