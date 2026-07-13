@@ -37,7 +37,8 @@ jobs:
             libxtst6 \
             xdg-utils \
             libasound2-dev \
-            libsecret-1-dev
+            libsecret-1-dev \
+            rpm
 
       - name: Install dependencies
         run: npm ci
@@ -49,8 +50,8 @@ jobs:
       - name: Build renderer + main
         run: npm run build
 
-      - name: Package .deb / AppImage / tar.gz
-        run: npx electron-builder --linux deb AppImage tar.gz --publish never
+      - name: Package .deb / .rpm / AppImage / tar.gz
+        run: npx electron-builder --linux deb rpm AppImage tar.gz --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -63,6 +64,7 @@ jobs:
           name: linux-artifacts
           path: |
             release/*.deb
+            release/*.rpm
             release/*.AppImage
             release/*.tar.gz
             release/*.yml
@@ -85,10 +87,11 @@ jobs:
         with:
           files: |
             artifacts/linux-artifacts/*.deb
+            artifacts/linux-artifacts/*.rpm
             artifacts/linux-artifacts/*.AppImage
             artifacts/linux-artifacts/*.tar.gz
           draft: true
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           generate_release_notes: true
           body: |
             ## GrapeStrap ${{ github.ref_name }}
@@ -102,6 +105,11 @@ jobs:
             sudo apt install ./grapestrap_*.deb
             ```
 
+            **.rpm (Fedora/openSUSE/RHEL):**
+            ```
+            sudo dnf install ./grapestrap-*.rpm
+            ```
+
             **AppImage (universal):**
             ```
             chmod +x GrapeStrap-*.AppImage
@@ -110,6 +118,6 @@ jobs:
 
             **tar.gz:** extract and run `grapestrap` from the extracted folder.
 
-            See [INSTALL.md](https://github.com/grapestrap/grapestrap/blob/main/docs/INSTALL.md) for more.
+            See [INSTALL.md](https://github.com/juhriah-ops/grapestrap/blob/main/docs/INSTALL.md) for more.
 
-            rpm builds arrive in v0.0.2. Flatpak (Flathub) v0.0.2. Snap + AUR v0.1.0.
+            Flatpak (Flathub), AUR, and Snap are planned post-v0.1.0.

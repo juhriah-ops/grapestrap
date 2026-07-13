@@ -10,7 +10,10 @@
     "url": "https://github.com/grapestrap/grapestrap"
   },
   "license": "MIT",
-  "author": "GrapeStrap Contributors",
+  "author": {
+    "name": "GrapeStrap Contributors",
+    "email": "juhriah-ops@users.noreply.github.com"
+  },
   "scripts": {
     "dev": "vite",
     "start": "electron .",
@@ -65,6 +68,7 @@
     "linux": {
       "target": [
         "deb",
+        "rpm",
         "AppImage",
         "tar.gz"
       ],
@@ -76,12 +80,14 @@
         "application/x-grapestrap"
       ],
       "desktop": {
-        "Name": "GrapeStrap",
-        "Comment": "Visual Bootstrap 5 editor for Linux",
-        "Categories": "Development;WebDevelopment;",
-        "Keywords": "html;css;bootstrap;web;editor;dreamweaver;visual;",
-        "MimeType": "application/x-grapestrap;",
-        "StartupWMClass": "GrapeStrap"
+        "entry": {
+          "Name": "GrapeStrap",
+          "Comment": "Visual Bootstrap 5 editor for Linux",
+          "Categories": "Development;WebDevelopment;",
+          "Keywords": "html;css;bootstrap;web;editor;dreamweaver;visual;",
+          "MimeType": "application/x-grapestrap;",
+          "StartupWMClass": "GrapeStrap"
+        }
       }
     },
     "deb": {
