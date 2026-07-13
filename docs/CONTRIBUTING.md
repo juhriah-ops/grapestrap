@@ -91,7 +91,8 @@ Set up a development environment per the [Building from source](./INSTALL.md#bui
 - Node 20+
 - npm 10+
 - git
-- A C/C++ toolchain
+
+No C/C++ toolchain is needed — the dependency tree has no native modules to compile (the only `.node` binaries are prebuilt ones shipped inside packages).
 
 ### Workflow
 
@@ -108,9 +109,10 @@ Set up a development environment per the [Building from source](./INSTALL.md#bui
 6. **Run the tests:**
    ```bash
    npm run lint
-   npm run test:e2e
+   npm run build
+   npm run test:e2e                  # headless machine: xvfb-run -a npx playwright test
    ```
-   The Playwright smoke test gates v0.0.1 functionality. Don't break it.
+   `npm run build` first is not optional — the e2e suite launches the **built** app (`dist/main/main.js`), so specs run against stale code if you skip it after a `src/` change. The full 127-spec Playwright suite gates every release. Don't break it — the spec count only grows.
 7. **Commit** following the conventions below.
 8. **Push** to your fork.
 9. **Open a pull request** against `juhriah-ops/grapestrap:main`.
@@ -194,10 +196,10 @@ Sign-off your commits with `git commit -s` if you can — it's appreciated but n
 2. **Reference the issue** the PR closes in the description (`Closes #123`).
 3. **Describe what changed and why.** Don't make reviewers reverse-engineer the rationale from the diff.
 4. **Keep the PR focused.** One logical change per PR. Refactors that cross cut should be a separate PR.
-5. **Include tests** if you're touching tested surface area. The Playwright smoke test gates v0.0.1; new features gating v0.0.2 will need their own tests.
+5. **Include tests** if you're touching tested surface area. The 127-spec Playwright e2e suite gates every release; new features need their own specs.
 6. **Update docs** in the same PR if you're changing user-facing behaviour. Anything that touches install, config, plugin API, or shortcuts should update [INSTALL.md](./INSTALL.md), [ARCHITECTURE.md](./ARCHITECTURE.md), [PLUGIN-DEVELOPMENT.md](./PLUGIN-DEVELOPMENT.md), or `docs/KEYBOARD-SHORTCUTS.md` as appropriate.
 7. **Update [CREDITS.md](../CREDITS.md)** if you're pulling in a new third-party dependency or pattern.
-8. **Pass CI.** Lint and the Playwright smoke must be green.
+8. **Pass CI.** Lint and the full Playwright e2e suite must be green.
 9. **Address review feedback.** Push fixup commits; we squash on merge by default.
 10. **Be patient.** A maintainer will get to it.
 
@@ -225,11 +227,11 @@ If you've found a bug in a **bundled** built-in plugin (`@grapestrap/core-blocks
 
 Translations are precious. The Linux community translates fast, and we want every language a translator will give us.
 
-The translation process will be fully documented at `docs/translations/` once the i18n runtime ships in v0.1.0. Until then:
+The i18n runtime shipped in v0.1.0 and the full UI renders through it — the translator guide is **[docs/translations/README.md](./translations/README.md)**. The short version:
 
 1. Open a [Discussion](https://github.com/juhriah-ops/grapestrap/discussions) under "i18n" announcing the language you want to add.
-2. Wait for the v0.1.0 i18n scaffold (planned, near-term).
-3. We'll publish a translator guide and a starter `messages.json` template.
+2. Use the English catalog (`plugins/lang-en/messages.json`) as your starter template.
+3. Ship it as a `lang-<code>` plugin — dir naming, catalog structure, and testing are covered in the guide.
 
 A translation submitted as a `language` plugin (`registerLanguage`) is the canonical path — see [PLUGIN-DEVELOPMENT.md](./PLUGIN-DEVELOPMENT.md). The English message catalog ships as `@grapestrap/lang-en`, so your translation looks structurally identical.
 
