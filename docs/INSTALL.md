@@ -11,9 +11,6 @@ CREATED: 2026-07-12 (Wave 5 rewrite of the pre-alpha draft)
 
 # Installing GrapeStrap
 
-> **DRAFT** — accurate as of v0.1.0-rc; wording and screenshots get a
-> user-docs polish pass before the final v0.1.0 release.
-
 GrapeStrap is a Linux-first desktop visual editor for static Bootstrap 5
 sites. Every release ships four artifacts, built by CI from the tagged
 commit:
@@ -159,8 +156,8 @@ from the project's file-association config), which maps `*.gstrap` to
 `update-mime-database` and `update-desktop-database`. Double-clicking a
 `.gstrap` file in Files/Dolphin/Thunar then opens it in GrapeStrap.
 
-AppImage and tarball installs don't touch the system — register manually if
-you want the association:
+AppImage and tarball installs do not modify the system. To register the
+association manually:
 
 ```bash
 sudo cp packaging/desktop/grapestrap-mime.xml /usr/share/mime/packages/
