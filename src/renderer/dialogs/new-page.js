@@ -5,9 +5,10 @@
  * ROLE: Name + template-select dialog replacing the bare showTextPrompt in
  *       menu-router cmdNewPage. Validates inline (duplicate names — Wave 0
  *       bug #6 — and unsafe charsets) so invalid input never reaches
- *       projectState. Wave 4's new-PROJECT dialog will share this select
- *       pattern (v5 Wave 4 row).
- * DEPENDS: dialogs (gstrap-modals layer, prompt CSS classes), i18n.js
+ *       projectState. The template select is shared with the New Project
+ *       dialog via template-select.js since Wave 4 (v5 Wave 4 row).
+ * DEPENDS: dialogs (gstrap-modals layer, prompt CSS classes),
+ *          ./template-select.js, i18n.js
  * CREATED: 2026-07-12
  *
  * showNewPageDialog({ templates, validateName }) → Promise<
@@ -24,6 +25,7 @@
  */
 
 import { t } from '../i18n.js'
+import { templateSelectHtml } from './template-select.js'
 
 let activeDialog = null
 
@@ -43,12 +45,12 @@ export function showNewPageDialog({ templates = [], validateName = () => null } 
         <input class="gstrap-prompt-input" type="text" data-np-name
                spellcheck="false" autocomplete="off"
                value="about" placeholder="${escAttr(t('dialog.new-page.name-placeholder'))}">
-        <label class="gstrap-prompt-label">${escHtml(t('dialog.new-page.template-label'))}</label>
-        <select class="gstrap-prompt-input" data-np-template>
-          <option value="">${escHtml(t('dialog.new-page.template-none'))}</option>
-          ${templates.map(tp =>
-            `<option value="${escAttr(tp.name)}">${escHtml(tp.name)}</option>`).join('')}
-        </select>
+        ${templateSelectHtml({
+          labelText: t('dialog.new-page.template-label'),
+          noneText:  t('dialog.new-page.template-none'),
+          options:   templates.map(tp => ({ value: tp.name, label: tp.name })),
+          dataAttr:  'data-np-template'
+        })}
         <div class="gstrap-prompt-error" data-np-error hidden></div>
         <div class="gstrap-prompt-actions">
           <button class="gstrap-btn"                    data-np-cancel>${escHtml(t('dialog.new-page.cancel'))}</button>

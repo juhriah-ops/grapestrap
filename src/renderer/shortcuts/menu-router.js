@@ -19,8 +19,8 @@ import {
 import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
 import { rebuildCanvasFromCode } from '../editor/canvas-sync.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
-import { showTextPrompt } from '../dialogs/text-prompt.js'
 import { showNewPageDialog } from '../dialogs/new-page.js'
+import { showNewProjectDialog } from '../dialogs/new-project.js'
 import { duplicateComponent, deleteComponent } from './component-actions.js'
 import { propagateLibraryItem } from '../panels/library-items/propagate.js'
 import { createPage, validateNewName } from '../panels/templates/manage.js'
@@ -173,18 +173,14 @@ async function dispatchCommand(action, args = []) {
 // ─── Built-in command handlers ───────────────────────────────────────────────
 
 async function cmdNewProject() {
-  // window.prompt is blocked in modern Electron ("prompt() is and will not
-  // be supported.") — it throws and the throw was being swallowed by the
-  // eventBus try/catch, which is why New silently did nothing. Use our own
-  // in-renderer prompt dialog instead.
-  const name = await showTextPrompt({
-    title: 'New project',
-    label: 'Project name',
-    initialValue: 'My Project',
-    okLabel: 'Create…'
+  // Starter list is cosmetic — if the IPC fails the dialog degrades to a
+  // Blank-only select rather than blocking project creation (Wave 4, F5).
+  const starters = await window.grapestrap.project.starters().catch(() => [])
+  const result = await showNewProjectDialog({ starters })
+  if (!result) return
+  const project = await window.grapestrap.project.new({
+    name: result.name, templateId: result.templateId
   })
-  if (!name) return
-  const project = await window.grapestrap.project.new({ name })
   if (project) {
     projectState.set(project)
     if (project.pages?.[0]) pageState.open(project.pages[0].name)

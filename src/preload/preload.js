@@ -32,6 +32,7 @@ const grapestrap = {
   // ─── Project ops ───────────────────────────────────────────────────────────
   project: {
     new:           (config)         => ipcRenderer.invoke('project:new', config),
+    starters:      ()               => ipcRenderer.invoke('project:starters'),
     open:          (path)           => ipcRenderer.invoke('project:open', path),
     importDir:     (opts)           => ipcRenderer.invoke('project:import-directory', opts),
     save:          (project)        => ipcRenderer.invoke('project:save', project),

@@ -85,6 +85,19 @@
   "dialog.new-page.create": "Create",
   "dialog.new-page.cancel": "Cancel",
 
+  "dialog.new-project.title": "New project",
+  "dialog.new-project.name-label": "Project name",
+  "dialog.new-project.name-placeholder": "e.g. My Project",
+  "dialog.new-project.name-required": "Enter a project name.",
+  "dialog.new-project.starter-label": "Starter template",
+  "dialog.new-project.starter-blank": "Blank — empty index page",
+  "dialog.new-project.create": "Create…",
+  "dialog.new-project.cancel": "Cancel",
+
+  "starter.landing.label": "Landing Page",
+  "starter.portfolio.label": "Portfolio",
+  "starter.blog.label": "Blog",
+
   "tpl.menu.make-region": "Make Editable Region…",
   "tpl.menu.remove-region": "Remove Editable Region",
   "tpl.menu.edit-master": "Edit Master Template \"{name}\"",

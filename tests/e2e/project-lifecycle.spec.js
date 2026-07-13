@@ -97,9 +97,11 @@ test('File menu: cmdNewProject path does not throw on the prompt step', async ()
   // Electron ("prompt() is and will not be supported.") and the throw was
   // being swallowed by the eventBus try/catch — File→New / File→New Page
   // both did nothing visible. The fix replaced window.prompt with our own
-  // text-prompt dialog AND added an outer try/catch in handleCommand that
-  // toasts errors. This spec asserts (a) the prompt dialog actually appears,
-  // and (b) clicking Cancel resolves cleanly without a thrown command error.
+  // in-renderer dialog AND added an outer try/catch in handleCommand that
+  // toasts errors. Since Wave 4 the dialog is the New Project dialog
+  // (dialogs/new-project.js, data-npr-* hooks) instead of the bare
+  // text-prompt. This spec asserts (a) the dialog actually appears, and
+  // (b) clicking Cancel resolves cleanly without a thrown command error.
   const { app, appWindow } = await launch()
   // Wait for boot to subscribe handlers (boot is async; launch() only waits
   // for window.__gstrap to be defined, which happens synchronously before
@@ -123,7 +125,7 @@ test('File menu: cmdNewProject path does not throw on the prompt step', async ()
   })
   await appWindow.evaluate(() => {
     window.__gstrap.eventBus.on('toast', p => window.__captureToast(p))
-    document.querySelector('[data-action="cancel"]').click()
+    document.querySelector('[data-npr-cancel]').click()
   })
   await appWindow.waitForFunction(() => !document.querySelector('.gstrap-prompt-card'), null, { timeout: 2_000 })
   expect(toastedError).toBe(false)

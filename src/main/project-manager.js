@@ -19,6 +19,8 @@ import { promises as fsp } from 'node:fs'
 import { dirname, join, basename, extname, resolve } from 'node:path'
 import { app } from 'electron'
 import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument } from '../shared/page-html.js'
+import { copyFilesIdempotent } from './copy-tasks.js'
+import { getStarter, applyStarter } from './starters/index.js'
 
 const MANIFEST_VERSION = '1.0'
 const FORMAT_TAG = 'grapestrap-project'
@@ -110,18 +112,9 @@ async function copyFrameworkAssets(siteRoot) {
     [join(faRoot, 'webfonts', 'fa-v4compatibility.woff2'),     join(webfontsDir, 'fa-v4compatibility.woff2'), false]
   ]
 
-  const fatal = []
-  for (const [src, dst, isFatal] of tasks) {
-    // Idempotent: skip if dst already exists. `copyFile` with COPYFILE_EXCL
-    // would throw on re-run, which is what we want when this is invoked from
-    // loadProject (we don't want to clobber an asset the user might have
-    // hand-edited). Manual existence check for clearer error semantics.
-    try { await fsp.access(dst); continue } catch { /* dst missing, copy */ }
-    try { await fsp.copyFile(src, dst) }
-    catch (err) {
-      if (isFatal) fatal.push(`${src} → ${dst}: ${err?.code || err?.message || err}`)
-    }
-  }
+  // Copy loop extracted to copy-tasks.js (Wave 4) — shared with the starter
+  // vendor-asset copier. Same skip-if-exists idempotency, same fatal collection.
+  const fatal = await copyFilesIdempotent(tasks)
   if (fatal.length) {
     throw new Error(
       `Could not copy bundled framework assets — ${fatal.join('; ')}. ` +
@@ -375,7 +368,7 @@ function guessAssetKind(ext) {
   return null
 }
 
-export async function createProject({ targetPath, name, templateId: _templateId = 'blank' }) {
+export async function createProject({ targetPath, name, templateId = 'blank' }) {
   const projectDir = dirname(targetPath)
   const site = siteDir(projectDir)
   await fsp.mkdir(projectDir, { recursive: true })
@@ -391,11 +384,17 @@ export async function createProject({ targetPath, name, templateId: _templateId 
   // dependency on the renderer's bundled copy.
   await copyFrameworkAssets(site)
 
-  const indexHtml = renderBlankIndex(name)
   // Project's own custom stylesheet — referenced via assets/css/style.css from
   // the wrapped page so the same path works in canvas + on a server.
   await fsp.mkdir(join(site, 'assets', 'css'), { recursive: true })
   await fsp.writeFile(join(site, 'assets', 'css', 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
+
+  // Wave 4: resolve the starter. Unknown/omitted ids fail OPEN to a blank
+  // project — a stale dialog or a typo'd IPC call must never block creation.
+  const starter = getStarter(templateId)
+  if (templateId !== 'blank' && !starter) {
+    console.warn(`[grapestrap] unknown starter template "${templateId}" — creating a blank project`)
+  }
 
   const now = new Date().toISOString()
   const manifest = {
@@ -408,15 +407,7 @@ export async function createProject({ targetPath, name, templateId: _templateId 
       lastSavedAt: now,
       appVersion: app.getVersion()
     },
-    pages: [
-      {
-        name: 'index',
-        file: 'pages/index.html',
-        templateName: null,
-        regions: {},
-        head: { title: name, description: '', customMeta: [], customLinks: [], customScripts: [] }
-      }
-    ],
+    pages: [],
     templates: [],
     libraryItems: [],
     snippets: [],
@@ -432,14 +423,29 @@ export async function createProject({ targetPath, name, templateId: _templateId 
     }
   }
 
-  // Write the index page as full HTML so the file is a real standalone
-  // document with framework links in <head>. The canvas extracts the body
-  // for editing; manifest.head provides title/description/etc.
-  await fsp.writeFile(
-    join(site, 'pages', 'index.html'),
-    composeFullPageHtml(indexHtml, manifest.pages[0], manifest),
-    'utf8'
-  )
+  if (starter) {
+    // Writes site/templates/*.gstrap-tpl, site/pages/*.html (full HTML via
+    // composeFullPageHtml), text assets, vendor deps; appends the matching
+    // manifest entries and stamps metadata.starter.
+    await applyStarter({ site, starter, manifest })
+  } else {
+    const indexHtml = renderBlankIndex(name)
+    manifest.pages.push({
+      name: 'index',
+      file: 'pages/index.html',
+      templateName: null,
+      regions: {},
+      head: { title: name, description: '', customMeta: [], customLinks: [], customScripts: [] }
+    })
+    // Write the index page as full HTML so the file is a real standalone
+    // document with framework links in <head>. The canvas extracts the body
+    // for editing; manifest.head provides title/description/etc.
+    await fsp.writeFile(
+      join(site, 'pages', 'index.html'),
+      composeFullPageHtml(indexHtml, manifest.pages[0], manifest),
+      'utf8'
+    )
+  }
 
   // Update globalCSS pointer to the new in-assets location so loadProject
   // reads from there. (The legacy site/style.css path is dead now.)
@@ -517,7 +523,15 @@ export async function loadProject(manifestPath) {
           // intentional manifest content.
           title:        head.title       || page.head?.title       || '',
           description:  head.description || page.head?.description || '',
-          favicon:      head.favicon     || page.head?.favicon     || ''
+          favicon:      head.favicon     || page.head?.favicon     || '',
+          // customScripts are emitted at end-of-body (composeFullPageHtml)
+          // and stripped from the extracted body, so the parse always comes
+          // back empty — the manifest is their source of truth. Without this
+          // the spread above clobbers them with [] on every load (first real
+          // producer: the Wave 4 Portfolio starter's glightbox init).
+          customScripts: head.customScripts?.length
+            ? head.customScripts
+            : (page.head?.customScripts || [])
         }
         return { ...page, html: body, head: merged }
       }
