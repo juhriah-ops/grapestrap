@@ -23,6 +23,7 @@
 import { eventBus } from '../../state/event-bus.js'
 import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
+import { t } from '../../i18n.js'
 
 let host = null
 let userHidden = false
@@ -72,9 +73,9 @@ function paint() {
   const refs = parseLinks(page.html || '')
   host.hidden = false
   host.innerHTML = `
-    <span class="gstrap-lf-label">Linked:</span>
+    <span class="gstrap-lf-label">${escHtml(t('lf.label'))}</span>
     ${refs.length === 0
-      ? '<span class="gstrap-lf-empty">No external CSS/JS referenced by this page</span>'
+      ? `<span class="gstrap-lf-empty">${escHtml(t('lf.empty'))}</span>`
       : refs.map(r => `
           <button class="gstrap-lf-chip gstrap-lf-${r.kind}" data-lf-href="${escAttr(r.href)}"
                   title="${escAttr(r.kind.toUpperCase())} — ${escAttr(r.href)}">
@@ -90,12 +91,12 @@ function onChipClick(href) {
   const projectCss = projectState.current?.manifest?.globalCSS || 'style.css'
   if (matchesPath(href, projectCss)) {
     eventBus.emit('linked-files:open-globalcss')
-    eventBus.emit('toast', { type: 'info', message: 'Project style.css is open in the Custom CSS panel.' })
+    eventBus.emit('toast', { type: 'info', message: t('lf.toast.globalcss-open') })
     return
   }
   eventBus.emit('toast', {
     type: 'info',
-    message: `External resource: ${href}`
+    message: t('lf.toast.external-resource', { href })
   })
 }
 

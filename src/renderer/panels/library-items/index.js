@@ -28,6 +28,7 @@ import { getEditor } from '../../editor/grapesjs-init.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
 import { wireLibraryLock } from './lock.js'
 import { propagateLibraryItem } from './propagate.js'
+import { t } from '../../i18n.js'
 
 let host = null
 let eventsWired = false
@@ -55,26 +56,26 @@ function paint() {
   if (!host) return
   const project = projectState.current
   if (!project) {
-    host.innerHTML = `<div class="gstrap-lib-empty">Open a project to see its library.</div>`
+    host.innerHTML = `<div class="gstrap-lib-empty">${escHtml(t('lib.empty'))}</div>`
     return
   }
   const items = project.libraryItems || []
   host.innerHTML = `
     <div class="gstrap-lib-toolbar">
-      <button class="gstrap-lib-btn" data-lib-new>+ New</button>
-      <button class="gstrap-lib-btn" data-lib-from-selection>+ From Selection</button>
+      <button class="gstrap-lib-btn" data-lib-new>${escHtml(t('lib.new'))}</button>
+      <button class="gstrap-lib-btn" data-lib-from-selection>${escHtml(t('lib.from-selection'))}</button>
     </div>
     ${items.length === 0
-      ? `<div class="gstrap-lib-empty">No library items yet. Click "+ New" or wrap a selection.</div>`
+      ? `<div class="gstrap-lib-empty">${escHtml(t('lib.empty-list'))}</div>`
       : `<ul class="gstrap-lib-list">
           ${items.map(it => `
             <li class="gstrap-lib-item" data-lib-id="${escAttr(it.id)}">
               <span class="gstrap-lib-name">${escHtml(it.name || it.id)}</span>
               <span class="gstrap-lib-actions">
-                <button class="gstrap-lib-mini" data-lib-insert="${escAttr(it.id)}" title="Insert into page">↵</button>
-                <button class="gstrap-lib-mini" data-lib-edit="${escAttr(it.id)}"   title="Open for editing">✎</button>
-                <button class="gstrap-lib-mini" data-lib-rename="${escAttr(it.id)}" title="Rename">A</button>
-                <button class="gstrap-lib-mini" data-lib-delete="${escAttr(it.id)}" title="Delete">✕</button>
+                <button class="gstrap-lib-mini" data-lib-insert="${escAttr(it.id)}" title="${escAttr(t('lib.insert-title'))}">↵</button>
+                <button class="gstrap-lib-mini" data-lib-edit="${escAttr(it.id)}"   title="${escAttr(t('lib.edit-title'))}">✎</button>
+                <button class="gstrap-lib-mini" data-lib-rename="${escAttr(it.id)}" title="${escAttr(t('action.rename'))}">A</button>
+                <button class="gstrap-lib-mini" data-lib-delete="${escAttr(it.id)}" title="${escAttr(t('action.delete'))}">✕</button>
               </span>
             </li>
           `).join('')}
@@ -107,11 +108,11 @@ function wireEvents() {
 async function cmdNew() {
   if (!requireProject()) return
   const name = await showTextPrompt({
-    title: 'New library item',
-    label: 'Library item name',
-    initialValue: 'Footer',
-    placeholder: 'e.g. Footer',
-    okLabel: 'Create'
+    title: t('lib.prompt.new-title'),
+    label: t('lib.prompt.name-label'),
+    initialValue: t('lib.prompt.default-name'),
+    placeholder: t('lib.prompt.name-placeholder'),
+    okLabel: t('action.create')
   })
   if (!name) return
   const item = makeItem(name, '<div class="container py-3"><p>New library item</p></div>')
@@ -126,14 +127,14 @@ async function cmdFromSelection() {
   const editor = getEditor()
   const sel = editor?.getSelected?.()
   if (!sel) {
-    eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.select-element') })
     return
   }
   const name = await showTextPrompt({
-    title: 'Library item from selection',
-    label: 'Library item name',
+    title: t('lib.prompt.from-selection-title'),
+    label: t('lib.prompt.name-label'),
     initialValue: tagOf(sel) || 'item',
-    okLabel: 'Create'
+    okLabel: t('action.create')
   })
   if (!name) return
   const innerHtml = sel.toHTML()
@@ -193,10 +194,10 @@ async function cmdRename(id) {
   const item = projectState.current.libraryItems.find(it => it.id === id)
   if (!item) return
   const next = await showTextPrompt({
-    title: 'Rename library item',
-    label: 'New name',
+    title: t('lib.prompt.rename-title'),
+    label: t('lib.prompt.rename-label'),
     initialValue: item.name || item.id,
-    okLabel: 'Rename'
+    okLabel: t('action.rename')
   })
   if (!next || next === item.name) return
   item.name = next
@@ -215,7 +216,7 @@ function cmdDelete(id) {
   if (inUse > 0) {
     eventBus.emit('toast', {
       type: 'warning',
-      message: `Library item is used on ${inUse} page(s). Detach instances first.`
+      message: t('lib.toast.in-use', { count: inUse })
     })
     return
   }
@@ -262,7 +263,7 @@ function countInstances(id) {
 
 function requireProject() {
   if (!projectState.current) {
-    eventBus.emit('toast', { type: 'warning', message: 'Open or create a project first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.no-project') })
     return false
   }
   return true

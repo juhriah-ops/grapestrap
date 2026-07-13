@@ -25,16 +25,17 @@
  */
 
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { t } from '../../i18n.js'
 
 export const id = 'cascade'
-export const label = 'Cascade'
+export const labelKey = 'sm.panel.cascade'
 
 export function render(host, ctx) {
   const { component } = ctx
   const editor = getEditor()
   const frameDoc = editor?.Canvas?.getFrameEl()?.contentDocument
   if (!frameDoc || !component) {
-    host.innerHTML = `<div class="gstrap-sm-hint">Cascade unavailable — canvas not ready.</div>`
+    host.innerHTML = `<div class="gstrap-sm-hint">${escapeHtml(t('sm.cascade-unavailable'))}</div>`
     return
   }
 
@@ -43,7 +44,7 @@ export function render(host, ctx) {
   // (Backbone view), or we can fall back to the cid-attributed node.
   const el = component.view?.el || frameDoc.querySelector(`[data-gjs-id="${component.cid}"]`)
   if (!el || !el.matches) {
-    host.innerHTML = `<div class="gstrap-sm-hint">Selected element not yet in canvas DOM.</div>`
+    host.innerHTML = `<div class="gstrap-sm-hint">${escapeHtml(t('sm.cascade-not-in-dom'))}</div>`
     return
   }
 
@@ -52,22 +53,24 @@ export function render(host, ctx) {
   const totalRules = groups.inline.length + groups.project.length + groups.bootstrap.length
 
   if (totalRules === 0) {
-    host.innerHTML = `<div class="gstrap-sm-hint">No CSS rules match this element.</div>`
+    host.innerHTML = `<div class="gstrap-sm-hint">${escapeHtml(t('sm.cascade-no-rules'))}</div>`
     return
   }
 
+  // Group ids stay literal (they feed the data-cascade-group attribute);
+  // only the visible heading goes through t().
   host.innerHTML = `
-    ${renderGroup('Inline',    groups.inline,    winners)}
-    ${renderGroup('Project',   groups.project,   winners)}
-    ${renderGroup('Bootstrap', groups.bootstrap, winners)}
+    ${renderGroup('inline',    t('sm.cascade-inline'),    groups.inline,    winners)}
+    ${renderGroup('project',   t('sm.cascade-project'),   groups.project,   winners)}
+    ${renderGroup('bootstrap', t('sm.cascade-bootstrap'), groups.bootstrap, winners)}
   `
 }
 
-function renderGroup(label, rules, winners) {
+function renderGroup(groupId, label, rules, winners) {
   if (!rules.length) return ''
   return `
-    <div class="gstrap-sm-cascade-group" data-cascade-group="${label.toLowerCase()}">
-      <div class="gstrap-sm-label">${label}</div>
+    <div class="gstrap-sm-cascade-group" data-cascade-group="${groupId}">
+      <div class="gstrap-sm-label">${escapeHtml(label)}</div>
       ${rules.map(r => `
         <div class="gstrap-sm-cascade-rule">
           <div class="gstrap-sm-cascade-selector">${escapeHtml(r.selector)}</div>

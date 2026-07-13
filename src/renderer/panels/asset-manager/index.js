@@ -30,11 +30,16 @@
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { t } from '../../i18n.js'
 
+// Per-kind message keys (Wave 4 sweep). Titles/empties are per-kind keys, not
+// one parameterised string — "Add images" was built by lowercasing the label,
+// which doesn't survive translation. addedKey resolves via i18next plurals
+// (_one/_other) so "Added 1 image" / "Added 2 images" stay byte-identical.
 const KINDS = [
-  { id: 'images', label: 'Images' },
-  { id: 'fonts',  label: 'Fonts'  },
-  { id: 'videos', label: 'Videos' }
+  { id: 'images', labelKey: 'am.images', addTitleKey: 'am.add-images-title', emptyKey: 'am.empty-images', addedKey: 'am.toast.added-image' },
+  { id: 'fonts',  labelKey: 'am.fonts',  addTitleKey: 'am.add-fonts-title',  emptyKey: 'am.empty-fonts',  addedKey: 'am.toast.added-font'  },
+  { id: 'videos', labelKey: 'am.videos', addTitleKey: 'am.add-videos-title', emptyKey: 'am.empty-videos', addedKey: 'am.toast.added-video' }
 ]
 
 const CONTAINER_TAGS = new Set([
@@ -127,20 +132,20 @@ function publishCache() {
 function paint() {
   if (!host) return
   if (!projectState.current) {
-    host.innerHTML = `<div class="gstrap-am-empty">Open a project to manage its assets.</div>`
+    host.innerHTML = `<div class="gstrap-am-empty">${escHtml(t('am.empty'))}</div>`
     return
   }
   host.innerHTML = `
     ${KINDS.map(k => `
       <section class="gstrap-am-section" data-kind="${k.id}">
         <div class="gstrap-am-section-head">
-          <span class="gstrap-am-section-title">${k.label}</span>
-          <button class="gstrap-am-add" data-add-kind="${k.id}" title="Add ${k.label.toLowerCase()}">+ Add</button>
+          <span class="gstrap-am-section-title">${escHtml(t(k.labelKey))}</span>
+          <button class="gstrap-am-add" data-add-kind="${k.id}" title="${escAttr(t(k.addTitleKey))}">${escHtml(t('am.add'))}</button>
         </div>
         <div class="gstrap-am-grid">
           ${(assetsByKind[k.id] || []).map(name => renderTile(k.id, name)).join('')}
           ${(assetsByKind[k.id] || []).length === 0
-            ? `<div class="gstrap-am-empty-section">No ${k.label.toLowerCase()} yet.</div>`
+            ? `<div class="gstrap-am-empty-section">${escHtml(t(k.emptyKey))}</div>`
             : ''}
         </div>
       </section>
@@ -165,7 +170,7 @@ function renderTile(kind, name) {
           : `<span class="gstrap-am-tile-glyph">${kind === 'fonts' ? 'A' : '▶'}</span>`}
       </div>
       <div class="gstrap-am-tile-name">${escHtml(name)}</div>
-      <button class="gstrap-am-tile-x" data-asset-delete="${escAttr('site/' + relPath)}" title="Delete">×</button>
+      <button class="gstrap-am-tile-x" data-asset-delete="${escAttr('site/' + relPath)}" title="${escAttr(t('action.delete'))}">×</button>
     </div>
   `
 }
@@ -187,23 +192,24 @@ function wireEvents() {
 
 async function onAddClicked(kind) {
   if (!projectState.current) {
-    eventBus.emit('toast', { type: 'warning', message: 'Open or create a project first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.no-project') })
     return
   }
   try {
     const added = await window.grapestrap.file.importAsset(kind)
     if (added && added.length > 0) {
       eventBus.emit('assets:changed')
-      eventBus.emit('toast', { type: 'success', message: `Added ${added.length} ${kind.replace(/s$/, '')}${added.length === 1 ? '' : 's'}` })
+      const addedKey = KINDS.find(k => k.id === kind)?.addedKey || 'am.toast.added-image'
+      eventBus.emit('toast', { type: 'success', message: t(addedKey, { count: added.length }) })
     }
   } catch (err) {
-    eventBus.emit('toast', { type: 'error', message: `Asset import failed: ${err?.message || err}` })
+    eventBus.emit('toast', { type: 'error', message: t('am.toast.import-failed', { error: err?.message || err }) })
   }
 }
 
 async function handleDroppedFiles(fileList, forceKind) {
   if (!projectState.current) {
-    eventBus.emit('toast', { type: 'warning', message: 'Open or create a project first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.no-project') })
     return
   }
   const files = Array.from(fileList || [])
@@ -230,13 +236,16 @@ async function handleDroppedFiles(fileList, forceKind) {
   if (okCount) {
     eventBus.emit('toast', {
       type: 'success',
-      message: `Added ${okCount} file${okCount === 1 ? '' : 's'}.`
+      message: t('am.toast.added-files', { count: okCount })
     })
   }
   if (skipped.length) {
     eventBus.emit('toast', {
       type: 'warning',
-      message: `Skipped ${skipped.length} file${skipped.length === 1 ? '' : 's'} (unrecognised type): ${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? '…' : ''}`
+      message: t('am.toast.skipped-files', {
+        count: skipped.length,
+        names: `${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? '…' : ''}`
+      })
     })
   }
 }
@@ -261,7 +270,7 @@ async function onDeleteClicked(relPath) {
     await window.grapestrap.file.delete(relPath)
     eventBus.emit('assets:changed')
   } catch (err) {
-    eventBus.emit('toast', { type: 'error', message: `Delete failed: ${err?.message || err}` })
+    eventBus.emit('toast', { type: 'error', message: t('am.toast.delete-failed', { error: err?.message || err }) })
   }
 }
 

@@ -27,6 +27,7 @@
 import { GoldenLayout, LayoutConfig } from 'golden-layout'
 
 import { eventBus } from '../state/event-bus.js'
+import { t } from '../i18n.js'
 import { renderFileManager } from '../panels/file-manager/index.js'
 import { renderDomTree }     from '../panels/dom-tree/index.js'
 import { renderCanvas }      from '../panels/canvas/index.js'
@@ -72,20 +73,45 @@ export const LAYOUT_FLOORS = {
   canvasMinH: CANVAS_MIN_H
 }
 
+// GL tab titles resolve through t() (Wave 4 sweep) — but this module loads at
+// import time, BEFORE initI18n() runs in boot(), so titles can't live in the
+// const below (pre-init t() returns the raw key). stampPanelTitles() applies
+// them on every clone handed to GL, which only ever happens post-init.
+const PANEL_TITLE_KEYS = {
+  'file-manager':  'panel.file-manager',
+  'library-items': 'panel.library-items',
+  'asset-manager': 'panel.asset-manager',
+  'canvas':        'panel.canvas',
+  'dom-tree':      'panel.dom-tree',
+  'properties':    'panel.properties',
+  'custom-css':    'panel.custom-css'
+}
+
+function stampPanelTitles(node) {
+  if (!node || typeof node !== 'object') return node
+  if (node.type === 'component' && PANEL_TITLE_KEYS[node.componentType]) {
+    node.title = t(PANEL_TITLE_KEYS[node.componentType])
+  }
+  if (node.root) stampPanelTitles(node.root)   // top-level LayoutConfig wrapper
+  for (const child of node.content || []) stampPanelTitles(child)
+  return node
+}
+
 const DEFAULT_CONFIG = {
   root: {
     type: 'row',
     content: [
-      // LEFT STACK — Project / Library / Assets
+      // LEFT STACK — Project / Library / Assets. Titles come from
+      // stampPanelTitles() (PANEL_TITLE_KEYS above), not literals here.
       {
         type: 'stack',
         width: 18,
         content: [
-          { type: 'component', componentType: 'file-manager',   title: 'Project',
+          { type: 'component', componentType: 'file-manager',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
-          { type: 'component', componentType: 'library-items',  title: 'Library',
+          { type: 'component', componentType: 'library-items',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
-          { type: 'component', componentType: 'asset-manager',  title: 'Assets',
+          { type: 'component', componentType: 'asset-manager',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       },
@@ -95,7 +121,7 @@ const DEFAULT_CONFIG = {
         type: 'stack',
         width: 56,
         content: [
-          { type: 'component', componentType: 'canvas', title: 'Canvas',
+          { type: 'component', componentType: 'canvas',
             isClosable: false, minWidth: CANVAS_MIN_W, minHeight: CANVAS_MIN_H }
         ]
       },
@@ -108,11 +134,11 @@ const DEFAULT_CONFIG = {
         width: 26,
         activeItemIndex: 1,
         content: [
-          { type: 'component', componentType: 'dom-tree',    title: 'DOM',
+          { type: 'component', componentType: 'dom-tree',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
-          { type: 'component', componentType: 'properties',  title: 'Properties',
+          { type: 'component', componentType: 'properties',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
-          { type: 'component', componentType: 'custom-css',  title: 'Custom CSS',
+          { type: 'component', componentType: 'custom-css',
             isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
         ]
       }
@@ -141,7 +167,7 @@ export function initGoldenLayout(host) {
     layout.registerComponentFactoryFunction(componentType, container => render(container.element))
   }
 
-  layout.loadLayout(DEFAULT_CONFIG)
+  layout.loadLayout(getDefaultConfig())
 
   // GL re-parents panel DOM on maximize/restore. For the canvas iframe that
   // means the document gets rebuilt — base href + globalCSS injection need
@@ -252,17 +278,18 @@ export function getLayout() {
 
 export function resetLayout() {
   if (!layout) return
-  layout.loadLayout(DEFAULT_CONFIG)
+  layout.loadLayout(getDefaultConfig())
 }
 
 // ─── Workspace-layouts surface (Wave 3) ─────────────────────────────────────
 // workspaces.js never imports golden-layout directly — these three wrappers
 // plus getRegisteredComponentTypes() are its whole GL contract.
 
-/** Deep clone of the LOCKED 4-column default config. Presets are built from
- *  this so they can never drift from the shell (PLAN.md §2.4). */
+/** Deep clone of the LOCKED 4-column default config, panel titles stamped
+ *  from the live t() catalog. Presets are built from this so they can never
+ *  drift from the shell (PLAN.md §2.4). */
 export function getDefaultConfig() {
-  return structuredClone(DEFAULT_CONFIG)
+  return stampPanelTitles(structuredClone(DEFAULT_CONFIG))
 }
 
 /** Current arrangement as a serialisable LayoutConfig (GL 2.6:

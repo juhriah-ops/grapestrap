@@ -14,9 +14,10 @@ import {
   textSizePattern, textColorPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup } from './class-utils.js'
+import { t } from '../../i18n.js'
 
 export const id = 'text'
-export const label = 'Text'
+export const labelKey = 'sm.panel.text'
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -31,29 +32,29 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Align</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.align'))}</label>
       <div class="gstrap-sm-segs">
         ${TEXT_ALIGN.map(v => {
           const cls = textAlignClass(v.value)
           return `<button class="gstrap-sm-seg ${curAlign === cls ? 'is-active' : ''}"
                           data-align="${v.value}" title="${cls}">${v.label}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-align-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-align-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Weight</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.weight'))}</label>
       <div class="gstrap-sm-grid">
         ${TEXT_WEIGHT.map(v => {
           const cls = `fw-${v.value}`
           return `<button class="gstrap-sm-pill ${curWeight === cls ? 'is-active' : ''}"
                           data-weight="${v.value}" title="${cls}">${v.label}</button>`
         }).join('')}
-        <button class="gstrap-sm-pill gstrap-sm-clear" data-weight-clear>Clear</button>
+        <button class="gstrap-sm-pill gstrap-sm-clear" data-weight-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Style</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.style'))}</label>
       <div class="gstrap-sm-grid">
         ${TEXT_STYLE.map(v => {
           const cls = `fst-${v.value}`
@@ -73,25 +74,25 @@ export function render(host, ctx) {
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Size</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.size'))}</label>
       <div class="gstrap-sm-segs">
         ${TEXT_SIZE.map(s => {
           const cls = `fs-${s}`
           return `<button class="gstrap-sm-seg ${curSize === cls ? 'is-active' : ''}"
                           data-size="${s}" title="${cls}">${s}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-size-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-size-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Color</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.color'))}</label>
       <div class="gstrap-sm-swatches">
         ${TEXT_COLOR.map(c => {
           const cls = `text-${c.value}`
           return `<button class="gstrap-sm-swatch ${curColor === cls ? 'is-active' : ''}"
                           data-color="${c.value}" style="--swatch:${c.swatch}" title="${cls}"></button>`
         }).join('')}
-        <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="Clear">×</button>
+        <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="${escHtml(t('action.clear'))}">×</button>
       </div>
     </div>
   `
@@ -163,4 +164,8 @@ export function render(host, ctx) {
   host.querySelector('[data-color-clear]')?.addEventListener('click', () => {
     applyGroup(component, textColorPattern(), null); requestRender()
   })
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }

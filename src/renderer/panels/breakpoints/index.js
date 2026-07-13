@@ -28,6 +28,7 @@ import { eventBus } from '../../state/event-bus.js'
 import { pageState } from '../../state/page-state.js'
 import { projectState } from '../../state/project-state.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { t } from '../../i18n.js'
 
 const BREAKPOINTS = [
   { id: '',    label: 'xs',  min: 0,    short: '<576' },
@@ -87,13 +88,13 @@ function paint() {
   host.innerHTML = `
     <div class="gstrap-bp-row">
       <span class="gstrap-bp-readout">
-        <span class="gstrap-bp-width">${currentWidth ? `${currentWidth}px` : 'fill'}</span>
+        <span class="gstrap-bp-width">${currentWidth ? `${currentWidth}px` : escHtml(t('bp.fill'))}</span>
         <span class="gstrap-bp-active">${activeBp.label} ${activeBp.short}</span>
       </span>
       <input type="range" class="gstrap-bp-slider" data-bp-slider
              min="${MIN}" max="${MAX}" step="1" value="${currentWidth || canvasInnerWidth()}">
       <span class="gstrap-bp-snaps">
-        <button class="gstrap-bp-snap" data-bp-snap="auto" title="Fill canvas pane">100%</button>
+        <button class="gstrap-bp-snap" data-bp-snap="auto" title="${escAttr(t('bp.fill-title'))}">100%</button>
         ${SNAP_PRESETS.map(w => `<button class="gstrap-bp-snap ${currentWidth === w ? 'is-active' : ''}"
                                           data-bp-snap="${w}">${w}</button>`).join('')}
       </span>
@@ -117,14 +118,14 @@ function renderResponsiveChips(activeBp) {
   const hideCls = activeBp.id ? `d-${activeBp.id}-none`  : 'd-none'
   return `
     <div class="gstrap-bp-chips">
-      <span class="gstrap-bp-chips-label">at ${activeBp.label}:</span>
+      <span class="gstrap-bp-chips-label">${escHtml(t('bp.at-label', { bp: activeBp.label }))}</span>
       <button class="gstrap-bp-toggle" data-bp-class="${hideCls}"
-              title="${classes.includes(hideCls) ? 'Remove' : 'Add'} ${hideCls}">
-        ${classes.includes(hideCls) ? '👁‍🗨 hidden' : '🚫 hide'}
+              title="${escAttr(t(classes.includes(hideCls) ? 'bp.remove-class-title' : 'bp.add-class-title', { cls: hideCls }))}">
+        ${escHtml(classes.includes(hideCls) ? t('bp.hidden') : t('bp.hide'))}
       </button>
       <button class="gstrap-bp-toggle" data-bp-class="${showCls}"
-              title="${classes.includes(showCls) ? 'Remove' : 'Add'} ${showCls}">
-        ${classes.includes(showCls) ? '✓ shown' : '👁 show'}
+              title="${escAttr(t(classes.includes(showCls) ? 'bp.remove-class-title' : 'bp.add-class-title', { cls: showCls }))}">
+        ${escHtml(classes.includes(showCls) ? t('bp.shown') : t('bp.show'))}
       </button>
       ${interesting.length ? `<span class="gstrap-bp-chips-sep"></span>` : ''}
       ${interesting.map(c =>
@@ -225,3 +226,4 @@ function canvasInnerWidth() {
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c])
 }
+function escAttr(s) { return escHtml(s) }

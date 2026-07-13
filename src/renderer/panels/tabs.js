@@ -7,10 +7,11 @@
 
 import { pageState } from '../state/page-state.js'
 import { eventBus } from '../state/event-bus.js'
+import { t } from '../i18n.js'
 
 export function renderTabs(host) {
   host.innerHTML = `<div class="gstrap-tabs-row" data-region="tab-row"></div>
-                    <button class="gstrap-tab-new" data-cmd="file:new-page" title="New Page">+</button>`
+                    <button class="gstrap-tab-new" data-cmd="file:new-page" title="${escAttr(t('tabs.new-page-title'))}">+</button>`
   refresh(host)
   eventBus.on('tab:opened',  () => refresh(host))
   eventBus.on('tab:closed',  () => refresh(host))
@@ -42,21 +43,22 @@ export function renderTabs(host) {
 function refresh(host) {
   const row = host.querySelector('[data-region="tab-row"]')
   if (!row) return
-  row.innerHTML = pageState.tabs.map((t, i) => {
+  row.innerHTML = pageState.tabs.map((tab, i) => {
     const active = i === pageState.activeIndex ? 'is-active' : ''
-    const dirty = t.dirty ? ' is-dirty' : ''
-    // Badge literals are Wave 4 t() sweep targets (file has no t() import).
-    const kind = t.kind === 'library' ? ' is-library' : t.kind === 'template' ? ' is-template' : ''
-    const badge = t.kind === 'library'
-      ? `<span class="gstrap-tab-badge" title="Library item">lib</span>`
-      : t.kind === 'template'
-        ? `<span class="gstrap-tab-badge" title="Master template">tpl</span>`
+    const dirty = tab.dirty ? ' is-dirty' : ''
+    // Badge tooltips go through t(); the 3-letter lib/tpl badge glyphs are
+    // iconography (like the toolbar's D/T/M buttons), not prose.
+    const kind = tab.kind === 'library' ? ' is-library' : tab.kind === 'template' ? ' is-template' : ''
+    const badge = tab.kind === 'library'
+      ? `<span class="gstrap-tab-badge" title="${escAttr(t('tabs.badge-library-title'))}">lib</span>`
+      : tab.kind === 'template'
+        ? `<span class="gstrap-tab-badge" title="${escAttr(t('tabs.badge-template-title'))}">tpl</span>`
         : ''
-    const label = t.label || t.pageName
-    return `<div class="gstrap-tab ${active}${dirty}${kind}" data-tab="${escAttr(t.pageName)}">
+    const label = tab.label || tab.pageName
+    return `<div class="gstrap-tab ${active}${dirty}${kind}" data-tab="${escAttr(tab.pageName)}">
               ${badge}
               <span class="gstrap-tab-label">${escHtml(label)}</span>
-              <button class="gstrap-tab-x" data-tab-close="${escAttr(t.pageName)}" title="Close">×</button>
+              <button class="gstrap-tab-x" data-tab-close="${escAttr(tab.pageName)}" title="${escAttr(t('action.close'))}">×</button>
             </div>`
   }).join('')
 }

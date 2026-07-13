@@ -17,6 +17,7 @@
 
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { t } from '../../i18n.js'
 
 let hostEl = null
 let selectedId = null
@@ -86,13 +87,13 @@ function paint() {
   if (!hostEl) return
   const editor = getEditor()
   if (!editor) {
-    hostEl.innerHTML = `<div class="gstrap-dom-empty">Canvas not ready.</div>`
+    hostEl.innerHTML = `<div class="gstrap-dom-empty">${esc(t('dom.canvas-not-ready'))}</div>`
     return
   }
   const wrapper = editor.getWrapper()
   const children = wrapper ? wrapper.components() : []
   if (!children || children.length === 0) {
-    hostEl.innerHTML = `<div class="gstrap-dom-empty">Empty page.</div>`
+    hostEl.innerHTML = `<div class="gstrap-dom-empty">${esc(t('dom.empty-page'))}</div>`
     return
   }
   const rows = []

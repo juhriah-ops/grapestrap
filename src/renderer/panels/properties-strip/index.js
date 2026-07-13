@@ -18,6 +18,7 @@
 
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { t } from '../../i18n.js'
 
 const HEADING_LEVELS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
 
@@ -34,7 +35,7 @@ export function renderPropertyStrip(target) {
 function setEmptyState() {
   if (!host) return
   currentComponent = null
-  host.innerHTML = `<span class="gstrap-strip-hint">Select an element on the canvas to edit its properties.</span>`
+  host.innerHTML = `<span class="gstrap-strip-hint">${escHtml(t('strip.hint'))}</span>`
 }
 
 function renderForElement(component) {
@@ -48,23 +49,24 @@ function renderForElement(component) {
     .map(c => typeof c === 'string' ? c : (c?.get?.('name') || ''))
     .filter(Boolean)
 
+  // href/target/src/alt field labels are HTML attribute names — data, no t().
   const sections = [
-    `<span class="gstrap-strip-tag" title="Element">${escHtml(tag)}</span>`,
-    fieldText('id', 'ID', attrs.id ?? ''),
-    fieldText('classes', 'Classes', flatClasses.join(' '))
+    `<span class="gstrap-strip-tag" title="${escAttr(t('props.element'))}">${escHtml(tag)}</span>`,
+    fieldText('id', t('props.id'), attrs.id ?? ''),
+    fieldText('classes', t('props.classes'), flatClasses.join(' '))
   ]
 
   if (tag === 'a') {
     sections.push(fieldText('href', 'href', attrs.href ?? ''))
     sections.push(fieldSelect('target', 'target', attrs.target ?? '', [
-      ['', '(default)'], ['_self', '_self'], ['_blank', '_blank'],
+      ['', t('strip.target-default')], ['_self', '_self'], ['_blank', '_blank'],
       ['_parent', '_parent'], ['_top', '_top']
     ]))
   } else if (tag === 'img') {
     sections.push(fieldText('src', 'src', attrs.src ?? ''))
     sections.push(fieldText('alt', 'alt', attrs.alt ?? ''))
   } else if (HEADING_LEVELS.includes(tag)) {
-    sections.push(fieldSelect('heading-level', 'level', tag,
+    sections.push(fieldSelect('heading-level', t('strip.level'), tag,
       HEADING_LEVELS.map(h => [h, h.toUpperCase()])))
   }
 

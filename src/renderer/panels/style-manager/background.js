@@ -17,9 +17,10 @@ import { applyGroup, readGroup, toggleClass } from './class-utils.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { pickSelector, isBsUtility } from './css-rule-utils.js'
+import { t } from '../../i18n.js'
 
 export const id = 'background'
-export const label = 'Background'
+export const labelKey = 'sm.panel.background'
 
 const BG_SIZES = ['', 'cover', 'contain', 'auto']
 const BG_POSITIONS = ['', 'center', 'top', 'bottom', 'left', 'right']
@@ -44,7 +45,7 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Color</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.color'))}</label>
       <div class="gstrap-sm-swatches">
         ${BG_COLOR.map(c => {
           const cls = `bg-${c.value}`
@@ -54,29 +55,29 @@ export function render(host, ctx) {
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Subtle</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.subtle'))}</label>
       <div class="gstrap-sm-grid">
         ${BG_SUBTLE.map(s => {
           const cls = `bg-${s}`
           return `<button class="gstrap-sm-pill ${cur === cls ? 'is-active' : ''}"
                           data-subtle="${s}" title="${cls}">${s.replace('-subtle','')}</button>`
         }).join('')}
-        <button class="gstrap-sm-pill gstrap-sm-clear" data-clear>Clear</button>
+        <button class="gstrap-sm-pill gstrap-sm-clear" data-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Effect</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.effect'))}</label>
       <div class="gstrap-sm-grid">
         <button class="gstrap-sm-pill ${hasGradient ? 'is-active' : ''}" data-gradient
-                title="bg-gradient">Gradient</button>
+                title="bg-gradient">${escHtml(t('sm.gradient'))}</button>
       </div>
     </div>
 
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Image</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.image'))}</label>
       ${!selector ? `
         <div class="gstrap-sm-hint">
-          Add a custom class or id to this element first — background images need a target selector.
+          ${escHtml(t('sm.bg-needs-selector'))}
         </div>
       ` : `
         <div class="gstrap-sm-bg-image">
@@ -85,14 +86,14 @@ export function render(host, ctx) {
                  ${imagePreviewMarkup(currentBgImage)}
                  <span class="gstrap-sm-bg-name">${escHtml(basename(currentBgImage))}</span>
                </div>`
-            : `<div class="gstrap-sm-bg-empty">No image</div>`}
+            : `<div class="gstrap-sm-bg-empty">${escHtml(t('sm.no-image'))}</div>`}
           <div class="gstrap-sm-bg-actions">
-            <button class="gstrap-sm-pill" data-bg-toggle-picker>${currentBgImage ? 'Change' : 'Pick'}</button>
-            ${currentBgImage ? `<button class="gstrap-sm-pill gstrap-sm-clear" data-bg-clear>Clear</button>` : ''}
+            <button class="gstrap-sm-pill" data-bg-toggle-picker>${escHtml(currentBgImage ? t('sm.change') : t('sm.pick'))}</button>
+            ${currentBgImage ? `<button class="gstrap-sm-pill gstrap-sm-clear" data-bg-clear>${escHtml(t('action.clear'))}</button>` : ''}
           </div>
           <div class="gstrap-sm-bg-picker" data-bg-picker hidden>
             ${images.length === 0
-              ? `<div class="gstrap-sm-hint">No images in project assets yet. Drop files into the Assets panel.</div>`
+              ? `<div class="gstrap-sm-hint">${escHtml(t('sm.no-project-images'))}</div>`
               : `<div class="gstrap-sm-bg-grid">
                   ${images.map(rel => `
                     <button class="gstrap-sm-bg-tile ${currentBgImage === rel ? 'is-active' : ''}"
@@ -106,9 +107,9 @@ export function render(host, ctx) {
         </div>
         ${currentBgImage ? `
           <div class="gstrap-sm-bg-controls">
-            ${selectRow('Size',     'bg-size',     BG_SIZES,     currentBgSize)}
-            ${selectRow('Position', 'bg-position', BG_POSITIONS, currentBgPosition)}
-            ${selectRow('Repeat',   'bg-repeat',   BG_REPEATS,   currentBgRepeat)}
+            ${selectRow(t('sm.label.size'),     'bg-size',     BG_SIZES,     currentBgSize)}
+            ${selectRow(t('sm.label.position'), 'bg-position', BG_POSITIONS, currentBgPosition)}
+            ${selectRow(t('sm.label.repeat'),   'bg-repeat',   BG_REPEATS,   currentBgRepeat)}
           </div>
         ` : ''}
       `}
@@ -256,7 +257,7 @@ function basename(p) {
 function selectRow(label, prop, options, value) {
   return `
     <label class="gstrap-sm-bg-control">
-      <span>${label}</span>
+      <span>${escHtml(label)}</span>
       <select data-bg-prop="background-${prop.replace(/^bg-/, '')}" class="gstrap-sm-pseudo-input">
         ${options.map(o => `<option value="${o}" ${o === value ? 'selected' : ''}>${o || '—'}</option>`).join('')}
       </select>

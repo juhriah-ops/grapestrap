@@ -19,9 +19,11 @@ import {
   alignContentPattern, gapPattern, flexEnabledPattern
 } from './bs-classes.js'
 import { applyGroup, hasGroup, readGroup } from './class-utils.js'
+import { t } from '../../i18n.js'
+import { codeMarkup } from '../../i18n-html.js'
 
 export const id = 'flex'
-export const label = 'Flex'
+export const labelKey = 'sm.panel.flex'
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -29,8 +31,8 @@ export function render(host, ctx) {
   if (!hasGroup(component, flexEnabledPattern())) {
     host.innerHTML = `
       <div class="gstrap-sm-hint">
-        Flex utilities apply only when the element has <code>d-flex</code>.
-        <button class="gstrap-sm-pill" data-set-flex>Set display: flex</button>
+        ${codeMarkup(t('sm.flex-hint'))}
+        <button class="gstrap-sm-pill" data-set-flex>${escHtml(t('sm.set-flex'))}</button>
       </div>
     `
     host.querySelector('[data-set-flex]')?.addEventListener('click', () => {
@@ -51,20 +53,20 @@ export function render(host, ctx) {
   const curGap     = readGroup(component, gapPattern())
 
   host.innerHTML = `
-    ${row('Direction', FLEX_DIRECTION, 'flex-', curDir, 'dir')}
-    ${row('Wrap',      FLEX_WRAP,      'flex-', curWrap, 'wrap')}
-    ${row('Justify',   FLEX_JUSTIFY,   'justify-content-', curJustify, 'just')}
-    ${row('Align Items', FLEX_ALIGN_ITEMS, 'align-items-', curAlignI, 'aitems')}
-    ${row('Align Content', FLEX_ALIGN_CONTENT, 'align-content-', curAlignC, 'acontent')}
+    ${row(t('sm.label.direction'), FLEX_DIRECTION, 'flex-', curDir, 'dir')}
+    ${row(t('sm.label.wrap'),      FLEX_WRAP,      'flex-', curWrap, 'wrap')}
+    ${row(t('sm.label.justify'),   FLEX_JUSTIFY,   'justify-content-', curJustify, 'just')}
+    ${row(t('sm.label.align-items'), FLEX_ALIGN_ITEMS, 'align-items-', curAlignI, 'aitems')}
+    ${row(t('sm.label.align-content'), FLEX_ALIGN_CONTENT, 'align-content-', curAlignC, 'acontent')}
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Gap</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.gap'))}</label>
       <div class="gstrap-sm-segs">
         ${FLEX_GAP.map(g => {
           const cls = `gap-${g}`
           return `<button class="gstrap-sm-seg ${curGap === cls ? 'is-active' : ''}"
                           data-gap="${g}" title="${cls}">${g}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-gap-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-gap-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
   `
@@ -90,14 +92,14 @@ export function render(host, ctx) {
 function row(label, list, prefix, current, dataKey) {
   return `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">${label}</label>
+      <label class="gstrap-sm-label">${escHtml(label)}</label>
       <div class="gstrap-sm-segs">
         ${list.map(v => {
           const cls = `${prefix}${v.value}`
           return `<button class="gstrap-sm-seg ${current === cls ? 'is-active' : ''}"
                           data-${dataKey}="${v.value}" title="${cls}">${v.label}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-${dataKey}-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-${dataKey}-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
   `
@@ -113,4 +115,8 @@ function bindRow(host, sel, patternFn, prefix, current, component, requestRender
   host.querySelector(`[data-${dataKey}-clear]`)?.addEventListener('click', () => {
     applyGroup(component, patternFn(), null); requestRender()
   })
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }

@@ -16,9 +16,10 @@ import {
   borderRadiusPattern, shadowPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup, readGroupAll, toggleClass } from './class-utils.js'
+import { t } from '../../i18n.js'
 
 export const id = 'border'
-export const label = 'Border'
+export const labelKey = 'sm.panel.border'
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -31,7 +32,7 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Sides</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.sides'))}</label>
       <div class="gstrap-sm-segs">
         ${BORDER_SIDES.map(s => {
           const cls = s.value ? `border-${s.value}` : 'border'
@@ -39,51 +40,51 @@ export function render(host, ctx) {
           return `<button class="gstrap-sm-seg ${active ? 'is-active' : ''}"
                           data-side="${s.value}" title="${cls}">${s.label}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-side-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-side-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Width</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.width'))}</label>
       <div class="gstrap-sm-segs">
         ${BORDER_WIDTHS.map(w => {
           const cls = `border-${w}`
           return `<button class="gstrap-sm-seg ${curWidth === cls ? 'is-active' : ''}"
                           data-width="${w}" title="${cls}">${w}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-width-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-width-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Color</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.color'))}</label>
       <div class="gstrap-sm-swatches">
         ${BORDER_COLOR.map(c => {
           const cls = `border-${c.value}`
           return `<button class="gstrap-sm-swatch ${curColor === cls ? 'is-active' : ''}"
                           data-color="${c.value}" style="--swatch:${c.swatch}" title="${cls}"></button>`
         }).join('')}
-        <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="Clear">×</button>
+        <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="${escHtml(t('action.clear'))}">×</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Radius</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.radius'))}</label>
       <div class="gstrap-sm-segs">
         ${BORDER_RADIUS.map(r => {
           const cls = r.value ? `rounded-${r.value}` : 'rounded'
           return `<button class="gstrap-sm-seg ${curRadius === cls ? 'is-active' : ''}"
                           data-radius="${r.value}" title="${cls}">${r.label}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-radius-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-radius-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Shadow</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.shadow'))}</label>
       <div class="gstrap-sm-segs">
         ${SHADOW.map(s => {
           const cls = s.value ? `shadow-${s.value}` : 'shadow'
           return `<button class="gstrap-sm-seg ${curShadow === cls ? 'is-active' : ''}"
                           data-shadow="${s.value}" title="${cls}">${s.label}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-shadow-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-shadow-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
   `
@@ -142,4 +143,8 @@ export function render(host, ctx) {
   host.querySelector('[data-shadow-clear]')?.addEventListener('click', () => {
     applyGroup(component, shadowPattern(), null); requestRender()
   })
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }

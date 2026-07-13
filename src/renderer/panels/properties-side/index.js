@@ -18,6 +18,7 @@
 
 import { eventBus } from '../../state/event-bus.js'
 import { renderStyleManager } from '../style-manager/index.js'
+import { t } from '../../i18n.js'
 
 let host = null
 let currentComponent = null
@@ -51,7 +52,7 @@ function setEmpty() {
   if (!host) return
   host.innerHTML = `
     <section class="gstrap-props-section gstrap-empty">
-      Select an element on the canvas.
+      ${escHtml(t('props.empty'))}
     </section>
     <section class="gstrap-props-section" data-region="style-manager"></section>
   `
@@ -70,19 +71,19 @@ function renderForElement() {
 
   host.innerHTML = `
     <section class="gstrap-props-section">
-      <h4>Element</h4>
-      <div class="gstrap-prop-row"><label>Tag</label><span>${escHtml(tag)}</span></div>
-      <div class="gstrap-prop-row"><label>ID</label><input type="text" data-field="id" value="${escAttr(id)}"></div>
+      <h4>${escHtml(t('props.element'))}</h4>
+      <div class="gstrap-prop-row"><label>${escHtml(t('props.tag'))}</label><span>${escHtml(tag)}</span></div>
+      <div class="gstrap-prop-row"><label>${escHtml(t('props.id'))}</label><input type="text" data-field="id" value="${escAttr(id)}"></div>
     </section>
     <section class="gstrap-props-section">
-      <h4>Classes</h4>
+      <h4>${escHtml(t('props.classes'))}</h4>
       <div class="gstrap-class-chips">
-        ${classes.map(c => `<span class="gstrap-chip">${escHtml(c)}<button data-remove="${escAttr(c)}" title="Remove">×</button></span>`).join('')}
-        <input type="text" class="gstrap-chip-input" data-field="add-class" placeholder="add-class…">
+        ${classes.map(c => `<span class="gstrap-chip">${escHtml(c)}<button data-remove="${escAttr(c)}" title="${escAttr(t('action.remove'))}">×</button></span>`).join('')}
+        <input type="text" class="gstrap-chip-input" data-field="add-class" placeholder="${escAttr(t('props.add-class-placeholder'))}">
       </div>
     </section>
     <section class="gstrap-props-section">
-      <h4>Style</h4>
+      <h4>${escHtml(t('props.style'))}</h4>
       <div data-region="style-manager"></div>
     </section>
   `

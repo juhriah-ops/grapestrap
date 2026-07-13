@@ -12,9 +12,10 @@ import {
   maxWidthPattern, maxHeightPattern, vwPattern, vhPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup, hasGroup, toggleClass } from './class-utils.js'
+import { t } from '../../i18n.js'
 
 export const id = 'sizing'
-export const label = 'Sizing'
+export const labelKey = 'sm.panel.sizing'
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -27,29 +28,29 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Width</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.width'))}</label>
       <div class="gstrap-sm-segs">
         ${SIZING_W.map(w => {
           const cls = `w-${w}`
           return `<button class="gstrap-sm-seg ${curW === cls ? 'is-active' : ''}"
                           data-w="${w}" title="${cls}">${w}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-w-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-w-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Height</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.height'))}</label>
       <div class="gstrap-sm-segs">
         ${SIZING_H.map(h => {
           const cls = `h-${h}`
           return `<button class="gstrap-sm-seg ${curH === cls ? 'is-active' : ''}"
                           data-h="${h}" title="${cls}">${h}</button>`
         }).join('')}
-        <button class="gstrap-sm-seg gstrap-sm-clear" data-h-clear>Clear</button>
+        <button class="gstrap-sm-seg gstrap-sm-clear" data-h-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Max / Viewport</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.max-viewport'))}</label>
       <div class="gstrap-sm-grid">
         <button class="gstrap-sm-pill ${hasMW ? 'is-active' : ''}" data-toggle="mw-100" title="mw-100">mw-100</button>
         <button class="gstrap-sm-pill ${hasMH ? 'is-active' : ''}" data-toggle="mh-100" title="mh-100">mh-100</button>
@@ -87,4 +88,8 @@ export function render(host, ctx) {
       requestRender()
     })
   })
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }

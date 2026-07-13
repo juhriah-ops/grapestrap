@@ -40,15 +40,8 @@ import {
 import { applyGroup, readGroup } from '../panels/style-manager/class-utils.js'
 import { activeBreakpointId } from '../panels/breakpoints/index.js'
 import canvasCss from './drag-resize-canvas.css?raw'
+import { t } from '../i18n.js'
 
-// Wave 4 i18n sweep target — handle tooltips are the only translatable
-// strings here. The drag badge shows literal class names (not translatable).
-const UI_STRINGS = {
-  colHandleTitle: 'Drag to set column width',
-  imgHandleTitle: 'Drag to set image width',
-  marginHandleTitle: 'Drag to set margin',
-  paddingHandleTitle: 'Drag to set padding'
-}
 
 // BS5 sizing utilities have no responsive variants (verified against bundled
 // bootstrap 5.3.8: .w-50 exists, .w-md-50 does not) — image snaps ignore bp.
@@ -195,13 +188,13 @@ function buildHandles(overlay, comp, doc) {
   }
 
   if (isBootstrapColumn(comp)) {
-    make('col', 'gstrap-dragr-grip', UI_STRINGS.colHandleTitle)
+    make('col', 'gstrap-dragr-grip', t('dr.col-handle-title'))
   } else if ((comp.get?.('tagName') || '').toLowerCase() === 'img') {
-    make('img', 'gstrap-dragr-grip', UI_STRINGS.imgHandleTitle)
+    make('img', 'gstrap-dragr-grip', t('dr.img-handle-title'))
   }
   for (const side of EDGE_SIDES) {
-    make(`margin-${side}`, 'gstrap-dragr-strip gstrap-dragr-strip-margin', UI_STRINGS.marginHandleTitle)
-    make(`pad-${side}`, 'gstrap-dragr-strip gstrap-dragr-strip-padding', UI_STRINGS.paddingHandleTitle)
+    make(`margin-${side}`, 'gstrap-dragr-strip gstrap-dragr-strip-margin', t('dr.margin-handle-title'))
+    make(`pad-${side}`, 'gstrap-dragr-strip gstrap-dragr-strip-padding', t('dr.padding-handle-title'))
   }
   return handles
 }

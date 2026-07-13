@@ -17,11 +17,12 @@ import {
   displayClass, visibilityPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup } from './class-utils.js'
+import { t } from '../../i18n.js'
 
 let activeBreakpoint = ''  // '' = xs (default)
 
 export const id = 'display'
-export const label = 'Display'
+export const labelKey = 'sm.panel.display'
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -31,7 +32,7 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Breakpoint</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.breakpoint'))}</label>
       <div class="gstrap-sm-segs" data-prop="bp">
         ${BREAKPOINTS.map(b => `
           <button class="gstrap-sm-seg ${b === bp ? 'is-active' : ''}"
@@ -40,18 +41,18 @@ export function render(host, ctx) {
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Display</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.display'))}</label>
       <div class="gstrap-sm-grid">
         ${DISPLAY_VALUES.map(v => {
           const cls = displayClass(v.value, bp)
           return `<button class="gstrap-sm-pill ${curDisplay === cls ? 'is-active' : ''}"
                           data-display="${v.value}" title="${cls}">${v.label}</button>`
         }).join('')}
-        <button class="gstrap-sm-pill gstrap-sm-clear" data-display-clear>Clear</button>
+        <button class="gstrap-sm-pill gstrap-sm-clear" data-display-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Visibility</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.visibility'))}</label>
       <div class="gstrap-sm-grid">
         ${VISIBILITY_VALUES.map(v =>
           `<button class="gstrap-sm-pill ${curVis === v.value ? 'is-active' : ''}"
@@ -89,6 +90,10 @@ export function render(host, ctx) {
       requestRender()
     })
   })
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }
 
 // Match only the display class for the given breakpoint, leaving other

@@ -23,11 +23,13 @@ import {
 } from './bs-classes.js'
 import { applyGroup, readGroup } from './class-utils.js'
 import { eventBus } from '../../state/event-bus.js'
+import { t } from '../../i18n.js'
+import { codeMarkup } from '../../i18n-html.js'
 
 let activeBp = ''  // '' = base / xs
 
 export const id = 'columns'
-export const label = 'Columns'
+export const labelKey = 'sm.panel.columns'
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -35,8 +37,8 @@ export function render(host, ctx) {
   if (!isRow) {
     host.innerHTML = `
       <div class="gstrap-sm-hint">
-        Select a Bootstrap <code>.row</code> to edit its columns.
-        <button class="gstrap-sm-pill" data-make-row>Make this a row</button>
+        ${codeMarkup(t('sm.columns-hint'))}
+        <button class="gstrap-sm-pill" data-make-row>${escHtml(t('sm.make-row'))}</button>
       </div>
     `
     host.querySelector('[data-make-row]')?.addEventListener('click', () => {
@@ -51,7 +53,7 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Breakpoint</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.breakpoint'))}</label>
       <div class="gstrap-sm-segs" data-bp-strip>
         ${BREAKPOINTS.map(bp => `
           <button class="gstrap-sm-seg ${bp === activeBp ? 'is-active' : ''}" data-bp="${bp}">${bp || 'xs'}</button>
@@ -60,19 +62,19 @@ export function render(host, ctx) {
     </div>
 
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Quick splits</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.quick-splits'))}</label>
       <div class="gstrap-sm-grid">
         ${COL_PRESETS.map(p => `
-          <button class="gstrap-sm-pill" data-preset="${p.sizes.join(',')}" title="${p.sizes.length} columns">${p.label}</button>
+          <button class="gstrap-sm-pill" data-preset="${p.sizes.join(',')}" title="${escHtml(t('sm.columns-preset-title', { count: p.sizes.length }))}">${p.label}</button>
         `).join('')}
       </div>
     </div>
 
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Columns (${cols.length})</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.columns-count', { count: cols.length }))}</label>
       <div class="gstrap-sm-cols-list">
         ${cols.map((col, i) => renderCol(col, i, activeBp)).join('')}
-        <button class="gstrap-sm-pill" data-add-col>+ Add column</button>
+        <button class="gstrap-sm-pill" data-add-col>${escHtml(t('sm.add-column'))}</button>
       </div>
     </div>
   `
@@ -130,12 +132,12 @@ function renderCol(col, idx, bp) {
     <div class="gstrap-sm-cols-row">
       <span class="gstrap-sm-cols-idx">${idx + 1}.</span>
       <select data-col-size data-col-index="${idx}" class="gstrap-sm-pseudo-input">
-        <option value="" ${size === '' ? 'selected' : ''}>fill</option>
+        <option value="" ${size === '' ? 'selected' : ''}>${escHtml(t('sm.col-fill'))}</option>
         ${COL_SIZES.map(s => `
           <option value="${s}" ${s === size ? 'selected' : ''}>${s}</option>
         `).join('')}
       </select>
-      <button class="gstrap-sm-mini-x" data-col-remove="${idx}" title="Remove column">×</button>
+      <button class="gstrap-sm-mini-x" data-col-remove="${idx}" title="${escHtml(t('sm.remove-column'))}">×</button>
     </div>
   `
 }
@@ -170,4 +172,8 @@ function applyPreset(row, sizes, bp) {
   for (let i = 0; i < existing.length; i++) {
     applyGroup(existing[i], colPattern(bp), colClass(sizes[i], bp))
   }
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }

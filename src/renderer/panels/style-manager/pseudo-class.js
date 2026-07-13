@@ -21,26 +21,28 @@ import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { readRule, writeRule, pickSelector, isBsUtility } from './css-rule-utils.js'
 import { openColorPicker } from '../color-picker/index.js'
+import { t } from '../../i18n.js'
+import { codeMarkup } from '../../i18n-html.js'
 
 export const id = 'pseudo'
-export const label = 'Pseudo-class Styles'
+export const labelKey = 'sm.panel.pseudo'
 
 // Properties exposed in the editor. `kind` controls input type:
 //   color → color input + free-text fallback
 //   text  → free-text (e.g. transform, box-shadow)
 //   number → 0–1 step 0.05 (opacity)
 const PROPS = [
-  { key: 'background-color', label: 'Background',  kind: 'color' },
-  { key: 'color',            label: 'Text color',  kind: 'color' },
-  { key: 'border-color',     label: 'Border color',kind: 'color' },
-  { key: 'opacity',          label: 'Opacity',     kind: 'number' },
-  { key: 'cursor',           label: 'Cursor',      kind: 'select',
+  { key: 'background-color', labelKey: 'sm.prop.background',      kind: 'color' },
+  { key: 'color',            labelKey: 'sm.prop.text-color',     kind: 'color' },
+  { key: 'border-color',     labelKey: 'sm.prop.border-color',   kind: 'color' },
+  { key: 'opacity',          labelKey: 'sm.prop.opacity',        kind: 'number' },
+  { key: 'cursor',           labelKey: 'sm.prop.cursor',         kind: 'select',
     options: ['', 'pointer', 'default', 'not-allowed', 'wait', 'text', 'move', 'help'] },
-  { key: 'transform',        label: 'Transform',   kind: 'text',
+  { key: 'transform',        labelKey: 'sm.prop.transform',      kind: 'text',
     placeholder: 'scale(1.05)' },
-  { key: 'box-shadow',       label: 'Box shadow',  kind: 'text',
+  { key: 'box-shadow',       labelKey: 'sm.prop.box-shadow',     kind: 'text',
     placeholder: '0 0 0 .25rem rgba(13,110,253,.25)' },
-  { key: 'text-decoration',  label: 'Text decoration', kind: 'select',
+  { key: 'text-decoration',  labelKey: 'sm.prop.text-decoration', kind: 'select',
     options: ['', 'none', 'underline', 'line-through'] }
 ]
 
@@ -50,8 +52,7 @@ export function render(host, ctx) {
   if (pseudoState === 'normal' || !pseudoState) {
     host.innerHTML = `
       <div class="gstrap-sm-hint">
-        Pick a state above (<code>:hover</code>, <code>:focus</code>…) to edit
-        styles for that state. Rules write to project <code>style.css</code>.
+        ${codeMarkup(t('sm.pseudo-hint'))}
       </div>
     `
     return
@@ -60,8 +61,7 @@ export function render(host, ctx) {
   if (!projectState.current) {
     host.innerHTML = `
       <div class="gstrap-sm-hint">
-        Open or create a project first — pseudo-class styles save to the
-        project's <code>style.css</code>.
+        ${codeMarkup(t('sm.pseudo-needs-project-hint'))}
       </div>
     `
     return
@@ -71,10 +71,8 @@ export function render(host, ctx) {
   if (!selector) {
     host.innerHTML = `
       <div class="gstrap-sm-hint">
-        This element has no custom class or id. Add a class in the Properties
-        panel above (e.g. <code>cta-link</code>) so we can scope
-        <code>:${pseudoState}</code> styles to it.
-        <button class="gstrap-sm-pill" data-revert>Back to Normal</button>
+        ${codeMarkup(t('sm.pseudo-needs-selector-hint', { state: pseudoState }))}
+        <button class="gstrap-sm-pill" data-revert>${codeMarkup(t('sm.back-to-normal'))}</button>
       </div>
     `
     host.querySelector('[data-revert]')?.addEventListener('click', () => {
@@ -87,8 +85,8 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-pseudo-banner">
-      Editing <code>${selector}:${pseudoState}</code>
-      <button class="gstrap-sm-pill gstrap-sm-clear" data-clear-rule>Clear</button>
+      ${codeMarkup(t('sm.pseudo-editing', { selector, state: pseudoState }))}
+      <button class="gstrap-sm-pill gstrap-sm-clear" data-clear-rule>${codeMarkup(t('action.clear'))}</button>
     </div>
     ${PROPS.map(p => renderRow(p, rule[p.key] || '')).join('')}
   `
@@ -135,10 +133,10 @@ function renderRow(prop, value) {
   if (prop.kind === 'color') {
     return `
       <div class="gstrap-sm-row">
-        <label class="gstrap-sm-label">${prop.label}</label>
+        <label class="gstrap-sm-label">${codeMarkup(t(prop.labelKey))}</label>
         <div class="gstrap-sm-pseudo-pair">
           <button type="button" class="gstrap-cp-trigger" data-cp-trigger="${prop.key}"
-                  aria-label="Pick ${prop.label}"></button>
+                  aria-label="${escapeAttr(t('sm.pick-aria', { label: t(prop.labelKey) }))}"></button>
           <input type="text"  data-prop="${prop.key}" data-pair="text"
                  value="${escapeAttr(value)}" placeholder="#0d6efd or var(--bs-primary)" />
         </div>
@@ -148,7 +146,7 @@ function renderRow(prop, value) {
   if (prop.kind === 'number') {
     return `
       <div class="gstrap-sm-row">
-        <label class="gstrap-sm-label">${prop.label}</label>
+        <label class="gstrap-sm-label">${codeMarkup(t(prop.labelKey))}</label>
         <input type="number" min="0" max="1" step="0.05" data-prop="${prop.key}"
                value="${escapeAttr(value)}" placeholder="0.85" class="gstrap-sm-pseudo-input" />
       </div>
@@ -157,7 +155,7 @@ function renderRow(prop, value) {
   if (prop.kind === 'select') {
     return `
       <div class="gstrap-sm-row">
-        <label class="gstrap-sm-label">${prop.label}</label>
+        <label class="gstrap-sm-label">${codeMarkup(t(prop.labelKey))}</label>
         <select data-prop="${prop.key}" class="gstrap-sm-pseudo-input">
           ${prop.options.map(o => `<option value="${o}" ${o === value ? 'selected' : ''}>${o || '—'}</option>`).join('')}
         </select>
@@ -166,7 +164,7 @@ function renderRow(prop, value) {
   }
   return `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">${prop.label}</label>
+      <label class="gstrap-sm-label">${codeMarkup(t(prop.labelKey))}</label>
       <input type="text" data-prop="${prop.key}" value="${escapeAttr(value)}"
              placeholder="${escapeAttr(prop.placeholder || '')}" class="gstrap-sm-pseudo-input" />
     </div>

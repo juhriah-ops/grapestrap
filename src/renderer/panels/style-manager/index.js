@@ -32,6 +32,7 @@
 
 import { eventBus } from '../../state/event-bus.js'
 import { projectState } from '../../state/project-state.js'
+import { t } from '../../i18n.js'
 
 import * as spacing    from './spacing.js'
 import * as display    from './display.js'
@@ -49,8 +50,10 @@ import { pickSelector, isBsUtility } from './css-rule-utils.js'
 const SUBPANELS = [spacing, display, flex, columns, text, background, border, sizing, pseudo, cascade]
 const DEFAULT_OPEN = new Set(['spacing'])
 
+// 'Normal' is prose (labelKey); the ':hover'-style labels are CSS syntax and
+// stay literal — translating pseudo-class names would mislead.
 const PSEUDO_STATES = [
-  { value: 'normal',   label: 'Normal'    },
+  { value: 'normal',   labelKey: 'sm.pseudo-normal' },
   { value: 'hover',    label: ':hover'    },
   { value: 'focus',    label: ':focus'    },
   { value: 'active',   label: ':active'   },
@@ -89,7 +92,7 @@ export function renderStyleManager(target, getComponent) {
 function paint() {
   if (!host) return
   if (!currentComponent) {
-    host.innerHTML = `<div class="gstrap-empty">Select an element to edit its styles.</div>`
+    host.innerHTML = `<div class="gstrap-empty">${escHtml(t('sm.empty'))}</div>`
     return
   }
   host.innerHTML = `
@@ -98,7 +101,7 @@ function paint() {
       <section class="gstrap-sm-section" data-sp="${sp.id}">
         <button class="gstrap-sm-toggle" data-toggle="${sp.id}" aria-expanded="${openSet.has(sp.id)}">
           <span class="gstrap-sm-caret">${openSet.has(sp.id) ? '▾' : '▸'}</span>
-          <span class="gstrap-sm-title">${sp.label}</span>
+          <span class="gstrap-sm-title">${escHtml(t(sp.labelKey))}</span>
         </button>
         <div class="gstrap-sm-body" data-body="${sp.id}" ${openSet.has(sp.id) ? '' : 'hidden'}></div>
       </section>
@@ -129,7 +132,7 @@ function renderPseudoBar() {
     <div class="gstrap-sm-pseudo-bar" data-pseudo-bar>
       ${PSEUDO_STATES.map(s => `
         <button class="gstrap-sm-pseudo-btn ${s.value === pseudoState ? 'is-active' : ''}"
-                data-pseudo-state="${s.value}">${s.label}</button>
+                data-pseudo-state="${s.value}">${s.labelKey ? escHtml(t(s.labelKey)) : s.label}</button>
       `).join('')}
     </div>
   `
@@ -141,7 +144,7 @@ function setPseudoState(next) {
     if (!projectState.current) {
       eventBus.emit('toast', {
         type: 'warning',
-        message: 'Open or create a project first — pseudo-class styles save to style.css.'
+        message: t('sm.toast.pseudo-needs-project')
       })
       return
     }
@@ -149,7 +152,7 @@ function setPseudoState(next) {
     if (!sel) {
       eventBus.emit('toast', {
         type: 'warning',
-        message: 'Add a custom class or id to this element first — pseudo-state styles need a target selector.'
+        message: t('sm.toast.pseudo-needs-selector')
       })
       return
     }
@@ -160,6 +163,10 @@ function setPseudoState(next) {
   // normal — user may want to keep the hint visible.
   if (next !== 'normal') openSet.add('pseudo')
   paint()
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }
 
 function rerenderOpen() {

@@ -44,15 +44,18 @@ import {
   getSnippetTiles, getSnippetContent,
   addProjectSnippetFromSelection, deleteProjectSnippet
 } from '../snippets/index.js'
+import { t } from '../../i18n.js'
 
+// Tab labels reuse the menu.insert.* keys — the native Insert menu mirrors
+// these categories one-to-one (menus.js), so they must translate as one unit.
 const TABS = [
-  { id: 'common',   label: 'Common'   },
-  { id: 'layout',   label: 'Layout'   },
-  { id: 'forms',    label: 'Forms'    },
-  { id: 'text',     label: 'Text'     },
-  { id: 'media',    label: 'Media'    },
-  { id: 'sections', label: 'Sections' },
-  { id: 'snippets', label: 'Snippets' }
+  { id: 'common',   labelKey: 'menu.insert.common'   },
+  { id: 'layout',   labelKey: 'menu.insert.layout'   },
+  { id: 'forms',    labelKey: 'menu.insert.forms'    },
+  { id: 'text',     labelKey: 'menu.insert.text'     },
+  { id: 'media',    labelKey: 'menu.insert.media'    },
+  { id: 'sections', labelKey: 'menu.insert.sections' },
+  { id: 'snippets', labelKey: 'menu.insert.snippets' }
   // Library still pending — opens via the dedicated panel for v0.0.2
 ]
 
@@ -61,7 +64,7 @@ let activeTab = 'common'
 export function renderInsertPanel(host) {
   host.innerHTML = `
     <div class="gstrap-insert-tabs">
-      ${TABS.map(t => `<button class="gstrap-insert-tab ${t.id === activeTab ? 'is-active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}
+      ${TABS.map(tab => `<button class="gstrap-insert-tab ${tab.id === activeTab ? 'is-active' : ''}" data-tab="${tab.id}">${escHtml(t(tab.labelKey))}</button>`).join('')}
     </div>
     <div class="gstrap-insert-content" data-region="insert-content"></div>
   `
@@ -159,7 +162,7 @@ function refreshContent(host) {
 
   const blocks = pluginRegistry.blocks.filter(b => matchesCategory(b, activeTab))
   if (blocks.length === 0) {
-    content.innerHTML = `<div class="gstrap-empty">No blocks in this category yet.</div>`
+    content.innerHTML = `<div class="gstrap-empty">${escHtml(t('insert.no-blocks'))}</div>`
     return
   }
   content.innerHTML = blocks.map(b => `
@@ -174,22 +177,22 @@ function renderSnippetsTab(content) {
   const tiles = getSnippetTiles()
   const captureTile = `
     <div class="gstrap-block-tile gstrap-snippet-capture" data-snippet-capture
-         title="Capture the current selection as a project snippet">
+         title="${escAttr(t('insert.capture-title'))}">
       <div class="gstrap-block-tile-media">＋</div>
-      <div class="gstrap-block-tile-label">From Selection</div>
+      <div class="gstrap-block-tile-label">${escHtml(t('insert.from-selection'))}</div>
     </div>
   `
   if (tiles.length === 0) {
     content.innerHTML = captureTile +
-      `<div class="gstrap-empty">No snippets yet. Select something on the canvas, then click "From Selection."</div>`
+      `<div class="gstrap-empty">${escHtml(t('insert.no-snippets'))}</div>`
     return
   }
-  content.innerHTML = captureTile + tiles.map(t => `
-    <div class="gstrap-block-tile gstrap-snippet-tile" data-block-id="${escAttr(t.id)}"
-         data-snippet-source="${t.source}" draggable="true" title="${escAttr(t.label)}">
-      <div class="gstrap-block-tile-media">${t.media}</div>
-      <div class="gstrap-block-tile-label">${escHtml(t.label)}</div>
-      ${t.deletable ? `<button class="gstrap-snippet-x" data-snippet-delete="${escAttr(t.rawId)}" title="Delete">×</button>` : ''}
+  content.innerHTML = captureTile + tiles.map(tile => `
+    <div class="gstrap-block-tile gstrap-snippet-tile" data-block-id="${escAttr(tile.id)}"
+         data-snippet-source="${tile.source}" draggable="true" title="${escAttr(tile.label)}">
+      <div class="gstrap-block-tile-media">${tile.media}</div>
+      <div class="gstrap-block-tile-label">${escHtml(tile.label)}</div>
+      ${tile.deletable ? `<button class="gstrap-snippet-x" data-snippet-delete="${escAttr(tile.rawId)}" title="${escAttr(t('action.delete'))}">×</button>` : ''}
     </div>
   `).join('')
 }
@@ -244,7 +247,7 @@ function appendAtAnchor(editor, anchor, content) {
 function performInsert(editor, blockId, anchor) {
   const content = blockContent(editor, blockId)
   if (!content) {
-    eventBus.emit('toast', { type: 'warning', message: `Block "${blockId}" has no content.` })
+    eventBus.emit('toast', { type: 'warning', message: t('insert.toast.no-content', { id: blockId }) })
     return null
   }
   const { target, added } = appendAtAnchor(editor, anchor, content)
@@ -258,7 +261,7 @@ function performInsert(editor, blockId, anchor) {
 function insertBlockById(blockId) {
   const editor = getEditor()
   if (!editor) {
-    eventBus.emit('toast', { type: 'warning', message: 'Canvas not ready.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.canvas-not-ready') })
     return
   }
   performInsert(editor, blockId, editor.getSelected?.())

@@ -25,6 +25,7 @@ import { pluginRegistry } from '../../plugin-host/registry.js'
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
+import { t } from '../../i18n.js'
 
 /**
  * Combined snippet list for the Insert tab. Returns:
@@ -70,20 +71,20 @@ export function getSnippetContent(tileId) {
  */
 export async function addProjectSnippetFromSelection() {
   if (!projectState.current) {
-    eventBus.emit('toast', { type: 'warning', message: 'Open or create a project first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.no-project') })
     return null
   }
   const editor = getEditor()
   const sel = editor?.getSelected?.()
   if (!sel) {
-    eventBus.emit('toast', { type: 'warning', message: 'Select an element first.' })
+    eventBus.emit('toast', { type: 'warning', message: t('toast.select-element') })
     return null
   }
   const name = await showTextPrompt({
-    title: 'New snippet',
-    label: 'Snippet name',
+    title: t('snip.prompt.new-title'),
+    label: t('snip.prompt.name-label'),
     initialValue: tagOf(sel) || 'snippet',
-    okLabel: 'Save'
+    okLabel: t('action.save')
   })
   if (!name) return null
   const id = generateId(name)

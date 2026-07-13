@@ -27,15 +27,6 @@ import { createTemplate, deleteTemplate } from '../templates/manage.js'
 import { isFileDirty } from '../../editor/file-tabs.js'
 import { t } from '../../i18n.js'
 
-// UI_STRINGS — Wave 4 t() sweep target (pre-existing strings stay literal
-// until the sweep lands; strings ADDED in Wave 4 go through t() directly).
-const UI_STRINGS = {
-  templatesTitle: 'Templates',
-  newTemplate: 'New template…',
-  newTemplatePrompt: { title: 'New template', label: 'Template name', initialValue: 'master', okLabel: 'Create' },
-  deleteTemplate: 'Delete Template'
-}
-
 // Site Files scan (Wave 4): .php under site/, recursive. assets/ is skipped —
 // it's the bundled framework tree and can't contain user php worth listing.
 const SITE_SCAN_SKIP_DIRS = new Set(['assets'])
@@ -74,7 +65,15 @@ export function renderFileManager(host) {
 
   host.addEventListener('click', async evt => {
     if (!evt.target.closest('[data-fm-new-template]')) return
-    const name = await showTextPrompt(UI_STRINGS.newTemplatePrompt)
+    // initialValue 'master' stays literal: template names are charset-
+    // validated (letters/digits/-/_ only) — a translated default could fail
+    // validation before the user types anything.
+    const name = await showTextPrompt({
+      title: t('fm.prompt.new-template-title'),
+      label: t('fm.prompt.template-name-label'),
+      initialValue: 'master',
+      okLabel: t('action.create')
+    })
     if (name) createTemplate(name)     // validates + toasts + opens the tab
   })
 
@@ -84,7 +83,7 @@ export function renderFileManager(host) {
     evt.preventDefault()
     const name = tplEl.dataset.fmTemplate
     showContextMenu(evt.clientX, evt.clientY, [
-      { label: UI_STRINGS.deleteTemplate, danger: true, action: () => deleteTemplate(name) }
+      { label: t('fm.delete-template'), danger: true, action: () => deleteTemplate(name) }
     ])
   })
 
@@ -153,9 +152,9 @@ function refresh() {
   if (!host) return
   const project = projectState.current
   if (!project) {
-    host.innerHTML = `<div class="gstrap-empty">No project open.<br><br>
-      <button class="gstrap-btn" data-cmd="file:new-project">New Project</button>
-      <button class="gstrap-btn" data-cmd="file:open-project">Open Project</button>
+    host.innerHTML = `<div class="gstrap-empty">${escHtml(t('fm.no-project'))}<br><br>
+      <button class="gstrap-btn" data-cmd="file:new-project">${escHtml(t('fm.new-project'))}</button>
+      <button class="gstrap-btn" data-cmd="file:open-project">${escHtml(t('fm.open-project'))}</button>
     </div>`
     host.addEventListener('click', evt => {
       const btn = evt.target.closest('[data-cmd]')
@@ -199,17 +198,17 @@ function refresh() {
 
   host.innerHTML = `
     <div class="gstrap-fm-section">
-      <div class="gstrap-fm-section-title">Pages</div>
+      <div class="gstrap-fm-section-title">${escHtml(t('fm.pages'))}</div>
       <ul class="gstrap-fm-list">${pages}</ul>
     </div>
     <div class="gstrap-fm-section">
-      <div class="gstrap-fm-section-title">${UI_STRINGS.templatesTitle}
-        <button class="gstrap-fm-section-action" data-fm-new-template title="${escAttr(UI_STRINGS.newTemplate)}">+</button>
+      <div class="gstrap-fm-section-title">${escHtml(t('fm.templates'))}
+        <button class="gstrap-fm-section-action" data-fm-new-template title="${escAttr(t('fm.new-template-title'))}">+</button>
       </div>
       <ul class="gstrap-fm-list">${templates}</ul>
     </div>
     <div class="gstrap-fm-section">
-      <div class="gstrap-fm-section-title">Styles</div>
+      <div class="gstrap-fm-section-title">${escHtml(t('fm.styles'))}</div>
       <ul class="gstrap-fm-list">
         <li class="gstrap-fm-item${projectState.globalCssDirty ? ' is-dirty' : ''}"${gitAttr('site/style.css')}>style.css</li>
       </ul>
@@ -220,7 +219,7 @@ function refresh() {
       <ul class="gstrap-fm-list">${siteFiles}</ul>
     </div>`}
     <div class="gstrap-fm-section">
-      <div class="gstrap-fm-section-title">Assets</div>
+      <div class="gstrap-fm-section-title">${escHtml(t('fm.assets'))}</div>
       <ul class="gstrap-fm-list">
         <li class="gstrap-fm-item">images/</li>
         <li class="gstrap-fm-item">fonts/</li>

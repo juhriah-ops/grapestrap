@@ -20,12 +20,13 @@ import {
   SPACING_SIDES, SPACING_SCALES_PADDING, SPACING_SCALES_MARGIN
 } from './bs-classes.js'
 import { applyGroup, readGroup } from './class-utils.js'
+import { t } from '../../i18n.js'
 
 let activeMarginSide = ''
 let activePaddingSide = ''
 
 export const id = 'spacing'
-export const label = 'Spacing'
+export const labelKey = 'sm.panel.spacing'
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -35,7 +36,7 @@ export function render(host, ctx) {
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Margin</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.margin'))}</label>
       <div class="gstrap-sm-segs" data-prop="m">
         ${SPACING_SIDES.map(s => `
           <button class="gstrap-sm-seg ${s.value === activeMarginSide ? 'is-active' : ''}"
@@ -50,11 +51,11 @@ export function render(host, ctx) {
         return `<button class="gstrap-sm-scale ${isActive ? 'is-active' : ''}"
                         data-scale="${scale}" title="${cls}">${scaleLabel(scale)}</button>`
       }).join('')}
-      <button class="gstrap-sm-scale gstrap-sm-clear" data-clear="m">Clear</button>
+      <button class="gstrap-sm-scale gstrap-sm-clear" data-clear="m">${escHtml(t('action.clear'))}</button>
     </div>
 
     <div class="gstrap-sm-row">
-      <label class="gstrap-sm-label">Padding</label>
+      <label class="gstrap-sm-label">${escHtml(t('sm.label.padding'))}</label>
       <div class="gstrap-sm-segs" data-prop="p">
         ${SPACING_SIDES.map(s => `
           <button class="gstrap-sm-seg ${s.value === activePaddingSide ? 'is-active' : ''}"
@@ -69,7 +70,7 @@ export function render(host, ctx) {
         return `<button class="gstrap-sm-scale ${isActive ? 'is-active' : ''}"
                         data-scale="${scale}" title="${cls}">${scaleLabel(scale)}</button>`
       }).join('')}
-      <button class="gstrap-sm-scale gstrap-sm-clear" data-clear="p">Clear</button>
+      <button class="gstrap-sm-scale gstrap-sm-clear" data-clear="p">${escHtml(t('action.clear'))}</button>
     </div>
   `
 
@@ -107,6 +108,10 @@ export function render(host, ctx) {
       requestRender()
     })
   })
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }
 
 function scaleLabel(scale) {
