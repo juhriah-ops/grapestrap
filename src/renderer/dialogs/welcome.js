@@ -52,7 +52,7 @@ export async function showWelcomeIfFirstRun() {
       const a = evt.target.closest('[data-action]')
       if (!a) return
       if (a.dataset.action === 'docs') {
-        window.grapestrap.shell.openExternal('https://grapestrap.org/docs')
+        window.grapestrap.shell.openExternal('https://github.com/juhriah-ops/grapestrap/tree/main/docs')
       }
       await window.grapestrap.prefs.set('general.welcomeShown', true)
       dlg.remove()

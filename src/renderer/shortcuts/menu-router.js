@@ -158,10 +158,10 @@ async function dispatchCommand(action, args = []) {
       return eventBus.emit(action)
 
     case 'help:about':         return eventBus.emit('dialog:about')
-    case 'help:docs':          return window.grapestrap.shell.openExternal('https://grapestrap.org/docs')
-    case 'help:github':        return window.grapestrap.shell.openExternal('https://github.com/grapestrap/grapestrap')
-    case 'help:report-issue':  return window.grapestrap.shell.openExternal('https://github.com/grapestrap/grapestrap/issues/new/choose')
-    case 'help:plugin-dev':    return window.grapestrap.shell.openExternal('https://grapestrap.org/docs/plugin-development')
+    case 'help:docs':          return window.grapestrap.shell.openExternal('https://github.com/juhriah-ops/grapestrap/tree/main/docs')
+    case 'help:github':        return window.grapestrap.shell.openExternal('https://github.com/juhriah-ops/grapestrap')
+    case 'help:report-issue':  return window.grapestrap.shell.openExternal('https://github.com/juhriah-ops/grapestrap/issues/new/choose')
+    case 'help:plugin-dev':    return window.grapestrap.shell.openExternal('https://github.com/juhriah-ops/grapestrap/blob/main/docs/PLUGIN-DEVELOPMENT.md')
     case 'help:shortcuts':     return eventBus.emit('dialog:shortcuts')
 
     default:

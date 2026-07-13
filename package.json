@@ -4,10 +4,13 @@
   "description": "Visual Bootstrap 5 editor for Linux. Dreamweaver alternative, MIT, no telemetry.",
   "main": "dist/main/main.js",
   "type": "module",
-  "homepage": "https://grapestrap.org",
+  "homepage": "https://github.com/juhriah-ops/grapestrap",
   "repository": {
     "type": "git",
-    "url": "https://github.com/grapestrap/grapestrap"
+    "url": "https://github.com/juhriah-ops/grapestrap"
+  },
+  "bugs": {
+    "url": "https://github.com/juhriah-ops/grapestrap/issues"
   },
   "license": "MIT",
   "author": {
