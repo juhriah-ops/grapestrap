@@ -6,7 +6,7 @@ A desktop visual editor for building static Bootstrap 5 websites, modeled after 
 
 ## Status
 
-Pre-alpha. Active development. v0.0.1 target: 4 weeks from project start. See `GRAPESTRAP_BUILD_PLAN_v4.md` for the full plan.
+Pre-alpha. Active development. v0.0.1 target: 4 weeks from project start. See `GRAPESTRAP_BUILD_PLAN_v5.md` for the active release campaign (`docs/internal/GRAPESTRAP_BUILD_PLAN_v4.md` for feature specs).
 
 ## Philosophy
 
@@ -24,7 +24,7 @@ Electron + GrapesJS + Monaco + Golden Layout + Vite. Vanilla JS, no TypeScript.
 
 ## Documentation
 
-- [Build Plan v4](./GRAPESTRAP_BUILD_PLAN_v4.md) — full project plan, current source of truth
+- [Build Plan v5](./GRAPESTRAP_BUILD_PLAN_v5.md) — v0.1.0 release campaign, current source of truth ([v4](./docs/internal/GRAPESTRAP_BUILD_PLAN_v4.md) stays canonical for feature specs)
 - [LICENSE](./LICENSE) — MIT
 - (Coming with v0.0.1) `docs/INSTALL.md`, `docs/CONTRIBUTING.md`, `docs/ARCHITECTURE.md`, `docs/PLUGIN-DEVELOPMENT.md`
 

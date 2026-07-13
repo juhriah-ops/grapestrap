@@ -2,7 +2,7 @@
 
 This document is for new contributors. It explains how GrapeStrap is structured, why we made the load-bearing design choices, and where to look in the source tree to find each subsystem.
 
-It is intentionally a high-level map. For the full feature list, milestone breakdown, and locked technical decisions, see [`GRAPESTRAP_BUILD_PLAN_v4.md`](../GRAPESTRAP_BUILD_PLAN_v4.md). For installation and runtime paths, see [INSTALL.md](./INSTALL.md). For writing plugins, see [PLUGIN-DEVELOPMENT.md](./PLUGIN-DEVELOPMENT.md).
+It is intentionally a high-level map. For the full feature list, milestone breakdown, and locked technical decisions, see [`GRAPESTRAP_BUILD_PLAN_v4.md`](./internal/GRAPESTRAP_BUILD_PLAN_v4.md). For installation and runtime paths, see [INSTALL.md](./INSTALL.md). For writing plugins, see [PLUGIN-DEVELOPMENT.md](./PLUGIN-DEVELOPMENT.md).
 
 ---
 
@@ -131,7 +131,7 @@ All renderer code is vanilla ES modules. Vite bundles it. There is no JSX, no tr
 
 ## Source tree map
 
-Annotated tree. Compare to the canonical layout in the [build plan](../GRAPESTRAP_BUILD_PLAN_v4.md#project-structure):
+Annotated tree. Compare to the canonical layout in the [build plan](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#project-structure):
 
 ```
 grapestrap/
@@ -371,7 +371,7 @@ my-project/
     └── videos/
 ```
 
-The manifest references pages, templates, library items, and global CSS by relative path. Pages and library item HTML live in their own files **so a one-line edit produces a one-line git diff** instead of a noisy diff inside a 50KB JSON blob. The full manifest schema is in the [build plan](../GRAPESTRAP_BUILD_PLAN_v4.md#project-file-format-gstrap) and validated by `src/shared/file-format.js`.
+The manifest references pages, templates, library items, and global CSS by relative path. Pages and library item HTML live in their own files **so a one-line edit produces a one-line git diff** instead of a noisy diff inside a 50KB JSON blob. The full manifest schema is in the [build plan](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#project-file-format-gstrap) and validated by `src/shared/file-format.js`.
 
 ### Why pages-on-disk
 
@@ -428,7 +428,7 @@ Default Golden Layout arrangement: file manager and DOM tree on the left, canvas
 
 ### Color palette
 
-Dark theme only for v0.x. The full palette is in the [build plan](../GRAPESTRAP_BUILD_PLAN_v4.md#color-palette-dark-theme). Light theme is on the v0.2 list.
+Dark theme only for v0.x. The full palette is in the [build plan](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#color-palette-dark-theme). Light theme is on the v0.2 list.
 
 ### Fonts
 
@@ -595,7 +595,7 @@ For anything substantial, open an issue or a Discussion thread first to align on
 
 ## Further reading
 
-- [GRAPESTRAP_BUILD_PLAN_v4.md](../GRAPESTRAP_BUILD_PLAN_v4.md) — the canonical, authoritative build plan. Every locked decision lives there.
+- [GRAPESTRAP_BUILD_PLAN_v4.md](./internal/GRAPESTRAP_BUILD_PLAN_v4.md) — the canonical, authoritative build plan. Every locked decision lives there.
 - [INSTALL.md](./INSTALL.md) — installation, system requirements, XDG paths, Wayland.
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — how to contribute.
 - [PLUGIN-DEVELOPMENT.md](./PLUGIN-DEVELOPMENT.md) — write a plugin.

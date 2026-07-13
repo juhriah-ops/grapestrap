@@ -76,7 +76,7 @@ Use the feature request template (`.github/ISSUE_TEMPLATE/feature_request.md`). 
 - What you've tried as a workaround
 - Whether the feature could live as a plugin instead of a core change
 
-The build plan ([`GRAPESTRAP_BUILD_PLAN_v4.md`](../GRAPESTRAP_BUILD_PLAN_v4.md)) is the source of truth for what's planned and when. Before requesting, check the [Phase 4 — v0.2 and beyond](../GRAPESTRAP_BUILD_PLAN_v4.md#phase-4--v02-and-beyond) section to see if your idea is already on the roadmap.
+The build plan ([`GRAPESTRAP_BUILD_PLAN_v4.md`](./internal/GRAPESTRAP_BUILD_PLAN_v4.md)) is the source of truth for what's planned and when. Before requesting, check the [Phase 4 — v0.2 and beyond](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#phase-4--v02-and-beyond) section to see if your idea is already on the roadmap.
 
 We close feature requests that are out of scope (anything that would compromise the no-telemetry, no-cloud, Linux-first stance — see [README.md](../README.md#anti-features-we-will-not-have)) with a polite explanation. That's not a personal rejection.
 
@@ -257,7 +257,7 @@ For the v0.x release series, GrapeStrap follows a **BDFL** (Benevolent Dictator 
 
 Architectural decisions are recorded as ADRs (Architecture Decision Records) in `docs/decisions/`. Significant design choices get an ADR before they get code. The ADR is open for public comment in a Discussion thread before being marked accepted.
 
-The locked technical decisions (Electron, Vite, Monaco, Golden Layout, vanilla JS, no telemetry, MIT, plugin-from-day-1, code-authoritative-when-active sync) are documented in the [build plan](../GRAPESTRAP_BUILD_PLAN_v4.md#locked-technical-decisions). Reopening these requires a strong case and a migration plan — the bar is high.
+The locked technical decisions (Electron, Vite, Monaco, Golden Layout, vanilla JS, no telemetry, MIT, plugin-from-day-1, code-authoritative-when-active sync) are documented in the [build plan](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#locked-technical-decisions). Reopening these requires a strong case and a migration plan — the bar is high.
 
 ---
 
@@ -284,6 +284,6 @@ See also:
 - [INSTALL.md](./INSTALL.md) — installation
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — how GrapeStrap is built
 - [PLUGIN-DEVELOPMENT.md](./PLUGIN-DEVELOPMENT.md) — write a plugin
-- [GRAPESTRAP_BUILD_PLAN_v4.md](../GRAPESTRAP_BUILD_PLAN_v4.md) — full build plan
+- [GRAPESTRAP_BUILD_PLAN_v4.md](./internal/GRAPESTRAP_BUILD_PLAN_v4.md) — full build plan
 - [CREDITS.md](../CREDITS.md) — attributions
 - [LICENSE](../LICENSE) — MIT

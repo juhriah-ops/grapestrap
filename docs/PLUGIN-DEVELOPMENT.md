@@ -4,7 +4,7 @@ GrapeStrap is a thin host with a rich plugin API. **Every block, section, panel,
 
 This guide walks you through writing a plugin: the manifest, the API surface, the lifecycle, a complete worked example, distribution, and the trust model. By the end you should be able to publish `@yourname/blocks-bulma` (or whatever) and have it Just Work.
 
-If you haven't read [ARCHITECTURE.md](./ARCHITECTURE.md), skim its [Plugin host](./ARCHITECTURE.md#plugin-host) section first. The full API spec is also in the [build plan](../GRAPESTRAP_BUILD_PLAN_v4.md#plugin-api-specification).
+If you haven't read [ARCHITECTURE.md](./ARCHITECTURE.md), skim its [Plugin host](./ARCHITECTURE.md#plugin-host) section first. The full API spec is also in the [build plan](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#plugin-api-specification).
 
 ---
 
@@ -990,8 +990,8 @@ If your plugin needs to do something this list forbids, open a Discussion. There
 
 ## Further reading
 
-- [GRAPESTRAP_BUILD_PLAN_v4.md — Plugin API Specification](../GRAPESTRAP_BUILD_PLAN_v4.md#plugin-api-specification) — canonical API spec.
-- [GRAPESTRAP_BUILD_PLAN_v4.md — Plugin Architecture](../GRAPESTRAP_BUILD_PLAN_v4.md#plugin-architecture) — high-level design.
+- [GRAPESTRAP_BUILD_PLAN_v4.md — Plugin API Specification](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#plugin-api-specification) — canonical API spec.
+- [GRAPESTRAP_BUILD_PLAN_v4.md — Plugin Architecture](./internal/GRAPESTRAP_BUILD_PLAN_v4.md#plugin-architecture) — high-level design.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — how the plugin host fits into the editor.
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — how to submit a plugin to the curated list.
 - [INSTALL.md](./INSTALL.md) — XDG paths, where user plugins live.

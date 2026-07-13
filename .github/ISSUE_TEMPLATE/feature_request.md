@@ -14,7 +14,7 @@ What does it unblock? Who benefits? If you can compare to how Dreamweaver, BBEdi
 
 ## Has it been considered already?
 
-Check `GRAPESTRAP_BUILD_PLAN_v4.md` and the issue tracker first. If it's already on the v0.x roadmap, link the existing item rather than opening a duplicate.
+Check `GRAPESTRAP_BUILD_PLAN_v5.md` (and `docs/internal/GRAPESTRAP_BUILD_PLAN_v4.md` for feature specs) and the issue tracker first. If it's already on the v0.x roadmap, link the existing item rather than opening a duplicate.
 
 ## Are you willing to help?
 
