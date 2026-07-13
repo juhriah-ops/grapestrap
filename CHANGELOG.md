@@ -6,7 +6,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Working toward `v0.1.0` per `GRAPESTRAP_BUILD_PLAN_v5.md` (waves; v4 stays canonical for feature specs). Deferred from the 2026-07-06 hygiene sweep: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
+The `v0.1.0` release per `GRAPESTRAP_BUILD_PLAN_v5.md` — all feature waves (0–5A) landed 2026-07-12; this section becomes the v0.1.0 notes when the Wave 6 rc ladder tags. Deferred past v1: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
+
+### Added (Wave 5 — Linux packaging, About, 2026-07-12)
+- **rpm packages** build alongside deb/AppImage/tar.gz and are wired into the release pipeline. Packaging config migrated to the **electron-builder 26 schema** (`linux.desktop` flat keys → nested `desktop.entry {}`) — every `--linux` build had been failing validation since the builder-26 bump; the tag-time release workflow would have died on it.
+- **`.gstrap` files register a MIME type** (`application/x-grapestrap` via `/usr/share/mime/packages/grapestrap.xml`); deb/rpm postinst runs `update-mime-database` + `update-desktop-database` so double-click-to-open works after install. Full 8-bit hicolor icon set (16→512).
+- **Help → About is a real modal** — version, repo link, and the no-telemetry pledge (previously a toast).
+- Locked master-template chrome now **dims** in the canvas so editable regions are visually obvious; preview serves `.php` files as `text/plain` source instead of forcing a download.
+
+### Added (Wave 4 — PHP awareness, starter templates, full localization, 2026-07-12)
+- **PHP awareness**: `.php` files open in a Monaco code tab with PHP syntax highlighting and dotted-underline `include`/`require` decorations; a new File Manager **Site Files** section lists them, and edits save back to disk. Highlight-only — no include resolution, no PHP execution in preview.
+- **Starter templates**: the New Project dialog offers **Blank, Landing Page, Portfolio, Blog** — each scaffolds pages, master templates, and in-project vendor assets (Portfolio bundles glightbox locally, same pattern as the frameworks).
+- **Full UI localization**: panels, dialogs, toolbar, status bar, toasts, and the native menus all render through `t()` (catalog 131 → 459 keys). Languages ship as `lang-<code>` plugins — see `docs/translations/README.md`.
+
+### Added (Wave 3 — workspace layouts, preview, git status, 2026-07-12)
+- **Workspace Layouts**: save and switch named panel arrangements (geometry + visibility) of the locked 4-column shell, with **Designer / Coder / Compact** presets and Reset Layout.
+- **Preview in Browser** (toolbar + Ctrl+F12): exports the project to XDG cache and serves it over a **loopback-only** HTTP server with SSE auto-reload on save; detects an installed browser (`GRAPESTRAP_PREVIEW_CMD` overrides). Nothing leaves 127.0.0.1.
+- **Git status indicators**: file-manager rows get modified/untracked dots and the status bar shows branch + ahead/behind for projects that are git repos. Read-only — no commit UI in v0.1.0.
+
+### Added (Wave 1 — crash recovery, i18n core, 2026-07-12)
+- **Crash recovery**: while a project is dirty, a `.gstrap.recovery` snapshot is written next to the manifest every ~30s (design and code-view edits, template tabs included); the next launch offers Restore / Discard. Snapshots clear on save.
+- **i18n runtime core**: UI strings resolve through i18next from language-plugin catalogs (`registerLanguage` API, pref `general.language`, English fallback) — the string sweep itself landed in Wave 4.
 
 ### Added (Wave 2 — Drag-to-resize with class snapping, 2026-07-12)
 - **Drag-to-resize** (BUILD_PLAN v5 Wave 2, the Dreamweaver-parity marquee): drag handles on the selected component snap to Bootstrap classes instead of writing pixel CSS. Columns (direct children of `.row` with a col class) get a side grip that quantizes to `col-{bp}-1..12` against the row's 12-column grid; images get corner grips snapping to `w-25/50/75/100`; everything else ≥32px gets margin (outer) and padding (inner) edge strips snapping to the BS5 spacing scale `0..5` with logical sides (`t/b/s/e`). Ghost outline + live class badge (e.g. `col-md-7`) previews the snap target during the drag; release applies via the Style Manager's `applyGroup()` — one Backbone write, ONE undo entry; Escape/deselect/tab-swap/frame-reload cancels without writing.
@@ -20,6 +40,9 @@ Working toward `v0.1.0` per `GRAPESTRAP_BUILD_PLAN_v5.md` (waves; v4 stays canon
 - **Status bar region indicator** on templated pages: `Region: <id>` / `Locked — template "<name>"` / `Template: <name>` (state in `data-region-state`), plus per-kind tab extension (`.gstrap-tpl`).
 
 ### Fixed
+- **Cross-tab undo restored the previous page's component tree** (Wave 0 — surfaced by the new coverage specs) — the UndoManager is now fenced during `swapToTab` so switching pages can't leak history across tabs.
+- **Saving never cleared the dirty dots** (Wave 0) — save now runs `projectState.markAllClean()`, so file-manager dots and the tab indicator reset correctly.
+- **Reset Layout stacked duplicate event listeners** (Wave 3, latent since the panels were built) — panel factories are now idempotent, so Reset Layout / workspace switches no longer multiply subscriptions (proven by a failing-first listener-count spec).
 - **`file:new-page` accepted duplicate page names** (Wave 0 finding #6) — the New Page dialog now validates collisions across pages/templates/library ids inline, and rejects unsafe charsets (also closes a latent `pages/../x` path traversal into `page.file` from the old raw prompt).
 - **A missing template file no longer fails the whole project open** — template load is fail-open per entry (`html: ''` + `missingFile` flag, warning toast); pages render from their own composed content.
 - **Canvas edits on a non-page tab dirtied a phantom page** — `canvas:content-changed` now routes template tabs to `markTemplateDirty`.
@@ -29,9 +52,10 @@ Working toward `v0.1.0` per `GRAPESTRAP_BUILD_PLAN_v5.md` (waves; v4 stays canon
 - **Undo contract: canvas history is per VIEW-session** — the code→design rebuild (`rebuildCanvasFromCode`) is now fenced out of undo history and clears it, the same treatment the 2026-07-12 tab-swap fix applied. Undo can no longer restore a component tree the authoritative Monaco buffer doesn't describe; the cost is that hopping to Code view and back drops canvas undo history for that tab.
 - Template files default to `templates/<name>.gstrap-tpl` (was `.html`; `templates[]` has been empty in every real project, and manifests recording an explicit `file` keep it verbatim).
 - Crash-recovery snapshots now capture template-tab edits (design AND code view), carry `templates[].regions` / `pages[].regions`, and replay template propagation on restore.
+- **Version is `0.1.0-rc.0`** (untagged until the Wave 6 rc ladder); bundled plugin compat ranges widened to `>=0.0.1 <0.2.0` — the version bump alone would otherwise have deactivated all five plugins (semver caret landmine, defused Wave 0).
 
 ### Tests
-77 → 93 green (~3.8m). New `tests/e2e/templates.spec.js` (10 specs, round-trip/idempotency anchor first — `data-grpstr-region` + locks survive serialize → code→design rebuild → save → reopen, with byte-equal second serialize) and `tests/e2e/drag-resize.spec.js` (6 real-mouse specs: col snap at base + bp-scoped, one-undo/one-redo, image width, margin edge, ghost/badge visibility). `multi-page.spec.js` new-page selectors updated to the new dialog.
+55 → **127 green** across the campaign (23 files). Wave 0 split the 3,853-line `smoke.spec.js` into 9 domain files + shared `tests/e2e/helpers.js`, turned the full e2e suite ON in CI, and added coverage-hole specs (`multi-page`, `file-ops`, `undo-redo`, `plugin-robustness`). Feature specs per wave: `recovery`, `i18n` (Wave 1, extended with Wave 4 sweep probes); `templates` (10 specs, round-trip/idempotency anchor first — `data-grpstr-region` + locks survive serialize → code→design rebuild → save → reopen, byte-equal second serialize) and `drag-resize` (6 real-mouse specs: col snap at base + bp-scoped, one-undo/one-redo, image width, margin edge, ghost/badge visibility) (Wave 2); `workspaces` (incl. the listener-leak regression), `preview` (SSE reload with a stubbed browser), `git-status` (Wave 3); `php`, `starter-templates` (Wave 4); `about` (Wave 5). Suite hygiene: per-launch XDG scratch is now cleaned up (`keepXdg` opt-out) — a full run had been leaking ~2GB into tmpfs.
 
 ## [v0.0.2-alpha.13] — 2026-07-06 (patch — panel sync + splitter fixes, Electron 43, hygiene)
 

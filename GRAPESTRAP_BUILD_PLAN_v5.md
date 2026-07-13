@@ -9,6 +9,31 @@
 
 ---
 
+## Corrections & landed-state (2026-07-13, program-docs pass — plan text below left as written; source wins)
+
+**Waves 0–5A are LANDED**, all local-only commits, suite 127/127 green at `e87fb5e`:
+
+| Wave | Commit range | Suite after |
+|---|---|---|
+| 0 — Rails | `dcc18a8`…`1fe0513` (split `aaa6472`, CI e2e `de5f6cf`, landmine+rc.0 `f4c1cc0`, coverage specs `f70f9ef`) | 68 |
+| 1 — Safety net | `701203e` (crash recovery), `db846b8` (i18n core), `8220bf5` (docs) | 77 |
+| 2 — Marquee | `a017f2a` (Master Templates), `da11442` (drag-to-resize) | 93 |
+| 3 — Mid-size | `06a9634` (panel idempotency), `574e246` (workspaces), `02fcc60` (preview), `6aeb4b9` (git status) | 115 |
+| 4 — Content + sweep | `756d97a` (PHP), `d13677d` (starters), `f1f1442`/`667874b`/`ca9dc5e`/`12ab479` (i18n sweep), `75ecb49` (e2e tmp cleanup) | 126 |
+| 5A — Packaging | `e055654` (rpm + pipeline), `853c775` (icons + MIME + INSTALL), `e87fb5e` (About + php MIME + chrome-dim) | 127 |
+
+Corrections to plan lines, verified against source (audit trails in `sandbox-artifacts/grapestrap/w*-*/`):
+
+1. **Wave 3 workspaces row:** GL 2.6 has no `toConfig()`/`loadConfig()` — the shipped API is `saveLayout()` → `LayoutConfig.fromResolved()` on save and `loadLayout()` on apply, in `src/renderer/layout/golden-layout-config.js`.
+2. **Wave 3 preview row:** the "~60-line `node:http` static server" landed at **363 lines** (`src/main/preview-server.js` — SSE client set, HEAD, heartbeat, teardown). And there is **no second chokidar**: refresh reuses the existing project watcher + `project:saved`, debounced renderer-side.
+3. **Wave 3 git-status row:** `bindProjectWatcher` is at **`ipc-handlers.js:369`** (the `:325` ref predates Waves 1-2 insertions). Also note the row's trigger set ("chokidar events + saves") structurally **cannot see pure `.git/` mutations** — chokidar ignores dotfiles, so a terminal-side `git init`/`commit`/branch-switch fires no watcher event; designed around (see `w3-git-status/PLAN.md` §1, §3).
+4. **Wave 4 PHP row:** the Monarch contribution import landed at `monaco-init.js:37` (not `:29-32`; monaco ships no `vs/language/php` service — tokenizer only, as scoped).
+5. **Test plan summary:** "Est. 55 → ~75 specs" — actual is **127** (23 files; 9 domain + 14 feature). Wave 6's pre-tag gate should read 127, not ~75.
+6. **Packaging (found by w5-packaging, matters at Wave 6):** electron-builder 26 changed the desktop-entry schema — `linux.desktop` flat keys must be nested `desktop.entry {}`. **Every `--linux` build at this plan's baseline failed validation** until `e055654`; release.yml would have died at tag time. Also: `desktop.entry` Name/Comment/Categories/MimeType are always clobbered by computed values (removed as dead config), and `linux.mimeTypes` doubled the `fileAssociations` MimeType (removed).
+7. **Wave 5 hygiene row status:** internal docs moved to `docs/internal/` and the CHANGELOG v0.1.0 section written (this pass); README rewrite, SECURITY.md, PR template, INSTALL.md polish remain with user-docs.
+
+---
+
 ## How this document relates to v4
 
 v5 **supersedes v4's roadmap, milestones, and packaging plan** (v4 §§8-11 and the Development Milestones table). v4 **remains canonical** for everything that hasn't changed:
