@@ -320,6 +320,143 @@ test('Import folder: preserves head <link>/<script> + arbitrary subdirs (css/, j
   await fsp.rm(targetDir, { recursive: true, force: true })
 })
 
+test('Canvas CSS urls: stylesheet-relative background-image resolves + loads; legacy shape still works', async () => {
+  // rc.2 fix: authored globalCSS urls are FILE-RELATIVE to the stylesheet
+  // (assets/css/style.css → `../images/…`), but the canvas injects the CSS
+  // inline where urls resolve against the document base (site/). Verifies:
+  //   1. The injected <style data-grapestrap-globalcss> carries the
+  //      document-relative rewrite (`assets/images/…`), not the authored
+  //      `../images/…` — while projectState keeps the authored text.
+  //   2. The computed background URL resolves inside site/assets/images/
+  //      and the file ACTUALLY loads (Image() probe in the iframe).
+  //   3. A legacy site-root-relative rule (`assets/images/…`) passes
+  //      through unchanged and loads too (compat heuristic).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-cssurl-'))
+  const projectPath = join(projectDir, 'cssurl.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  const png1x1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  )
+  await fsp.writeFile(join(projectDir, 'site', 'assets', 'images', 'bg.png'), png1x1)
+
+  const authoredCss =
+    'main { background-image: url("../images/bg.png"); }\n' +
+    'body { background-image: url("assets/images/bg.png"); }\n'
+  await appWindow.evaluate(css => {
+    window.__gstrap.projectState.current.globalCSS = css
+    window.__gstrap.eventBus.emit('project:css-changed')
+  }, authoredCss)
+  await appWindow.waitForTimeout(100)
+
+  const result = await appWindow.evaluate(async () => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const doc = ed.Canvas.getFrameEl().contentDocument
+    const win = doc.defaultView
+    const injected = doc.querySelector('style[data-grapestrap-globalcss]').textContent
+    const computedUrlOf = el => {
+      const bg = win.getComputedStyle(el).backgroundImage
+      return (bg.match(/url\("?([^")]+)"?\)/) || [])[1] || ''
+    }
+    const probeLoad = src => new Promise(resolve => {
+      const img = new win.Image()
+      img.onload = () => resolve(true)
+      img.onerror = () => resolve(false)
+      img.src = src
+    })
+    const mainUrl = computedUrlOf(doc.querySelector('main'))
+    const bodyUrl = computedUrlOf(doc.body)
+    return {
+      injected,
+      authoredInState: window.__gstrap.projectState.current.globalCSS,
+      mainUrl,
+      bodyUrl,
+      mainLoads: await probeLoad(mainUrl),
+      bodyLoads: await probeLoad(bodyUrl)
+    }
+  })
+
+  // 1. In-memory rewrite at the inject point only — authored text untouched.
+  expect(result.injected).toContain('url("assets/images/bg.png")')
+  expect(result.injected).not.toContain('../images/')
+  expect(result.authoredInState).toBe(authoredCss)
+
+  // 2. File-relative rule resolves into site/assets/images/ and loads.
+  expect(result.mainUrl).toContain('/site/assets/images/bg.png')
+  expect(result.mainLoads).toBe(true)
+
+  // 3. Legacy rule resolves to the same file and loads.
+  expect(result.bodyUrl).toContain('/site/assets/images/bg.png')
+  expect(result.bodyLoads).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Export: authored CSS ships byte-identical, urls resolve, whole site/ tree copied', async () => {
+  // rc.2 fix: export does ZERO url rewriting — the stylesheet ships exactly
+  // as authored and its file-relative urls resolve against assets/css/.
+  // Export also copies the whole site/ tree (minus pages/, templates/,
+  // library/, *.tmp) instead of only site/assets/, so imported projects
+  // with files elsewhere under site/ keep them. Verifies:
+  //   1. Exported assets/css/style.css is byte-identical to the in-memory
+  //      globalCSS (in-memory buffer wins over the on-disk copy).
+  //   2. The referenced image exists at the path `../images/bg.png`
+  //      resolves to when anchored at assets/css/ (assets/images/bg.png).
+  //   3. A file OUTSIDE site/assets/ (site/images/extra.png) is copied.
+  //   4. pages/, templates/, library/, and *.tmp never land in the export.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-expurl-'))
+  const projectPath = join(projectDir, 'expurl.gstrap')
+  const outputDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-expurl-out-'))
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+
+  const png1x1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  )
+  await fsp.writeFile(join(projectDir, 'site', 'assets', 'images', 'bg.png'), png1x1)
+  await fsp.mkdir(join(projectDir, 'site', 'images'), { recursive: true })
+  await fsp.writeFile(join(projectDir, 'site', 'images', 'extra.png'), png1x1)
+  await fsp.writeFile(join(projectDir, 'site', 'scratch.tmp'), 'never ships', 'utf8')
+
+  // Authored CSS with a stylesheet-relative url — stays dirty (unsaved) so
+  // the export must take the in-memory buffer, not the on-disk style.css.
+  const authoredCss = '/* authored */\nmain { background-image: url("../images/bg.png"); }\n'
+  await appWindow.evaluate(async ({ css, out }) => {
+    window.__gstrap.projectState.current.globalCSS = css
+    const project = window.__gstrap.projectState.current
+    return await window.grapestrap.project.export(project, out)
+  }, { css: authoredCss, out: outputDir })
+
+  // 1. Byte-identical — no rewriting, in-memory wins.
+  const exportedCss = await fsp.readFile(join(outputDir, 'assets', 'css', 'style.css'), 'utf8')
+  expect(exportedCss).toBe(authoredCss)
+
+  // 2. `../images/bg.png` from assets/css/ resolves to assets/images/bg.png.
+  const bgExists = await fsp.access(join(outputDir, 'assets', 'images', 'bg.png')).then(() => true, () => false)
+  expect(bgExists).toBe(true)
+
+  // 3. Non-assets site/ content survives the export.
+  const extraExists = await fsp.access(join(outputDir, 'images', 'extra.png')).then(() => true, () => false)
+  expect(extraExists).toBe(true)
+
+  // 4. Editor-internal dirs + scratch never ship.
+  const entries = await fsp.readdir(outputDir, { recursive: true })
+  expect(entries.some(e => e === 'pages' || e.startsWith('pages/'))).toBe(false)
+  expect(entries.some(e => e === 'templates' || e.startsWith('templates/'))).toBe(false)
+  expect(entries.some(e => e === 'library' || e.startsWith('library/'))).toBe(false)
+  expect(entries.some(e => e.endsWith('.tmp'))).toBe(false)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+  await fsp.rm(outputDir,  { recursive: true, force: true })
+})
+
 test('Canvas resync: switching projectDir re-injects <base> and re-fetches relative images', async () => {
   // Reported by user 2026-05-04: "images disappear when you expand the
   // canvas window to fullscreen." GL maximize re-parents the canvas DOM

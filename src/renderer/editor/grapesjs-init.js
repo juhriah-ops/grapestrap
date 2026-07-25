@@ -20,6 +20,7 @@ import { eventBus } from '../state/event-bus.js'
 import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
 import { initDragResize } from './drag-resize.js'
+import { rewriteCssUrls, stylesheetDirOf } from '../../shared/css-urls.js'
 import { log } from '../log.js'
 
 // Framework assets (Bootstrap, Bootstrap Icons, Font Awesome) are NOT loaded
@@ -242,6 +243,13 @@ export function initGrapesJS(container) {
 // canvas iframe. Tag is identified by `data-grapestrap-globalcss`; the
 // Cascade view sub-panel keys off the same attribute to label rules as
 // "project" origin.
+//
+// The authored CSS's relative url()s are FILE-RELATIVE to the stylesheet at
+// assets/css/style.css (e.g. `../images/foo.png`) — correct for export, where
+// pages link it via <link href="assets/css/style.css">. Inlined here they'd
+// resolve against the canvas document base (`site/`) instead, so rewrite them
+// to document-relative IN MEMORY at inject time. The user's CSS (projectState,
+// Custom CSS panel, disk, export) is never touched.
 function syncGlobalCssIntoCanvas(docArg) {
   const doc = docArg || editor?.Canvas?.getFrameEl()?.contentDocument
   if (!doc) return
@@ -252,7 +260,8 @@ function syncGlobalCssIntoCanvas(docArg) {
     tag.id = 'gstrap-global-css'
     doc.head.appendChild(tag)
   }
-  tag.textContent = projectState.current?.globalCSS || ''
+  const stylesheetBase = stylesheetDirOf(projectState.current?.manifest?.globalCSS || 'assets/css/style.css')
+  tag.textContent = rewriteCssUrls(projectState.current?.globalCSS || '', stylesheetBase)
 }
 
 // Inject (or update) a `<base href="file://<projectDir>/site/">` so relative

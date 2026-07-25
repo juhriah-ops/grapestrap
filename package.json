@@ -27,6 +27,7 @@
     "build:tarball": "npm run build && electron-builder --linux tar.gz",
     "build:linux": "npm run build && electron-builder --linux deb rpm AppImage tar.gz",
     "test:e2e": "playwright test",
+    "test:unit": "node --test tests/unit/",
     "lint": "eslint src/ plugins/ tests/"
   },
   "dependencies": {

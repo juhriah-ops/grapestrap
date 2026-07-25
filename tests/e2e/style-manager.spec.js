@@ -776,7 +776,9 @@ test('Style Manager: Background image picker writes a CSS rule scoped by selecto
   // pattern as the pseudo-class editor, no inline styles. Verifies:
   //   1. With a custom class on the selection + an image in assets,
   //      clicking a tile in the picker writes a `.cls { background-image:
-  //      url(assets/images/foo.png); ... }` rule.
+  //      url(../images/foo.png); ... }` rule — FILE-RELATIVE to the
+  //      stylesheet at assets/css/style.css (rc.2 url-resolution fix; the
+  //      old site-root-relative shape broke on export).
   //   2. Clear removes the rule.
   //   3. No-class element shows the "needs a class" hint instead of the
   //      picker.
@@ -815,20 +817,21 @@ test('Style Manager: Background image picker writes a CSS rule scoped by selecto
     null, { timeout: 3_000 }
   )
 
-  // Show the picker, then click the hero.png tile.
+  // Show the picker, then click the hero.png tile (tile paths are
+  // stylesheet-relative since the rc.2 url fix).
   await appWindow.evaluate(() => document.querySelector('[data-bg-toggle-picker]').click())
   await appWindow.waitForFunction(
-    () => !!document.querySelector('[data-bg-pick="assets/images/hero.png"]'),
+    () => !!document.querySelector('[data-bg-pick="../images/hero.png"]'),
     null, { timeout: 3_000 }
   )
   await appWindow.evaluate(() => {
-    document.querySelector('[data-bg-pick="assets/images/hero.png"]').click()
+    document.querySelector('[data-bg-pick="../images/hero.png"]').click()
   })
 
   // Rule lands in globalCSS.
   let css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
   expect(css).toMatch(/\.hero-banner\s*\{/)
-  expect(css).toMatch(/background-image:\s*url\("assets\/images\/hero\.png"\)/)
+  expect(css).toMatch(/background-image:\s*url\("\.\.\/images\/hero\.png"\)/)
   expect(css).toMatch(/background-size:\s*cover/)
   expect(css).not.toMatch(/\.hero-banner:/)  // bare-state, no pseudo
 

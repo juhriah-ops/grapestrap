@@ -164,6 +164,11 @@ async function boot() {
         message: t('tpl.toast.missing-file', { names: missing.join(', ') })
       })
     }
+    // loadProject migrated legacy site-root-relative url()s in globalCSS to
+    // the file-relative convention (in memory only — load never writes disk).
+    // Mark the CSS dirty so the file-manager dot shows and the user's next
+    // save persists the migrated text.
+    if (project?.globalCssMigrated) projectState.markCssDirty()
   })
 
   // 6. First-run welcome (blocks on user dismissal — must be after every

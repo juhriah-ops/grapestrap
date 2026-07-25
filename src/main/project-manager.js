@@ -16,9 +16,10 @@
  */
 
 import { promises as fsp } from 'node:fs'
-import { dirname, join, basename, extname, resolve } from 'node:path'
+import { dirname, join, basename, extname, resolve, relative, sep } from 'node:path'
 import { app } from 'electron'
 import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument } from '../shared/page-html.js'
+import { migrateLegacyAssetUrls } from '../shared/css-urls.js'
 import { copyFilesIdempotent } from './copy-tasks.js'
 import { getStarter, applyStarter } from './starters/index.js'
 
@@ -29,10 +30,10 @@ const FORMAT_TAG = 'grapestrap-project'
 //   <projectDir>/<name>.gstrap     ← manifest, sits at the root of the project folder
 //   <projectDir>/site/             ← deployable web content
 //     ├─ pages/<name>.html
-//     ├─ assets/{images,fonts,videos}/
+//     ├─ assets/{images,fonts,videos}/     ← user media
+//     ├─ assets/{css,js,webfonts}/         ← frameworks + css/style.css (globalCSS)
 //     ├─ library/<id>.html
-//     ├─ templates/<name>.html
-//     └─ style.css
+//     └─ templates/<name>.gstrap-tpl
 //
 // Manifest paths (page.file, libraryItem.file, manifest.globalCSS) are
 // stored relative-to-`site/`. We resolve them through siteDir() so the
@@ -574,6 +575,24 @@ export async function loadProject(manifestPath) {
     }
   }
 
+  // One-shot url() migration (rc.2 → rc.3, same precedent as the legacy
+  // style.css path above): the app used to write site-root-relative
+  // `url("assets/images/…")`, which the canvas resolved fine but export
+  // broke (the stylesheet ships at assets/css/style.css). Rewrite exactly
+  // those app-written shapes to the file-relative convention
+  // (`url("../images/…")`) IN MEMORY; the renderer marks the CSS dirty off
+  // the flag so the user's next save persists it. Nothing else in the
+  // user's CSS is touched, and disk is not written here — load stays
+  // read-only.
+  let globalCssMigrated = false
+  if (globalCSS) {
+    const migration = migrateLegacyAssetUrls(globalCSS)
+    if (migration.changed) {
+      globalCSS = migration.css
+      globalCssMigrated = true
+    }
+  }
+
   return {
     manifestPath,
     projectDir,
@@ -582,7 +601,8 @@ export async function loadProject(manifestPath) {
     templates,
     libraryItems,
     snippets: manifest.snippets || [],
-    globalCSS
+    globalCSS,
+    globalCssMigrated
   }
 }
 
@@ -680,9 +700,15 @@ export async function clearRecovery(manifestPath) {
   try { await fsp.rm(manifestPath + '.recovery', { force: true }) } catch {}
 }
 
+// site/ subdirs that never ship in an export: pages/ is re-rendered flat at
+// the output root from the in-memory bodies, templates/ + library/ are
+// editor-internal fragments already composed into the pages.
+const EXPORT_EXCLUDED_SITE_DIRS = new Set(['pages', 'templates', 'library'])
+
 /**
- * Export the project to a flat folder. v0.0.1 minimal: one HTML per page, the
- * project style.css, bundled Bootstrap, and used assets. Master templates and
+ * Export the project to a flat folder: one HTML per page at the root, plus
+ * the site/ tree verbatim (frameworks, user assets, arbitrary imported
+ * subdirs) minus the editor-internal dirs above. Master templates and
  * library items resolve at this stage (v0.0.2+ — for v0.0.1 we assume no templates).
  */
 export async function exportProject(project, outputDir) {
@@ -693,29 +719,40 @@ export async function exportProject(project, outputDir) {
 
   // The framework bundle (Bootstrap + Bootstrap Icons + Font Awesome) lives
   // inside the project's own site/assets/ — copied in at project creation /
-  // import / load. The fsp.cp(assetsSrc → outputDir/assets) below carries
-  // them across to the export verbatim, so no separate framework-bundle step
-  // here. The pre-alpha.6 path that copied node_modules/bootstrap/dist/* into
+  // import / load. The fsp.cp(siteSrc → outputDir) below carries it across
+  // to the export verbatim, so no separate framework-bundle step here. The
+  // pre-alpha.6 path that copied node_modules/bootstrap/dist/* into
   // outputDir/css and outputDir/js is gone; everything funnels through the
-  // project-relative assets/ tree so canvas preview === server deploy.
+  // project-relative site/ tree so canvas preview === server deploy.
 
-  // Copy custom CSS — keeps living next to the framework so the export's
-  // one assets/ tree is self-sufficient.
+  // Copy the WHOLE site/ tree — not just site/assets/ — so imported projects
+  // keeping files elsewhere under site/ (css/, js/, images/, …) don't lose
+  // them on export. Editor-internal content is excluded: pages/ (re-rendered
+  // flat below from the in-memory bodies), templates/ + library/ (fragments,
+  // resolved into pages at compose time), and *.tmp (writeAtomic scratch).
+  // Missing site/ dir is fine — nothing to copy. Other failures (perms, EIO,
+  // disk full) propagate so the user gets a clear error toast instead of
+  // shipping a broken site silently.
+  const siteSrc = siteDir(project.projectDir)
+  if (await fsp.access(siteSrc).then(() => true, () => false)) {
+    await fsp.cp(siteSrc, outputDir, {
+      recursive: true,
+      filter: source => {
+        const rel = relative(siteSrc, source)
+        if (rel === '') return true
+        if (EXPORT_EXCLUDED_SITE_DIRS.has(rel.split(sep)[0])) return false
+        return !rel.endsWith('.tmp')
+      }
+    })
+  }
+
+  // Write custom CSS AFTER the site copy so the in-memory buffer (possibly
+  // dirty, possibly url-migrated at load) wins over the on-disk copy. Ships
+  // byte-identical to what the user authored — url()s are file-relative to
+  // this stylesheet (`../images/…`), so no rewriting is needed here, ever.
   if (project.globalCSS) {
     await fsp.mkdir(join(outputDir, 'assets', 'css'), { recursive: true })
     await fsp.writeFile(join(outputDir, 'assets', 'css', 'style.css'), project.globalCSS, 'utf8')
-  }
-
-  // Copy project assets folder (sourced from site/assets/). Missing source
-  // dir is fine — a project with no assets at all just has nothing to copy.
-  // Other failures (perms, EIO, disk full) propagate so the user gets a
-  // clear error toast instead of shipping a broken site silently. Echoes
-  // the prior bootstrap-export bug — same pattern.
-  const assetsSrc = join(siteDir(project.projectDir), 'assets')
-  try { await fsp.access(assetsSrc) }
-  catch { /* no assets dir → nothing to copy, that's OK */ }
-  if (await fsp.access(assetsSrc).then(() => true, () => false)) {
-    await fsp.cp(assetsSrc, join(outputDir, 'assets'), { recursive: true })
   }
 
   // Render each page as a full HTML document. Same composer the save loop

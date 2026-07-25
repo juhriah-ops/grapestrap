@@ -210,7 +210,7 @@ function refresh() {
     <div class="gstrap-fm-section">
       <div class="gstrap-fm-section-title">${escHtml(t('fm.styles'))}</div>
       <ul class="gstrap-fm-list">
-        <li class="gstrap-fm-item${projectState.globalCssDirty ? ' is-dirty' : ''}"${gitAttr('site/style.css')}>style.css</li>
+        <li class="gstrap-fm-item${projectState.globalCssDirty ? ' is-dirty' : ''}"${gitAttr(`site/${project.manifest?.globalCSS || 'assets/css/style.css'}`)}>style.css</li>
       </ul>
     </div>
     ${sitePhpFiles.length === 0 ? '' : `

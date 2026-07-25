@@ -181,6 +181,45 @@ test('save broadcasts SSE reload after re-export; the change is served', async (
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+// ─── Spec 2b — file-relative stylesheet urls serve correctly ─────────────────
+test('preview: style.css ships verbatim and its file-relative bg image serves 200', async () => {
+  // rc.2 fix — preview = exportProject + static serve, so it inherits the
+  // export contract: authored CSS byte-identical (urls file-relative to
+  // assets/css/style.css), and the image a browser would resolve from
+  // `../images/bg.png` (URL-normalized to /assets/images/bg.png) serves 200.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-cssurl-'))
+  const { app, appWindow } = await launch({ GRAPESTRAP_PREVIEW_CMD: STUB_BROWSER })
+  await openSeedProject(appWindow, join(projectDir, 'pv.gstrap'))
+
+  const png1x1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=',
+    'base64'
+  )
+  await fsp.writeFile(join(projectDir, 'site', 'assets', 'images', 'bg.png'), png1x1)
+
+  const authoredCss = 'main { background-image: url("../images/bg.png"); }\n'
+  await appWindow.evaluate(css => {
+    window.__gstrap.projectState.current.globalCSS = css
+  }, authoredCss)
+
+  const status = await startPreview(appWindow)
+
+  // Stylesheet serves the authored bytes — no export-side rewriting.
+  const css = await request(`${status.url}/assets/css/style.css`)
+  expect(css.status).toBe(200)
+  expect(css.body).toBe(authoredCss)
+
+  // The URL a browser resolves from the stylesheet: assets/css/ + ../images/
+  // → /assets/images/bg.png (request() uses the URL form, which normalizes
+  // dot-segments client-side exactly like a browser does).
+  const img = await request(`${status.url}/assets/css/../images/bg.png`)
+  expect(img.status).toBe(200)
+  expect(img.headers['content-type']).toBe('image/png')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
 // ─── Spec 3 — traversal 403, missing 404, method 405 ─────────────────────────
 test('traversal (raw + encoded) → 403, missing file → 404, POST → 405', async () => {
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-guard-'))

@@ -7,6 +7,10 @@
  * component's first non-BS class (or id) — same pattern the pseudo-class
  * editor uses, so behavior stays predictable: no inline styles, edits are
  * portable, round-trip via globalCSS reads.
+ *
+ * url() values are written FILE-RELATIVE to the stylesheet
+ * (`../images/foo.png` from assets/css/style.css) — the canonical convention
+ * shared with export and the canvas rewrite (src/shared/css-urls.js).
  */
 
 import {
@@ -17,6 +21,7 @@ import { applyGroup, readGroup, toggleClass } from './class-utils.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { pickSelector, isBsUtility } from './css-rule-utils.js'
+import { toDocumentRelativeUrl, stylesheetDirOf } from '../../../shared/css-urls.js'
 import { t } from '../../i18n.js'
 
 export const id = 'background'
@@ -239,14 +244,29 @@ function listProjectImages() {
   // Asset Manager refreshes via 'assets:changed'. If unavailable, fall
   // back to walking projectState.current.snippets etc — but for v0.0.2
   // we just kick a refresh and read what's there last.
+  //
+  // Paths are FILE-RELATIVE to the project stylesheet (assets/css/style.css)
+  // — the canonical url() convention — so the written rule resolves both in
+  // export (<link href="assets/css/style.css">) and in the canvas (rewritten
+  // to document-relative at inject time by grapesjs-init.js).
   const cache = window.__gstrap_assets || { images: [] }
-  return (cache.images || []).map(name => `assets/images/${name}`)
+  return (cache.images || []).map(name => `../images/${name}`)
+}
+
+// The stylesheet's directory relative to the site root — the base every
+// stylesheet-relative url() resolves against.
+function stylesheetBase() {
+  return stylesheetDirOf(projectState.current?.manifest?.globalCSS || 'assets/css/style.css')
 }
 
 function imagePreviewMarkup(relPath) {
   const projectDir = projectState.current?.projectDir
   if (!projectDir) return ''
-  const url = `file://${projectDir}/site/${relPath}`
+  // relPath is stylesheet-relative (`../images/foo.png`) — or the legacy
+  // site-root-relative shape when read back from an unmigrated rule. Resolve
+  // to site-root-relative before anchoring at the project's site/ dir.
+  const siteRelative = toDocumentRelativeUrl(relPath, stylesheetBase())
+  const url = `file://${projectDir}/site/${siteRelative}`
   return `<img src="${escAttr(url)}" alt="" loading="lazy">`
 }
 
