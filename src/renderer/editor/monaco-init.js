@@ -35,6 +35,13 @@ import 'monaco-editor/esm/vs/language/css/monaco.contribution.js'
 // Registers extensions .php/.php4/.php5/.phtml/.ctp, which is what lets
 // createModel(value, undefined, uri) infer 'php' for file tabs (file-tabs.js).
 import 'monaco-editor/esm/vs/basic-languages/php/php.contribution.js'
+// JavaScript (Graphite-starter wave) is the same tokenizer-only shape as PHP
+// above: registers the .js extension for createModel's language inference,
+// no vs/language/typescript worker pulled in, so the default editorWorker
+// branch below still covers it. Deliberately NOT the TS language service —
+// file tabs need syntax highlighting for the starter's assets/js/main.js,
+// not full IntelliSense.
+import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js'
 
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { log } from '../log.js'

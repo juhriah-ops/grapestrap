@@ -13,6 +13,13 @@
  * Compose: body + head metadata → full HTML for disk + Code-view display.
  * Extract: full HTML → { body, head } for canvas + manifest.
  *
+ * A project may VENDOR ITS OWN framework instead of GrapeStrap's bundled one
+ * (the Graphite starter ships its own Bootstrap + Font Awesome + webfonts).
+ * Such a project carries `manifest.framework = { css: [...], js: [...] }`, and
+ * that list is emitted in place of the bundled set — see resolveFrameworkAssets.
+ * Every emitted tag stays marked `data-grpstr-fw` either way, so extraction is
+ * identical for both kinds of project.
+ *
  * This module is plain JS — no Node-only or browser-only APIs at module
  * scope — so it imports cleanly from main/, renderer/, and tests.
  */
@@ -34,6 +41,65 @@ export const FRAMEWORK_SCRIPTS = [
   { src: 'assets/js/bootstrap.bundle.js', defer: true, gstrap: 'bsjs' }
 ]
 export const PROJECT_STYLESHEET = { rel: 'stylesheet', href: 'assets/css/style.css', gstrap: 'project-css' }
+
+// project-manager.js#createProject seeds the manifest with the pre-alpha.2
+// root-level stylesheet pointer and only rewrites it to the real in-assets
+// path AFTER the project's pages have been composed; legacy manifests on disk
+// can carry the same pointer persistently. It never names a file createProject
+// actually writes, so composing it verbatim would emit a dead link — it
+// resolves to PROJECT_STYLESHEET.href instead, which is what every build
+// before vendored frameworks emitted unconditionally.
+const LEGACY_ROOT_STYLESHEET = 'style.css'
+
+/**
+ * Pick the framework <link>/<script> set for a project.
+ *
+ * A `manifest.framework` of any shape means the project vendors its own
+ * framework, so the bundled set is suppressed entirely — a project that
+ * declares an empty list gets no framework tags at all, which is a legitimate
+ * authoring choice, not a fallback to the bundle.
+ *
+ * @param {object} manifest - Project manifest (may be a partial stub)
+ * @returns {{css: Array<{rel: string, href: string, marker: string}>,
+ *            js: Array<{src: string, defer: boolean, marker: string}>}}
+ *          Tag descriptors in emit order, each carrying its data-grpstr-fw value
+ */
+function resolveFrameworkAssets(manifest) {
+  const vendored = manifest && typeof manifest.framework === 'object' && manifest.framework !== null
+    ? manifest.framework
+    : null
+
+  if (!vendored) {
+    return {
+      css: FRAMEWORK_LINKS.map(link => ({ rel: link.rel, href: link.href, marker: link.gstrap })),
+      js:  FRAMEWORK_SCRIPTS.map(script => ({ src: script.src, defer: script.defer, marker: script.gstrap }))
+    }
+  }
+
+  // Indexed markers keep each vendored tag recognisable to the extractor,
+  // which strips on the presence of data-grpstr-fw and ignores its value.
+  const cssList = Array.isArray(vendored.css) ? vendored.css : []
+  const jsList  = Array.isArray(vendored.js)  ? vendored.js  : []
+  return {
+    css: cssList.filter(isNonEmptyString).map((href, index) => ({ rel: 'stylesheet', href, marker: `fwx-${index}` })),
+    js:  jsList.filter(isNonEmptyString).map((src, index)  => ({ src, defer: true, marker: `fwjs-${index}` }))
+  }
+}
+
+/**
+ * Resolve the href for the project's own stylesheet link.
+ * @param {object} manifest - Project manifest (may be a partial stub)
+ * @returns {string} Site-relative stylesheet path
+ */
+function projectStylesheetHref(manifest) {
+  const declared = typeof manifest?.globalCSS === 'string' ? manifest.globalCSS.trim() : ''
+  if (!declared || declared === LEGACY_ROOT_STYLESHEET) return PROJECT_STYLESHEET.href
+  return declared
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim() !== ''
+}
 
 /**
  * Wrap a body-only page fragment + manifest head into a full HTML document.
@@ -64,13 +130,14 @@ export function composeFullPageHtml(bodyHtml, page = {}, manifest = {}) {
     .map(s => `<script src="${escapeHtml(s.src)}"${s.defer ? ' defer' : ''}${s.async ? ' async' : ''} data-grpstr-script></script>`)
     .join('\n  ')
 
-  const fwLinks = FRAMEWORK_LINKS
-    .map(l => `<link rel="${l.rel}" href="${l.href}" data-grpstr-fw="${l.gstrap}">`)
+  const framework = resolveFrameworkAssets(manifest)
+  const fwLinks = framework.css
+    .map(l => `<link rel="${l.rel}" href="${escapeHtml(l.href)}" data-grpstr-fw="${l.marker}">`)
     .join('\n  ')
-  const fwScripts = FRAMEWORK_SCRIPTS
-    .map(s => `<script src="${s.src}"${s.defer ? ' defer' : ''} data-grpstr-fw="${s.gstrap}"></script>`)
+  const fwScripts = framework.js
+    .map(s => `<script src="${escapeHtml(s.src)}"${s.defer ? ' defer' : ''} data-grpstr-fw="${s.marker}"></script>`)
     .join('\n  ')
-  const projCss = `<link rel="${PROJECT_STYLESHEET.rel}" href="${PROJECT_STYLESHEET.href}" data-grpstr-fw="${PROJECT_STYLESHEET.gstrap}">`
+  const projCss = `<link rel="${PROJECT_STYLESHEET.rel}" href="${escapeHtml(projectStylesheetHref(manifest))}" data-grpstr-fw="${PROJECT_STYLESHEET.gstrap}">`
 
   const headLines = [
     '<meta charset="utf-8">',
@@ -84,9 +151,10 @@ export function composeFullPageHtml(bodyHtml, page = {}, manifest = {}) {
     customLinkTags
   ].filter(Boolean).join('\n  ')
 
-  const bodyEnd = customScriptTags
-    ? `${fwScripts}\n  ${customScriptTags}`
-    : fwScripts
+  // Either half can be empty — a project vendoring a CSS-only framework emits
+  // no framework scripts at all, and joining blindly would leave a stray blank
+  // line before the user's own scripts.
+  const bodyEnd = [fwScripts, customScriptTags].filter(Boolean).join('\n  ')
 
   return `<!doctype html>
 <html lang="en">

@@ -47,7 +47,7 @@ Before Wave 6, the remaining Wave 5B item: user-docs (README rewrite, SECURITY.m
 - `bs-classes.js` `SPACING_SIDES` still emits dead BS4 `mr-*`/`ml-*` tokens (BS 5.3 uses `ms-*`/`me-*`) — one-line fix ticket.
 - Breakpoint-bar readout goes stale after a View-menu device switch.
 - Spacing drags on a template region element get wiped by the next template propagation (skip-handles-when-`removable===false` is the cheap fix).
-- PHP file-tab buffers are NOT in crash-recovery snapshots; `projectState.isDirty()` doesn't see file-tab dirty state.
+- File-tab buffers (`.php`, and as of the Graphite-starter wave `.js`/`.css` Site Files too — file-tabs.js's dirty tracking is extension-agnostic) are NOT in crash-recovery snapshots; `projectState.isDirty()` doesn't see file-tab dirty state.
 - `xdg.recoveryDir` is dead config (snapshots live next to the manifest).
 - Seeded-but-unused i18n keys: `app.tagline`, `empty.no-project`, `empty.no-tabs`, `empty.search-no-results`.
 - electron-builder warns `desktopName`/`syncDesktopName` unset (Wayland app_id) — check at Wave 6 acceptance.

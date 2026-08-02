@@ -2,8 +2,9 @@
  * GrapeStrap — GrapesJS canvas initialization
  *
  * Configures the canvas with:
- *   - Bundled Bootstrap 5 (CSS + JS) loaded into the iframe via canvas.styles/scripts
- *   - Bundled Font Awesome Free CSS (canvas icon set)
+ *   - Bootstrap 5 (CSS + JS) + Font Awesome Free reconciled into the iframe
+ *     head by syncFrameworksIntoCanvas — the project's own vendored framework
+ *     (manifest.framework) when it declares one, else GrapeStrap's bundled set
  *   - Inter font for canvas UI elements (the user's content can override)
  *   - Three responsive devices (Desktop/Tablet/Mobile)
  *   - Storage manager DISABLED — we manage state on disk via .gstrap, not localStorage
@@ -35,14 +36,38 @@ import { log } from '../log.js'
 // The link injection happens in syncFrameworksIntoCanvas (below), called
 // AFTER syncBaseHrefIntoCanvas so the relative href resolves correctly the
 // first time it's parsed.
-const FRAMEWORK_CSS = [
-  { href: 'assets/css/bootstrap.css',       attr: 'data-grapestrap-bs' },
-  { href: 'assets/css/bootstrap-icons.css', attr: 'data-grapestrap-bsi' },
-  { href: 'assets/css/all.css',             attr: 'data-grapestrap-fa' }
+//
+// A project that vendors its OWN framework (manifest.framework — the Graphite
+// starter ships its own Bootstrap + Font Awesome + webfonts) replaces this
+// default set wholesale rather than adding to it.
+const DEFAULT_FRAMEWORK_CSS = [
+  'assets/css/bootstrap.css',
+  'assets/css/bootstrap-icons.css',
+  'assets/css/all.css'
 ]
-const FRAMEWORK_JS = [
-  { src:  'assets/js/bootstrap.bundle.js',  attr: 'data-grapestrap-bsjs' }
+const DEFAULT_FRAMEWORK_JS = [
+  'assets/js/bootstrap.bundle.js'
 ]
+
+// Every framework tag we inject carries this attribute, holding its own
+// href/src. One marker for every entry (rather than the old per-constant
+// data-grapestrap-bs / -bsi / -fa / -bsjs attributes) is what lets the
+// reconciler enumerate the full injected set — including tags for a framework
+// list it has never seen — and drop the ones no longer in play.
+const CANVAS_FRAMEWORK_MARKER = 'data-grapestrap-fwx'
+
+// Superseded per-constant markers. Kept only so a tag injected by an earlier
+// build is found by URL and adopted under the common marker instead of being
+// duplicated alongside it.
+const LEGACY_CANVAS_FRAMEWORK_MARKERS = [
+  'data-grapestrap-bs',
+  'data-grapestrap-bsi',
+  'data-grapestrap-fa',
+  'data-grapestrap-bsjs'
+]
+const CANVAS_FRAMEWORK_SELECTOR = [CANVAS_FRAMEWORK_MARKER, ...LEGACY_CANVAS_FRAMEWORK_MARKERS]
+  .map(attr => `[${attr}]`)
+  .join(',')
 
 let editor = null
 
@@ -316,35 +341,129 @@ function refetchRelativeImages(doc) {
   })
 }
 
-// Inject Bootstrap / Bootstrap Icons / Font Awesome <link> + bundle <script>
-// into the canvas iframe head using project-relative paths. Resolved through
-// the project's <base href> so the SAME paths work in canvas preview AND
-// after server transfer. Idempotent: re-running updates href/src in place
-// instead of duplicating tags. No-op when no project is open.
+/**
+ * Reconcile the canvas iframe's framework <link>/<script> tags against the
+ * open project's active set.
+ *
+ * Paths are project-relative and resolve through the project's <base href>,
+ * so the SAME paths work in canvas preview AND after server transfer.
+ *
+ * Reconciling, not just additive: tags whose URL has dropped out of the active
+ * set are REMOVED. Injecting-only could never shrink the set, so switching
+ * from a project that vendors its own framework to one on the bundled set (or
+ * back) left the previous project's Bootstrap loaded in the iframe on top of
+ * the new one's — two Bootstraps fighting over the same canvas.
+ *
+ * No-op when no project is open, which leaves the previous project's tags in
+ * the iframe until the next project opens and reconciles them away.
+ *
+ * @param {Document} [docArg] - Canvas document; defaults to the live frame's
+ */
 function syncFrameworksIntoCanvas(docArg) {
   const doc = docArg || editor?.Canvas?.getFrameEl()?.contentDocument
   if (!doc) return
   if (!projectState.current?.projectDir) return
-  for (const { href, attr } of FRAMEWORK_CSS) {
-    let tag = doc.head.querySelector(`link[${attr}]`)
-    if (!tag) {
-      tag = doc.createElement('link')
-      tag.setAttribute('rel', 'stylesheet')
-      tag.setAttribute(attr, '')
-      doc.head.appendChild(tag)
-    }
-    if (tag.getAttribute('href') !== href) tag.setAttribute('href', href)
+
+  const active = getActiveFrameworkUrls()
+  removeStaleFrameworkTags(doc, active)
+
+  // The globalCSS <style> anchors the ordering contract: <base> → frameworks →
+  // globalCSS, so project CSS always wins the cascade over framework CSS.
+  // insertBefore(tag, null) appends, which is the pre-globalCSS-sync case.
+  const globalCssTag = doc.head.querySelector('style[data-grapestrap-globalcss]')
+  const orderedTags = [
+    ...active.css.map(href => ensureFrameworkTag(doc, 'link', href)),
+    ...active.js.map(src => ensureFrameworkTag(doc, 'script', src))
+  ]
+  if (!isFrameworkOrderCorrect(doc, orderedTags, globalCssTag)) {
+    for (const tag of orderedTags) doc.head.insertBefore(tag, globalCssTag)
   }
-  for (const { src, attr } of FRAMEWORK_JS) {
-    let tag = doc.head.querySelector(`script[${attr}]`)
-    if (!tag) {
-      tag = doc.createElement('script')
-      tag.setAttribute(attr, '')
-      tag.setAttribute('defer', '')
-      doc.head.appendChild(tag)
-    }
-    if (tag.getAttribute('src') !== src) tag.setAttribute('src', src)
+}
+
+/**
+ * The framework URLs the open project should have loaded, in emit order.
+ * A `manifest.framework` of any shape means the project vendors its own, so
+ * the bundled set is suppressed entirely rather than merged with.
+ * @returns {{css: string[], js: string[]}}
+ */
+function getActiveFrameworkUrls() {
+  const vendored = projectState.current?.manifest?.framework
+  if (!vendored || typeof vendored !== 'object') {
+    return { css: [...DEFAULT_FRAMEWORK_CSS], js: [...DEFAULT_FRAMEWORK_JS] }
   }
+  const isUsableUrl = value => typeof value === 'string' && value.trim() !== ''
+  return {
+    css: (Array.isArray(vendored.css) ? vendored.css : []).filter(isUsableUrl),
+    js:  (Array.isArray(vendored.js)  ? vendored.js  : []).filter(isUsableUrl)
+  }
+}
+
+/**
+ * Drop every injected framework tag whose URL is no longer active. Matching on
+ * URL (not on tag identity) is what lets a legacy per-constant-marked tag be
+ * retired by the same pass.
+ * @param {Document} doc - Canvas document
+ * @param {{css: string[], js: string[]}} active - Current active URL set
+ */
+function removeStaleFrameworkTags(doc, active) {
+  const activeCss = new Set(active.css)
+  const activeJs = new Set(active.js)
+  for (const tag of doc.head.querySelectorAll(CANVAS_FRAMEWORK_SELECTOR)) {
+    const isScript = tag.tagName === 'SCRIPT'
+    const url = tag.getAttribute(isScript ? 'src' : 'href') || ''
+    const isStillActive = isScript ? activeJs.has(url) : activeCss.has(url)
+    if (!isStillActive) tag.remove()
+  }
+}
+
+/**
+ * Find (or create) the tag for one framework URL, stamped with the common
+ * marker. Detached when freshly created — the caller owns head placement.
+ * @param {Document} doc - Canvas document
+ * @param {'link'|'script'} tagName - Element to look for / create
+ * @param {string} url - Project-relative href/src
+ * @returns {Element} The tag carrying this URL
+ */
+function ensureFrameworkTag(doc, tagName, url) {
+  const urlAttr = tagName === 'script' ? 'src' : 'href'
+  for (const candidate of doc.head.querySelectorAll(CANVAS_FRAMEWORK_SELECTOR)) {
+    if (candidate.tagName !== tagName.toUpperCase()) continue
+    if (candidate.getAttribute(urlAttr) !== url) continue
+    // Adopts a legacy per-constant-marked tag without refetching its resource.
+    candidate.setAttribute(CANVAS_FRAMEWORK_MARKER, url)
+    return candidate
+  }
+  const tag = doc.createElement(tagName)
+  tag.setAttribute(CANVAS_FRAMEWORK_MARKER, url)
+  if (tagName === 'link') tag.setAttribute('rel', 'stylesheet')
+  // Scripts stay deferred so the bundle can't block the canvas parse.
+  if (tagName === 'script') tag.setAttribute('defer', '')
+  tag.setAttribute(urlAttr, url)
+  return tag
+}
+
+/**
+ * True when every framework tag is already attached, in order, ahead of the
+ * globalCSS anchor. Resync runs on every canvas content change (rAF-coalesced),
+ * and re-inserting correctly-placed <link> nodes churns style recalculation in
+ * the iframe for nothing.
+ * @param {Document} doc - Canvas document
+ * @param {Element[]} orderedTags - Framework tags in intended order
+ * @param {Element|null} globalCssTag - The globalCSS <style>, if injected yet
+ * @returns {boolean}
+ */
+function isFrameworkOrderCorrect(doc, orderedTags, globalCssTag) {
+  const headChildren = Array.from(doc.head.children)
+  const anchorIndex = globalCssTag ? headChildren.indexOf(globalCssTag) : headChildren.length
+  let previousIndex = -1
+  for (const tag of orderedTags) {
+    const index = headChildren.indexOf(tag)
+    if (index === -1) return false          // freshly created, not attached yet
+    if (index <= previousIndex) return false // out of order against the list
+    if (index > anchorIndex) return false    // fell behind the globalCSS anchor
+    previousIndex = index
+  }
+  return true
 }
 
 export function getEditor() {

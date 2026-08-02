@@ -13,6 +13,21 @@
  *
  * Manifest schema is in v4 plan §16. Pages and library items are stored as
  * separate files for git-friendliness, NOT inlined into the manifest.
+ *
+ * Two schema fields govern which CSS/JS a project is built on:
+ *   - `globalCSS` (always present, site-relative): the project's own
+ *     stylesheet. Normally 'assets/css/style.css', but a project created from
+ *     a bundled starter points it at that starter's stylesheet instead
+ *     (Graphite → 'assets/css/theme.css'). Save, load, and export all resolve
+ *     it from the manifest — never assume style.css.
+ *   - `framework` (OPTIONAL, additive, 2026-08-02): `{ css: [], js: [] }` of
+ *     site-relative paths. Its presence means the project VENDORS ITS OWN
+ *     framework inside site/assets/vendor/, so grapestrap must not copy or
+ *     backfill its bundled Bootstrap/BSI/FA into the project (see
+ *     copyFrameworkAssets' two call sites), and composeFullPageHtml emits
+ *     these paths in place of the built-in set. Absent = legacy behaviour,
+ *     the app's own framework bundle — every project made before this field
+ *     existed, plus every blank project, reads that way.
  */
 
 import { promises as fsp } from 'node:fs'
@@ -32,6 +47,8 @@ const FORMAT_TAG = 'grapestrap-project'
 //     ├─ pages/<name>.html
 //     ├─ assets/{images,fonts,videos}/     ← user media
 //     ├─ assets/{css,js,webfonts}/         ← frameworks + css/style.css (globalCSS)
+//     ├─ assets/vendor/                    ← a bundled starter's own framework
+//     │                                      (manifest.framework; replaces the above)
 //     ├─ library/<id>.html
 //     └─ templates/<name>.gstrap-tpl
 //
@@ -378,23 +395,35 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
   await fsp.mkdir(join(site, 'assets', 'fonts'), { recursive: true })
   await fsp.mkdir(join(site, 'assets', 'videos'), { recursive: true })
 
+  // Wave 4: resolve the starter. Unknown/omitted ids fail OPEN to a blank
+  // project — a stale dialog or a typo'd IPC call must never block creation.
+  // Resolved BEFORE any asset copying because a starter that vendors its own
+  // framework/stylesheet suppresses both defaults below.
+  const starter = getStarter(templateId)
+  if (templateId !== 'blank' && !starter) {
+    console.warn(`[grapestrap] unknown starter template "${templateId}" — creating a blank project`)
+  }
+
   // Copy Bootstrap + Bootstrap Icons + Font Awesome into the project's own
   // assets/. The canvas iframe loads them via project-relative paths
   // (`assets/css/bootstrap.min.css`) resolved through `<base href>`, so the
   // exact same paths work when the project is rsync'd to a server. No
   // dependency on the renderer's bundled copy.
-  await copyFrameworkAssets(site)
+  //
+  // Skipped for starters that declare their own `framework`: their bundle
+  // ships a complete vendored CSS/JS set (site/assets/vendor/**) and the pages
+  // link that, so the app's copy would be a second, unreferenced framework on
+  // disk — dead weight in every export.
+  if (!starter?.framework) await copyFrameworkAssets(site)
 
   // Project's own custom stylesheet — referenced via assets/css/style.css from
-  // the wrapped page so the same path works in canvas + on a server.
+  // the wrapped page so the same path works in canvas + on a server. A starter
+  // with its own `globalCSS` (Graphite's bundled theme.css) supplies that file
+  // itself; writing the placeholder too would leave a stylesheet nothing links.
+  // The mkdir is unconditional — assets/css exists either way.
   await fsp.mkdir(join(site, 'assets', 'css'), { recursive: true })
-  await fsp.writeFile(join(site, 'assets', 'css', 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
-
-  // Wave 4: resolve the starter. Unknown/omitted ids fail OPEN to a blank
-  // project — a stale dialog or a typo'd IPC call must never block creation.
-  const starter = getStarter(templateId)
-  if (templateId !== 'blank' && !starter) {
-    console.warn(`[grapestrap] unknown starter template "${templateId}" — creating a blank project`)
+  if (!starter?.globalCSS) {
+    await fsp.writeFile(join(site, 'assets', 'css', 'style.css'), '/* Project-global custom CSS */\n', 'utf8')
   }
 
   const now = new Date().toISOString()
@@ -412,7 +441,10 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
     templates: [],
     libraryItems: [],
     snippets: [],
-    globalCSS: 'style.css',
+    // Default project stylesheet. applyStarter overrides it for starters that
+    // bring their own theme; composeFullPageHtml reads it when writing pages
+    // below, so it must already hold the final in-assets path here.
+    globalCSS: 'assets/css/style.css',
     palette: [],
     assets: [],
     vendorDeps: [],
@@ -447,10 +479,6 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
       'utf8'
     )
   }
-
-  // Update globalCSS pointer to the new in-assets location so loadProject
-  // reads from there. (The legacy site/style.css path is dead now.)
-  manifest.globalCSS = 'assets/css/style.css'
 
   await fsp.writeFile(targetPath, JSON.stringify(manifest, null, 2), 'utf8')
   return { manifest, projectPath: targetPath }
@@ -498,12 +526,19 @@ export async function loadProject(manifestPath) {
   // get a no-op. Failures here are non-fatal: throwing would block the
   // project from opening at all, which is worse than canvas rendering
   // unstyled until the user hits Refresh / re-creates.
-  try { await copyFrameworkAssets(site) }
-  catch (err) {
-    // Surface but don't block: load-time toasts wire through to the
-    // renderer via the wrapper that calls loadProject; for now log to
-    // stderr so packaged builds report it.
-    console.warn('[grapestrap] could not backfill framework assets:', err?.message || err)
+  //
+  // Projects that vendor their own framework (manifest.framework — created
+  // from a bundled starter) are excluded: they never had the app's Bootstrap
+  // and don't want it. Backfilling would inject assets/css/bootstrap.css on
+  // every open, unreferenced by any page and shipped in every export.
+  if (!manifest.framework) {
+    try { await copyFrameworkAssets(site) }
+    catch (err) {
+      // Surface but don't block: load-time toasts wire through to the
+      // renderer via the wrapper that calls loadProject; for now log to
+      // stderr so packaged builds report it.
+      console.warn('[grapestrap] could not backfill framework assets:', err?.message || err)
+    }
   }
 
   const pages = await Promise.all(
@@ -750,9 +785,15 @@ export async function exportProject(project, outputDir) {
   // dirty, possibly url-migrated at load) wins over the on-disk copy. Ships
   // byte-identical to what the user authored — url()s are file-relative to
   // this stylesheet (`../images/…`), so no rewriting is needed here, ever.
+  //
+  // The destination comes from the manifest, not a constant: a project created
+  // from a bundled starter points globalCSS at that starter's own stylesheet
+  // (Graphite → assets/css/theme.css), and writing to style.css instead would
+  // both leak an orphan file and ship the on-disk (stale) theme.
   if (project.globalCSS) {
-    await fsp.mkdir(join(outputDir, 'assets', 'css'), { recursive: true })
-    await fsp.writeFile(join(outputDir, 'assets', 'css', 'style.css'), project.globalCSS, 'utf8')
+    const cssRel = project.manifest?.globalCSS || 'assets/css/style.css'
+    await fsp.mkdir(dirname(join(outputDir, cssRel)), { recursive: true })
+    await fsp.writeFile(join(outputDir, cssRel), project.globalCSS, 'utf8')
   }
 
   // Render each page as a full HTML document. Same composer the save loop

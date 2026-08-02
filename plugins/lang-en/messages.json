@@ -291,6 +291,7 @@
   "tabs.new-page-title": "New Page",
   "tabs.badge-library-title": "Library item",
   "tabs.badge-template-title": "Master template",
+  "tabs.badge-file-title": "Code file",
 
   "props.empty": "Select an element on the canvas.",
   "props.element": "Element",
@@ -458,6 +459,7 @@
   "starter.landing.label": "Landing Page",
   "starter.portfolio.label": "Portfolio",
   "starter.blog.label": "Blog",
+  "starter.graphite.label": "Graphite",
 
   "tpl.menu.make-region": "Make Editable Region…",
   "tpl.menu.remove-region": "Remove Editable Region",

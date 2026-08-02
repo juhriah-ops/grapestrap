@@ -8,6 +8,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 The `v0.1.0` release per `GRAPESTRAP_BUILD_PLAN_v5.md` — all feature waves (0–5A) landed 2026-07-12; this section becomes the v0.1.0 notes when the Wave 6 rc ladder tags. Deferred past v1: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
 
+### Added (BS5 template pack round 1 — Graphite starter + code-file editing, 2026-08-02)
+- **Graphite starter template**: the New Project dialog gains **Graphite** — a complete 5-page Bootstrap 5 site (fading hero carousel, sidebar layouts, elements page) that scaffolds with its own vendored Bootstrap/Font Awesome/webfonts, theme stylesheet, and behavior script. First of the BS5 template pack; ships as an in-app bundle (`starters/graphite/`, ~40 files including images and fonts).
+- **Vendored-framework projects**: starters can now declare `manifest.framework {css[], js[]}` — pages, the canvas, and export then use the template's own framework files instead of GrapeStrap's bundled Bootstrap (no double-framework), and the bundled copies are never backfilled into the project. Projects without the field are untouched.
+- **Template stylesheet in the Custom CSS panel**: a starter can point `globalCSS` at its own stylesheet (Graphite: `assets/css/theme.css`) — live canvas sync, Style Manager writes, save, and export all follow it. The export path previously hardcoded `assets/css/style.css`; now honors the manifest.
+- **JS/CSS file editing**: the File Manager's Site Files section now lists project `.js`/`.css` files (vendor, minified, and framework files excluded) alongside `.php`, opening in Monaco code tabs with JavaScript highlighting; edits save to disk. The project's global stylesheet stays exclusive to the Custom CSS panel to prevent double-buffered edits.
+
+### Fixed (same round)
+- Canvas framework injection now **reconciles** on project switch — previously stale framework tags could accumulate in the canvas iframe when switching between projects with different framework sets.
+- Blank-project manifests seeded a legacy root-level `style.css` pointer that a post-create rewrite papered over; the seed is now correct and the compose path tolerates the legacy value from old saves.
+
 ### Added (Wave 5 — Linux packaging, About, 2026-07-12)
 - **rpm packages** build alongside deb/AppImage/tar.gz and are wired into the release pipeline. Packaging config migrated to the **electron-builder 26 schema** (`linux.desktop` flat keys → nested `desktop.entry {}`) — every `--linux` build had been failing validation since the builder-26 bump; the tag-time release workflow would have died on it.
 - **`.gstrap` files register a MIME type** (`application/x-grapestrap` via `/usr/share/mime/packages/grapestrap.xml`); deb/rpm postinst runs `update-mime-database` + `update-desktop-database` so double-click-to-open works after install. Full 8-bit hicolor icon set (16→512).

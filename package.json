@@ -114,6 +114,7 @@
       "dist/**/*",
       "plugins/**/*",
       "assets/**/*",
+      "starters/**/*",
       "node_modules/**/*",
       "package.json"
     ],
