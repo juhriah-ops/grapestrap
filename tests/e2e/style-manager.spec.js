@@ -905,3 +905,51 @@ test('Style Manager: pseudo-state on element with no usable selector toasts and 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+test('Style Manager: pseudo write never rewrites a compound rule ending in the same class', async () => {
+  // Selector-anchoring regression (2026-08-03 acceptance forensics): the rule
+  // writers used to match `.cta-link:hover` against the TAIL of a theme's
+  // `.hero-zone .cta-link:hover { … }` and clobber the compound rule in
+  // place. The write must leave the theme rule byte-identical and append a
+  // separate whole-selector rule instead.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-smanchor-'))
+  const projectPath = join(projectDir, 'smanchor.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // Theme-style compound rule (tab-indented, like starter stylesheets) +
+  // the custom class on the selected element.
+  const compoundRule = '\t.hero-zone .cta-link:hover {\n\t\tcolor: #123456;\n\t}\n'
+  await appWindow.evaluate(rule => {
+    window.__gstrap.projectState.current.globalCSS = rule
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    sel.setClass([...(sel.getClasses() || []), 'cta-link'])
+  }, compoundRule)
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-pseudo-state="hover"]').click()
+  })
+  await appWindow.waitForSelector('[data-pseudo-state="hover"].is-active', { timeout: 3_000 })
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="pseudo"] .gstrap-sm-body:not([hidden]) .gstrap-sm-pseudo-banner',
+    { timeout: 3_000 }
+  )
+
+  await appWindow.evaluate(() => {
+    const body = document.querySelector('.gstrap-sm-section[data-sp="pseudo"] .gstrap-sm-body')
+    const input = body.querySelector('input[data-prop="background-color"][data-pair="text"]')
+    input.value = '#ff0066'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  const css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS)
+  expect(css.startsWith(compoundRule)).toBe(true)
+  expect(css).toMatch(/\n\.cta-link:hover \{\n {2}background-color: #ff0066;\n\}\n/)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})

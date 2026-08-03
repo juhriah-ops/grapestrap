@@ -20,7 +20,7 @@ import {
 import { applyGroup, readGroup, toggleClass } from './class-utils.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
-import { pickSelector, isBsUtility } from './css-rule-utils.js'
+import { pickSelector, isBsUtility, readBareRule, writeBareRule } from './css-rule-utils.js'
 import { toDocumentRelativeUrl, stylesheetDirOf } from '../../../shared/css-urls.js'
 import { t } from '../../i18n.js'
 
@@ -192,50 +192,8 @@ function writeBgRule(selector, props) {
   eventBus.emit('project:css-changed')
 }
 
-// Read a bare-state `<selector> { ... }` rule (no pseudo). css-rule-utils'
-// readRule appends `:${pseudo}` to the selector regex, so passing an empty
-// pseudo produces a broken regex that requires a literal `:` after the
-// selector and never matches actual bare-state rules. Parallel function
-// here keeps the bare-state path self-contained.
-function readBareRule(globalCSS, selector) {
-  if (!globalCSS || !selector) return {}
-  const escSel = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const re = new RegExp(`${escSel}(?!:)\\s*\\{([^}]*)\\}`, 'm')
-  const match = re.exec(globalCSS)
-  if (!match) return {}
-  const out = {}
-  for (const decl of match[1].split(';')) {
-    const idx = decl.indexOf(':')
-    if (idx === -1) continue
-    const k = decl.slice(0, idx).trim()
-    const v = decl.slice(idx + 1).trim()
-    if (k) out[k] = v
-  }
-  return out
-}
-
-// Bare-state rule writer. Mirrors css-rule-utils' writeRule but without the
-// `:${pseudo}` suffix. We deliberately don't extend writeRule to handle
-// pseudo='' because the regex engineering for "match selector NOT followed
-// by a colon-pseudo" is finicky enough that a parallel function is clearer.
-function writeBareRule(globalCSS, selector, props) {
-  const escSel = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  // Match `<selector> { ... }` but NOT `<selector>:hover { ... }` etc.
-  const re = new RegExp(`${escSel}(?!:)\\s*\\{[^}]*\\}\\s*`, 'm')
-  const lines = Object.entries(props || {})
-    .filter(([, v]) => v !== '' && v != null)
-    .map(([k, v]) => `  ${k}: ${v};`)
-  const body = lines.join('\n')
-  if (!body) {
-    if (!re.test(globalCSS || '')) return globalCSS || ''
-    return (globalCSS || '').replace(re, '').replace(/\n{3,}/g, '\n\n')
-  }
-  const newRule = `${selector} {\n${body}\n}\n`
-  if (re.test(globalCSS || '')) return (globalCSS || '').replace(re, newRule)
-  const base = globalCSS || ''
-  const sep = base.length === 0 ? '' : (base.endsWith('\n') ? '\n' : '\n\n')
-  return base + sep + newRule
-}
+// readBareRule / writeBareRule moved to css-rule-utils.js (2026-08-03) with
+// the boundary-anchored selector matching + its unit tests.
 
 function listProjectImages() {
   const projectDir = projectState.current?.projectDir

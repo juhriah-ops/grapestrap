@@ -2,12 +2,15 @@
  * GrapeStrap — Style Manager: CSS-rule helpers for project style.css
  *
  * The pseudo-class state bar (chunk C) writes pseudo-state styles to project
- * `style.css` (held in `projectState.current.globalCSS`). These helpers do the
- * minimal CSS string surgery — read, upsert, remove — for a single
- * `selector + pseudo-class` rule. We deliberately don't pull in a full CSS AST
- * parser: round-tripping comments and complex sheets risks lossy edits the
- * user would notice. The string operations only ever touch the one rule
- * matching `selector:pseudo`, leaving the rest of the file byte-identical.
+ * `style.css` (held in `projectState.current.globalCSS`), and the Background
+ * sub-panel writes bare-state rules through the same surgery (readBareRule /
+ * writeBareRule, here since 2026-08-03). These helpers do the minimal CSS
+ * string surgery — read, upsert, remove — for a single whole-selector rule.
+ * We deliberately don't pull in a full CSS AST parser: round-tripping
+ * comments and complex sheets risks lossy edits the user would notice. The
+ * string operations only ever touch the one rule whose ENTIRE selector is
+ * the target (boundary-anchored — see SELECTOR_BOUNDARY), leaving the rest
+ * of the file byte-identical.
  *
  * Round-trip contract:
  *   - readRule(globalCSS, '.btn', 'hover') → { 'background-color': '#0d6efd' }
@@ -18,14 +21,28 @@
  *     file was empty / non-existent).
  */
 
-// One rule per selector+pseudo. Captures the body. The selector is matched
-// literally (escape regex chars in `selector` first); pseudo is appended after
-// a `:`. Whitespace around `{` and inside the body is permissive.
+// A selector only counts as a match when it is the rule's WHOLE selector:
+// the match must sit at the start of the sheet or right after a rule end
+// (`}`), a statement end (`;`, e.g. @import), or a comment close. Unanchored,
+// `.item` matched the TAIL of `.hero .item { … }` and the writers clobbered
+// the compound rule in place — the v0.1.0 acceptance forensics found a
+// Graphite theme rule rewritten this way (2026-08-03). `{` is deliberately
+// NOT a boundary: the first rule inside an `@media { … }` block is
+// breakpoint-scoped and must never be read or rewritten as the base rule
+// (later rules inside the block still match after their sibling's `}` — the
+// known cost of string surgery without a CSS AST, same as before).
+const SELECTOR_BOUNDARY = '(^|[};]|\\*\\/)'
+
+function escapeSelector(selector) {
+  return selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// One rule per selector+pseudo. Groups: (1) boundary, (2) leading whitespace
+// — both preserved by the writers — and (3) the rule body. Whitespace around
+// `{` and inside the body is permissive.
 function buildRuleRegex(selector, pseudo) {
-  const escSel = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return new RegExp(
-    `${escSel}\\s*:${pseudo}\\s*\\{[^}]*\\}\\s*`,
-    'm'
+    `${SELECTOR_BOUNDARY}(\\s*)${escapeSelector(selector)}\\s*:${pseudo}\\s*\\{([^}]*)\\}\\s*`
   )
 }
 
@@ -50,11 +67,9 @@ function bodyToProps(body) {
 
 export function readRule(globalCSS, selector, pseudo) {
   if (!globalCSS) return {}
-  const re = buildRuleRegex(selector, pseudo)
-  const match = re.exec(globalCSS)
+  const match = buildRuleRegex(selector, pseudo).exec(globalCSS)
   if (!match) return {}
-  const body = match[0].match(/\{([^}]*)\}/)?.[1] || ''
-  return bodyToProps(body)
+  return bodyToProps(match[3] || '')
 }
 
 /**
@@ -63,23 +78,59 @@ export function readRule(globalCSS, selector, pseudo) {
  */
 export function writeRule(globalCSS, selector, pseudo, props) {
   const body = propsToBody(props || {})
-  const re = buildRuleRegex(selector, pseudo)
-  const hasMatch = re.test(globalCSS || '')
+  const newRule = body ? `${selector}:${pseudo} {\n${body}\n}\n` : ''
+  return upsertRule(globalCSS, buildRuleRegex(selector, pseudo), newRule)
+}
 
-  if (!body) {
-    // Remove rule.
-    if (!hasMatch) return globalCSS || ''
-    return (globalCSS || '').replace(re, '').replace(/\n{3,}/g, '\n\n')
+// Shared writer core: replace the matched rule in place (keeping the boundary
+// + leading whitespace the regex captured), remove it when newRule is empty,
+// or append when nothing matched. Function replacements — a `$` inside a CSS
+// value must never be interpreted as a replacement pattern.
+function upsertRule(globalCSS, re, newRule) {
+  const base = globalCSS || ''
+  const hasMatch = re.test(base)
+
+  if (!newRule) {
+    if (!hasMatch) return base
+    return base.replace(re, (m, b, lead) => b + lead).replace(/\n{3,}/g, '\n\n')
   }
-
-  const newRule = `${selector}:${pseudo} {\n${body}\n}\n`
   if (hasMatch) {
-    return (globalCSS || '').replace(re, newRule)
+    return base.replace(re, (m, b, lead) => b + lead + newRule)
   }
   // Append. Add a leading newline if the file is non-empty and doesn't end in one.
-  const base = globalCSS || ''
   const sep = base.length === 0 ? '' : (base.endsWith('\n') ? '\n' : '\n\n')
   return base + sep + newRule
+}
+
+// ─── Bare-state (no-pseudo) rule surgery ─────────────────────────────────────
+// Moved here from background.js (2026-08-03) so the anchoring fix and its
+// unit tests cover both writers. Deliberately parallel to readRule/writeRule
+// rather than a pseudo='' special case: the bare regex needs `(?!:)` so
+// `.cls` never matches `.cls:hover { … }`, and folding that into the pseudo
+// builder is exactly the finicky regex engineering the split avoids.
+
+function buildBareRuleRegex(selector) {
+  return new RegExp(
+    `${SELECTOR_BOUNDARY}(\\s*)${escapeSelector(selector)}(?!:)\\s*\\{([^}]*)\\}\\s*`
+  )
+}
+
+/** Read a bare-state `<selector> { ... }` rule (no pseudo). */
+export function readBareRule(globalCSS, selector) {
+  if (!globalCSS || !selector) return {}
+  const match = buildBareRuleRegex(selector).exec(globalCSS)
+  if (!match) return {}
+  return bodyToProps(match[3] || '')
+}
+
+/**
+ * Insert or replace the bare-state `<selector> { ... }` rule in globalCSS.
+ * If `props` is empty (no truthy values), the rule is removed.
+ */
+export function writeBareRule(globalCSS, selector, props) {
+  const body = propsToBody(props || {})
+  const newRule = body ? `${selector} {\n${body}\n}\n` : ''
+  return upsertRule(globalCSS, buildBareRuleRegex(selector), newRule)
 }
 
 /**
