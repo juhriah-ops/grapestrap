@@ -10,6 +10,7 @@
  *   - Storage manager DISABLED — we manage state on disk via .gstrap, not localStorage
  *   - Style Manager EMPTY — replaced by our class-first panels
  *   - Inline-style writing DISABLED — selectors only, never inline
+ *   - Default views panel trimmed to the Layer Manager toggle only
  *
  * Plugins (loaded via the plugin host) register blocks/sections via the API.
  * This module just stands up the canvas; it's the plugins that fill it.
@@ -123,6 +124,22 @@ export function initGrapesJS(container) {
     // style is configured via the styleManager plugin defaults; we also catch
     // any inline attempts in canvas-sync.js.
     avoidInlineStyle: true
+  })
+
+  // Strip the default views-panel buttons that duplicate our own panels:
+  // Style Manager and traits/settings are replaced by the class-first
+  // side panels, blocks by the Insert panel. Only the Layer Manager
+  // toggle stays — it has no GrapeStrap-native equivalent.
+  //
+  // MUST run after render (onReady), not right after init: mutating the
+  // views panel before the deferred first render aborts EditorView.render
+  // partway — the devices-c select and the views-container panel silently
+  // never mount (reported on nola1 as "Desktop/Tablet/Mobile gone from the
+  // canvas top bar").
+  editor.onReady(() => {
+    for (const id of ['open-sm', 'open-tm', 'open-blocks']) {
+      editor.Panels.removeButton('views', id)
+    }
   })
 
   // Pump plugin-registered blocks into GrapesJS now that the editor exists.
