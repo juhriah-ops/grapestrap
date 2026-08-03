@@ -39,7 +39,7 @@ Run the steps in order. Steps marked with a section header share setup with the 
 |---|------|-----------------|-----------|-------|
 | 6 | File → New Project. In the New Project dialog, review the starter template choices. | Four starters are offered: Blank, Landing Page, Portfolio, Blog. | | |
 | 7 | Select **Landing Page**, choose a parent folder, and create the project. | The project scaffolds and opens: pages and a master template appear in the File Manager (Templates section populated), and the project's `site/assets/` tree contains Bootstrap, Bootstrap Icons, and Font Awesome — no CDN references. | | |
-| 8 | In the system file manager, double-click the project's `.gstrap` manifest file. | The file opens in GrapeStrap (MIME association `application/x-grapestrap` works end to end). | | Close the second instance/window afterward if one opens. |
+| 8 | In the system file manager, double-click the project's `.gstrap` manifest file. | The file opens in GrapeStrap (MIME association `application/x-grapestrap` works end to end). | | Close the second instance/window afterward if one opens. **The double-click always launches the INSTALLED build** — if a dev tree or older install is also present, make sure every later step runs in the build under test (the 2026-08-03 §5 failure came from continuing in a stale installed rc.2). |
 
 ## 3. Edit a region page (~4 min)
 

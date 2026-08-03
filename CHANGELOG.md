@@ -18,6 +18,9 @@ The `v0.1.0` release per `GRAPESTRAP_BUILD_PLAN_v5.md` — all feature waves (0�
 - Canvas framework injection now **reconciles** on project switch — previously stale framework tags could accumulate in the canvas iframe when switching between projects with different framework sets.
 - Blank-project manifests seeded a legacy root-level `style.css` pointer that a post-create rewrite papered over; the seed is now correct and the compose path tolerates the legacy value from old saves.
 
+### Fixed (v0.1.0-rc.1 acceptance §5 — preview css, 2026-08-03)
+- **Crash-recovery restore now migrates legacy css url() shapes**: a `.gstrap.recovery` snapshot written by a pre-rc.3 build could carry the old site-root-relative `url("assets/images/…")` form; restoring it re-injected the un-migrated text *after* the load-time migration had already run, and the next save persisted urls that 404 in preview/export (the broken hero background found in workstation acceptance). The restore overlay now applies the same one-shot migration and marks the CSS dirty so the fix persists on save.
+
 ### Added (Wave 5 — Linux packaging, About, 2026-07-12)
 - **rpm packages** build alongside deb/AppImage/tar.gz and are wired into the release pipeline. Packaging config migrated to the **electron-builder 26 schema** (`linux.desktop` flat keys → nested `desktop.entry {}`) — every `--linux` build had been failing validation since the builder-26 bump; the tag-time release workflow would have died on it.
 - **`.gstrap` files register a MIME type** (`application/x-grapestrap` via `/usr/share/mime/packages/grapestrap.xml`); deb/rpm postinst runs `update-mime-database` + `update-desktop-database` so double-click-to-open works after install. Full 8-bit hicolor icon set (16→512).

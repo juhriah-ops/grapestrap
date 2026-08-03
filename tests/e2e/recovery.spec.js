@@ -6,7 +6,9 @@
  *       relaunch offers the recovery dialog → Restore puts the edit back in
  *       projectState AND the canvas; Discard deletes the snapshot and leaves
  *       the empty state; a normal save clears the snapshot so the next launch
- *       shows no dialog. Each test relaunches with the FIRST session's XDG
+ *       shows no dialog; a snapshot carrying legacy site-root-relative css
+ *       url()s is migrated during the restore overlay (acceptance-§5
+ *       regression, 2026-08-03). Each test relaunches with the FIRST session's XDG
  *       root (launch() spreads extraEnv after its fresh XDG entries, so the
  *       override sticks) — that carries recents (the boot scan's source) and
  *       welcomeShown=true (so the welcome modal never races the recovery
@@ -182,6 +184,64 @@ test('Recovery: save clears the snapshot — no recovery dialog on next launch',
   } finally {
     if (app2) await app2.close().catch(() => {})
     await app.close().catch(() => {})
+    await fsp.rm(projectDir, { recursive: true, force: true })
+    await fsp.rm(xdgRoot, { recursive: true, force: true })
+  }
+})
+
+test('Recovery: legacy css url() in the snapshot is migrated on restore and persists on save', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-recov4-'))
+  const projectPath = join(projectDir, 'recov4.gstrap')
+  const recoveryPath = projectPath + '.recovery'
+  let app2 = null
+  // keepXdg: session 2 relaunches against this XDG root; the finally
+  // block below owns the rm.
+  const { app, appWindow, xdgRoot } = await launch({}, { keepXdg: true })
+  try {
+    await dismissWelcome(appWindow)
+    await seedDirtyProject(appWindow, projectPath)
+    // Stand-in for a snapshot written by a pre-rc.3 build: the buffer holds
+    // the legacy site-root-relative url() shape the old picker wrote. The
+    // 1 s snapshot loop captures it into .gstrap.recovery verbatim.
+    await appWindow.evaluate(() => {
+      window.__gstrap.projectState.current.globalCSS =
+        '.hero { background-image: url("assets/images/bg.png"); }\n'
+      window.__gstrap.projectState.markCssDirty()
+    })
+    await expect.poll(async () => {
+      try { return (await fsp.readFile(recoveryPath, 'utf8')).includes('assets/images/bg.png') }
+      catch { return false }
+    }, { timeout: 20_000 }).toBe(true)
+    await killHard(app)
+
+    const second = await launch(xdgEnv(xdgRoot))
+    app2 = second.app
+    const appWindow2 = second.appWindow
+
+    await appWindow2.waitForSelector(
+      '.gstrap-modal-overlay [data-action="restore"]', { timeout: 20_000 })
+    await appWindow2.click('.gstrap-modal-overlay [data-action="restore"]')
+
+    // The restore overlay migrated the snapshot text — not re-injected verbatim.
+    await appWindow2.waitForFunction(
+      () => window.__gstrap?.projectState?.current?.globalCSS?.includes('url("../images/bg.png")') === true,
+      null, { timeout: 20_000 })
+    expect(await appWindow2.evaluate(
+      () => window.__gstrap.projectState.current.globalCSS.includes('assets/images/bg.png'))).toBe(false)
+    // Migration alone must leave the CSS dirty so the next save persists it.
+    expect(await appWindow2.evaluate(() => window.__gstrap.projectState.isDirty())).toBe(true)
+
+    await appWindow2.evaluate(() => {
+      window.__gstrap.eventBus.emit('command', 'file:save')
+    })
+    await expect.poll(async () => {
+      try {
+        return await fsp.readFile(
+          join(projectDir, 'site', 'assets', 'css', 'style.css'), 'utf8')
+      } catch { return '' }
+    }, { timeout: 10_000 }).toContain('url("../images/bg.png")')
+  } finally {
+    if (app2) await app2.close().catch(() => {})
     await fsp.rm(projectDir, { recursive: true, force: true })
     await fsp.rm(xdgRoot, { recursive: true, force: true })
   }

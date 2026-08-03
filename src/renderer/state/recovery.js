@@ -13,7 +13,8 @@
  *       and on invalid/stale snapshots. Restore keeps the file until save.
  * DEPENDS: state/event-bus, state/project-state, state/page-state,
  *          editor/grapesjs-init (getCanvasHtml), editor/canvas-sync
- *          (getCodeEditorValue), shared/page-html, panels/library-items/
+ *          (getCodeEditorValue), shared/page-html, shared/css-urls
+ *          (migrateLegacyAssetUrls — restore overlay), panels/library-items/
  *          propagate (updateHtml), dialogs/recovery, log,
  *          window.grapestrap.project.{readRecovery,writeRecovery,clearRecovery,open,recent,addRecent}
  * CREATED: 2026-07-12
@@ -25,6 +26,7 @@ import { pageState } from './page-state.js'
 import { getCanvasHtml } from '../editor/grapesjs-init.js'
 import { getCodeEditorValue } from '../editor/canvas-sync.js'
 import { isFullHtmlDocument, extractPageFromFullHtml } from '../../shared/page-html.js'
+import { migrateLegacyAssetUrls } from '../../shared/css-urls.js'
 import { updateHtml } from '../panels/library-items/propagate.js'
 import { extractRegions, composeFromTemplate } from '../panels/templates/propagate.js'
 import { showRecoveryDialog } from '../dialogs/recovery.js'
@@ -326,9 +328,9 @@ async function restoreSnapshot(manifestPath, snapshot) {
       return
     }
 
-    const touchedPages = overlaySnapshot(fresh, snapshot)
+    const { touchedPages, cssMigrated } = overlaySnapshot(fresh, snapshot)
     openIntoUi(fresh, firstRestoredPageName(fresh, snapshot))
-    remarkDirty(snapshot, touchedPages)
+    remarkDirty(snapshot, touchedPages, cssMigrated)
 
     const when = formatWhen(snapshot.savedAt)
     eventBus.emit('toast', { type: 'success', message: t('recovery.toast.restored', { when }) })
@@ -350,10 +352,12 @@ async function restoreSnapshot(manifestPath, snapshot) {
  * projectState). Pages/templates by name, library items by id; items missing
  * on disk are re-added (an unsaved new page exists only in memory). Then
  * replay library propagation for dirty items using the pure updateHtml
- * helper. Returns the Set of page names propagation touched.
+ * helper. Returns the Set of page names propagation touched, plus whether
+ * the snapshot's globalCSS needed the legacy url() migration.
  */
 function overlaySnapshot(fresh, snapshot) {
   const snap = snapshot.project
+  let cssMigrated = false
 
   for (const sp of snap.pages || []) {
     const page = (fresh.pages || []).find(p => p.name === sp.name)
@@ -377,7 +381,16 @@ function overlaySnapshot(fresh, snapshot) {
     if (item) { item.html = si.html; item.file = si.file || item.file }
     else (fresh.libraryItems = fresh.libraryItems || []).push(si)
   }
-  if (typeof snap.globalCSS === 'string') fresh.globalCSS = snap.globalCSS
+  if (typeof snap.globalCSS === 'string') {
+    // A snapshot written by an older build can carry the legacy
+    // site-root-relative url() shape that loadProject's one-shot migration
+    // (which already ran on `fresh`) would have converted — restoring it
+    // verbatim re-injects the un-migrated text and the next save persists
+    // urls that 404 in preview/export (nola1 acceptance §5, 2026-08-03).
+    const migration = migrateLegacyAssetUrls(snap.globalCSS)
+    fresh.globalCSS = migration.css
+    cssMigrated = migration.changed
+  }
   if (Array.isArray(snap.snippets)) fresh.snippets = snap.snippets
   // metadata only (name/favicon edits); structural manifest fields (pages[],
   // templates[]) are derived from the arrays above at save time.
@@ -418,7 +431,7 @@ function overlaySnapshot(fresh, snapshot) {
       }
     }
   }
-  return touchedPages
+  return { touchedPages, cssMigrated }
 }
 
 /** Route the restored project through the normal open path — no special repaint. */
@@ -437,7 +450,7 @@ function openIntoUi(fresh, pageName) {
  * directly — subscribers must hear project:dirty-changed; see the bypass-class
  * warning in project-state.js markAllClean).
  */
-function remarkDirty(snapshot, touchedPages) {
+function remarkDirty(snapshot, touchedPages, cssMigrated = false) {
   const dirty = snapshot.dirty || {}
   for (const name of new Set([...(dirty.pages || []), ...touchedPages])) {
     projectState.markPageDirty(name)
@@ -445,7 +458,10 @@ function remarkDirty(snapshot, touchedPages) {
   for (const name of dirty.templates || []) projectState.markTemplateDirty(name)
   for (const id of dirty.library || []) projectState.markLibraryDirty(id)
   for (const id of dirty.snippets || []) projectState.markSnippetsDirty(id)
-  if (dirty.globalCss) projectState.markCssDirty()
+  // cssMigrated: the overlay converted legacy url() shapes the snapshot
+  // carried — the buffer differs from disk even if the snapshot's own CSS
+  // was clean, so the next save must persist it.
+  if (dirty.globalCss || cssMigrated) projectState.markCssDirty()
   if (dirty.manifest) projectState.markManifestDirty()
 }
 
