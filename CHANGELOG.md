@@ -6,7 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-The `v0.1.0` release per `GRAPESTRAP_BUILD_PLAN_v5.md` — all feature waves (0–5A) landed 2026-07-12; this section becomes the v0.1.0 notes when the Wave 6 rc ladder tags. Deferred past v1: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
+Nothing yet.
+
+## [v0.1.0] — 2026-08-03
+
+The `v0.1.0` release per `GRAPESTRAP_BUILD_PLAN_v5.md` — feature waves 0–5 landed 2026-07-12/13, rc ladder rc.1→rc.3, workstation acceptance passed 2026-08-03. Deferred past v1: vite 5 → 8 (dev-server esbuild advisory; needs a vite-plugin-electron compat pass), grapesjs 0.21 → 0.23 (underscore pinned via npm overrides meanwhile).
 
 ### Added (BS5 template pack round 1 — Graphite starter + code-file editing, 2026-08-02)
 - **Graphite starter template**: the New Project dialog gains **Graphite** — a complete 5-page Bootstrap 5 site (fading hero carousel, sidebar layouts, elements page) that scaffolds with its own vendored Bootstrap/Font Awesome/webfonts, theme stylesheet, and behavior script. First of the BS5 template pack; ships as an in-app bundle (`starters/graphite/`, ~40 files including images and fonts).
