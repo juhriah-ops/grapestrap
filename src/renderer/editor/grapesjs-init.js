@@ -138,9 +138,26 @@ export function initGrapesJS(container) {
   // canvas top bar").
   editor.onReady(() => {
     for (const id of ['open-sm', 'open-tm', 'open-blocks']) {
+      // open-sm ships active:true, so its Classes/Style view is already
+      // appended into the views-container at render — removing the button
+      // alone strands that view there, permanently open with no way to
+      // close it (and eating canvas width).
+      editor.stopCommand(id)
       editor.Panels.removeButton('views', id)
     }
+    // Vendor ships the layers button togglable:false (vanilla UX switches
+    // between views, never closes). With it as the sole survivor it must
+    // toggle off, or the overlay could never be dismissed.
+    editor.Panels.getButton('views', 'open-layers')?.set('togglable', true)
   })
+
+  // Vendor CSS reserves a permanent --gjs-left-width (15%) column for the
+  // views-container, shrinking the canvas even when the Layer Manager is
+  // closed — badly so in split view. gjs-chrome.css gives the canvas the
+  // full pane and turns the container into a right-edge overlay gated by
+  // this class.
+  editor.on('run:open-layers',  () => container.classList.add('is-gjs-views-open'))
+  editor.on('stop:open-layers', () => container.classList.remove('is-gjs-views-open'))
 
   // Pump plugin-registered blocks into GrapesJS now that the editor exists.
   for (const block of pluginRegistry.blocks) {

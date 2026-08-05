@@ -1,0 +1,49 @@
+/* GrapeStrap — GrapesJS chrome overrides (canvas panel)
+
+   Vendor grapes.min.css reserves a permanent --gjs-left-width (15%) column
+   on the right of the editor for the views-container (Layer Manager et al),
+   shrinking the canvas even when nothing is open — badly so in split view.
+   GrapeStrap keeps only the Layer Manager there, so instead: the canvas and
+   top command bar take the full pane, and the views-container becomes a
+   right-edge OVERLAY that only exists while the Layer Manager toggle is on
+   (`is-gjs-views-open` on the design host, wired in grapesjs-init.js).
+
+   `!important` matters: vendor grapes.min.css is imported from JS, so vite
+   serves it AFTER these link-tag styles — vendor wins any equal-specificity
+   tie unless ours are promoted (same story as the GL rules in panels.css). */
+
+.gstrap-canvas-design .gjs-cv-canvas,
+.gstrap-canvas-design .gjs-pn-commands {
+  width: 100% !important;
+}
+
+/* One button lives here now (Layer Manager) — hug it instead of spanning
+   the vendor 15% column, and slide the options cluster next to it. */
+.gstrap-canvas-design .gjs-pn-views {
+  width: auto !important;
+  border-bottom: 0 !important;
+}
+.gstrap-canvas-design .gjs-pn-options {
+  right: 44px !important;
+}
+
+/* Closed = gone entirely; the canvas owns the full pane width. */
+.gstrap-canvas-design:not(.is-gjs-views-open) .gjs-pn-views-container {
+  display: none !important;
+}
+
+/* Open = overlay docked to the right edge, above the canvas, solid so the
+   layer tree stays readable over any page content. Starts BELOW the top
+   strip (vendor spans it from top:0 with a 42px padding shim) — otherwise
+   the overlay background covers the options + layers buttons themselves. */
+.gstrap-canvas-design .gjs-pn-views-container {
+  top: var(--gjs-canvas-top);
+  height: calc(100% - var(--gjs-canvas-top)) !important;
+  padding-top: 0 !important;
+  width: 260px !important;
+  max-width: 60%;
+  background: var(--bg-2) !important;
+  border-left: 1px solid var(--border);
+  box-shadow: -6px 0 14px rgba(0, 0, 0, 0.35) !important;
+  z-index: 5;
+}

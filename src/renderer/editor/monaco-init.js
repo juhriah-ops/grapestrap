@@ -100,7 +100,14 @@ export function registerForRelayout(editor) {
   if (!editor) return
   liveEditors.add(editor)
 
-  const node = typeof editor.getDomNode === 'function' ? editor.getDomNode() : null
+  // Observe the CONTAINER, not editor.getDomNode(): Monaco sizes its own
+  // node from the last layout() call, so it never grows when the pane does —
+  // an RO on it goes silent exactly when a GL splitter drag or split-view
+  // resize widens the pane (seen on nola1 as a dead strip right of the code,
+  // text clipping at the stale edge). The container tracks the pane.
+  const node = typeof editor.getContainerDomNode === 'function'
+    ? editor.getContainerDomNode()
+    : (typeof editor.getDomNode === 'function' ? editor.getDomNode() : null)
   let ro = null
   if (node && typeof ResizeObserver === 'function') {
     let pending = false
