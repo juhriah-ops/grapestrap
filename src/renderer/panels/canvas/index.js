@@ -34,6 +34,11 @@ import { propagateTemplate, templateRegionsMeta } from '../templates/propagate.j
 
 let monacoPair = null
 
+/** Menu-router Find/Replace needs the html editor to run Monaco actions on. */
+export function getMonacoPair() {
+  return monacoPair
+}
+
 // Living editor DOM (design slot + code slots), built on the first factory
 // run and re-parented on every subsequent one. Never rebuilt: rebuilding
 // would create a second GrapesJS editor + orphaned Monaco pair (the pre-fix

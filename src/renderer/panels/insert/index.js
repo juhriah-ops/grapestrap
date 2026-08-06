@@ -145,9 +145,14 @@ export function renderInsertPanel(host) {
     setTimeout(tick, 100)
   })
 
+  // Insert menu (menu-router) lands here. Mirror the click path in full —
+  // repaint the tab buttons and announce the change — or the content swaps
+  // while the old tab button stays highlighted.
   eventBus.on('insert:focus-tab', tab => {
     activeTab = tab
+    host.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('is-active', b.dataset.tab === activeTab))
     refreshContent(host)
+    eventBus.emit('insert:tab-changed', activeTab)
   })
 }
 

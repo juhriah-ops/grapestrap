@@ -43,6 +43,12 @@ import 'monaco-editor/esm/vs/basic-languages/php/php.contribution.js'
 // not full IntelliSense.
 import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js'
 
+// editor.api.js also ships ZERO editor-feature contributions. Find/Replace
+// (Edit menu + Ctrl+F/Ctrl+H via menu-router's cmdFind) needs the find
+// controller registered or editor.getAction('actions.find') returns null
+// and the whole feature is a silent no-op.
+import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController.js'
+
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { log } from '../log.js'
 

@@ -26,6 +26,10 @@ import { propagateLibraryItem } from '../panels/library-items/propagate.js'
 import { createPage, validateNewName } from '../panels/templates/manage.js'
 import { propagateTemplate, templateRegionsMeta, refreshPageRegionsSnapshot } from '../panels/templates/propagate.js'
 import { openPagePropertiesDialog } from '../dialogs/page-properties.js'
+import { openProjectSettingsDialog } from '../dialogs/project-settings.js'
+import { openFindInProjectDialog } from '../dialogs/find-in-project.js'
+import { getMonacoPair } from '../panels/canvas/index.js'
+import { getFileEditor } from '../editor/file-tabs.js'
 import { cmdPreviewBrowser } from '../preview.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
@@ -120,6 +124,7 @@ async function dispatchCommand(action, args = []) {
     case 'file:open-project':  return cmdOpenProject()
     case 'file:import-folder': return cmdImportFolder()
     case 'file:page-properties': return openPagePropertiesDialog()
+    case 'file:project-settings': return openProjectSettingsDialog()
     case 'file:save':          return cmdSave()
     case 'file:save-as':       return cmdSaveAs()
     case 'file:refresh':       return cmdRefresh()
@@ -133,6 +138,9 @@ async function dispatchCommand(action, args = []) {
     case 'edit:quick-tag':     return cmdQuickTag()
     case 'edit:wrap-tag':      return cmdWrapTag()
     case 'edit:preferences':   return eventBus.emit('dialog:preferences')
+    case 'edit:find':          return cmdFind(false)
+    case 'edit:replace':       return cmdFind(true)
+    case 'edit:find-in-project': return openFindInProjectDialog()
 
     case 'view:mode-design':   return cmdViewMode('design')
     case 'view:mode-code':     return cmdViewMode('code')
@@ -155,7 +163,20 @@ async function dispatchCommand(action, args = []) {
     case 'view:toggle-insert':
     case 'view:toggle-status':
     case 'view:toggle-dom-tree':
+    case 'view:toggle-linked-files':
+    case 'view:toggle-breakpoints':
+    case 'view:toggle-custom-css':
       return eventBus.emit(action)
+
+    // Insert menu items focus the matching Insert-panel tab. If the panel
+    // strip is hidden (View → Toggle Insert), un-hide it through the normal
+    // toggle path first so visibility prefs stay consistent — focusing a tab
+    // in a hidden panel would otherwise be a silent no-op.
+    case 'insert:focus-tab': {
+      const host = document.getElementById('gstrap-insert')
+      if (host?.hidden) eventBus.emit('view:toggle-insert')
+      return eventBus.emit('insert:focus-tab', args[0])
+    }
 
     case 'help:about':         return eventBus.emit('dialog:about')
     case 'help:docs':          return window.grapestrap.shell.openExternal('https://github.com/juhriah-ops/grapestrap/tree/main/docs')
@@ -392,6 +413,35 @@ function escAttr(s) {
 function selectFirst(editor, replaced) {
   const next = Array.isArray(replaced) ? replaced[0] : replaced
   if (next && typeof editor.select === 'function') editor.select(next)
+}
+
+// Edit → Find / Replace. The native-menu accelerators (Ctrl+F / Ctrl+H)
+// swallow those keys app-wide — before this was wired, Monaco's built-in
+// find widget could never open. Route the action back INTO the active
+// Monaco editor: the file tab's single editor, or the page pair's html
+// editor. Design view has no visible code pane, so switch to Split first
+// (canvas stays, code pane appears — least surprising place to land).
+async function cmdFind(replace) {
+  const tab = pageState.active()
+  if (!tab) {
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
+  }
+  let target
+  if (tab.kind === 'file') {
+    target = getFileEditor()
+  } else {
+    if (tab.viewMode === 'design') pageState.setViewMode(tab.pageName, 'split')
+    target = getMonacoPair()?.htmlEditor
+  }
+  if (!target) {
+    return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
+  }
+  // Double-rAF: after a design→split switch the code pane needs a layout
+  // pass before Monaco can position the find widget.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+  target.focus()
+  const actionId = replace ? 'editor.action.startFindReplaceAction' : 'actions.find'
+  target.getAction(actionId)?.run()
 }
 
 function cmdViewMode(mode) {

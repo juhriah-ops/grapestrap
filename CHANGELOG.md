@@ -6,7 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Nothing yet.
+### Added (menu-wiring sweep, 2026-08-06)
+- **Edit → Find / Replace work** (Ctrl+F / Ctrl+H): the menu accelerators had claimed those keys app-wide while routing to a "not yet wired" toast — so Monaco's find widget could never open anywhere. The actions now land in the active code editor (file tab or page HTML editor; Design view switches to Split first). Also registers Monaco's find contribution, which `editor.api.js` doesn't ship — without it the editor has no find action at all.
+- **Edit → Find in Project**: new dialog searching page, template, and library-item markup plus the global custom CSS. Live plain-text search with match-case toggle, capped at 200 announced results; clicking a markup hit opens that tab in Code view.
+- **File → Project Settings**: new dialog — rename the project's display name (status bar follows) and review manifest path, project folder, global stylesheet, created/last-saved timestamps, and content counts. Export preferences stay unexposed until the exporter honours them.
+- **Insert menu items** now focus the matching Insert-panel tab (un-hiding the panel if toggled off), with the tab highlight and `insert:tab-changed` matching a real click.
+- **View → Toggle Linked Files / Breakpoint Slider / Custom CSS** menu items now reach their (already-existing) panel handlers instead of the not-wired toast.
+
+Every native menu item now performs its action — nothing routes to the "not yet wired" fallback.
 
 ## [v0.1.0] — 2026-08-03
 

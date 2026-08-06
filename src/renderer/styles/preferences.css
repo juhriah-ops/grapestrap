@@ -317,3 +317,93 @@
   padding: 2px 4px;
 }
 .gstrap-pp-meta-table input { width: 100%; }
+
+/* ─── Project Settings dialog (File → Project Settings) ─────────────────── */
+.gstrap-ps-card { height: auto; max-height: 86vh; }
+.gstrap-ps-body {
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow-y: auto;
+}
+.gstrap-ps-info {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.gstrap-ps-info th {
+  text-align: left;
+  font-weight: normal;
+  white-space: nowrap;
+  vertical-align: top;
+  color: var(--text-3);
+  padding: 3px 12px 3px 0;
+}
+.gstrap-ps-info td { padding: 3px 0; word-break: break-all; }
+.gstrap-ps-info code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-2);
+}
+
+/* ─── Find in Project dialog (Edit → Find in Project) ───────────────────── */
+.gstrap-fip-card { height: min(560px, 86vh); }
+.gstrap-fip-body {
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  min-height: 0;
+}
+.gstrap-fip-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gstrap-fip-controls .gstrap-pp-input { flex: 1; }
+.gstrap-fip-case {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gstrap-fip-results {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-1);
+  min-height: 0;
+}
+.gstrap-fip-hit {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.gstrap-fip-hit:hover:not(:disabled) { background: var(--bg-3); }
+.gstrap-fip-hit:disabled { cursor: default; }
+.gstrap-fip-source {
+  flex-shrink: 0;
+  color: var(--accent);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gstrap-fip-line { color: var(--text-3); }
+.gstrap-fip-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

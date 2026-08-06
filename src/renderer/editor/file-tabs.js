@@ -54,6 +54,11 @@ export function isFileDirty(relPath) {
   return dirtyFiles.has(relPath)
 }
 
+/** Menu-router Find/Replace needs the live editor to run Monaco actions on. */
+export function getFileEditor() {
+  return fileEditor
+}
+
 /** Canvas panel hands us the monaco-file slot once, on first factory run. */
 export function mountFileTabHost(host) {
   hostEl = host
