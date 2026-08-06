@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added (code assist, 2026-08-06)
+- **Code completion while typing** in every code surface — Code view, Split view, Custom CSS panel, and file tabs. The html/css language services were already computing completions (tags, properties, values), but the Monaco suggest controller is a contribution `editor.api.js` doesn't ship, so no dropdown could ever render. Quick suggestions stay on inside strings so path-typing keeps suggesting.
+- **Image autocomplete inside css `url(...)`**: typing `background: url(` pops the project's images (Asset Manager cache — fresh drops appear without restart) and inserts the correct relative path for the stylesheet being edited — `../images/<name>` in the global stylesheet, document-relative `assets/images/<name>` in inline page styles, file-relative in css file tabs.
+- **Find in the Custom CSS panel**: Edit → Find / Replace (and Ctrl+F / Ctrl+H) now land in whichever editor holds the caret — including the Custom CSS panel — instead of always targeting the page editor; view mode is left alone when a focused editor is found. Find / Replace / Find in Project also joined the renderer keybinding map, the reliable shortcut path when native accelerators don't fire (auto-hide menu bar, iframe focus).
+
 ### Added (menu-wiring sweep, 2026-08-06)
 - **Edit → Find / Replace work** (Ctrl+F / Ctrl+H): the menu accelerators had claimed those keys app-wide while routing to a "not yet wired" toast — so Monaco's find widget could never open anywhere. The actions now land in the active code editor (file tab or page HTML editor; Design view switches to Split first). Also registers Monaco's find contribution, which `editor.api.js` doesn't ship — without it the editor has no find action at all.
 - **Edit → Find in Project**: new dialog searching page, template, and library-item markup plus the global custom CSS. Live plain-text search with match-case toggle, capped at 200 announced results; clicking a markup hit opens that tab in Code view.

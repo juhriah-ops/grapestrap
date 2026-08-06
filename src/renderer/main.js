@@ -50,6 +50,7 @@ import { renderStatusBar } from './status-bar/status-bar.js'
 import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
 import { wireMenuActions } from './shortcuts/menu-router.js'
+import { registerCssAssetCompletion } from './editor/css-asset-completion.js'
 import { wireKeybindings } from './shortcuts/keybindings.js'
 import { wireToasts } from './dialogs/toasts.js'
 import { openPreferencesDialog } from './dialogs/preferences.js'
@@ -62,6 +63,7 @@ import { buildTemplateMenuItems } from './panels/templates/context-items.js'
 import { createTemplate, deleteTemplate, createPage, detachActivePage } from './panels/templates/manage.js'
 import { propagateTemplate, extractRegions, composeFromTemplate } from './panels/templates/propagate.js'
 import { getCssEditor } from './panels/custom-css/index.js'
+import { getMonacoPair } from './panels/canvas/index.js'
 import { log } from './log.js'
 
 async function boot() {
@@ -105,6 +107,9 @@ async function boot() {
   wireKeybindings()
   wireToasts()
   wireViewToggles()
+  // Language-level provider (not per-editor): every css model — Custom CSS
+  // panel, page pair, css file tabs — gets url() image completion.
+  registerCssAssetCompletion()
   wireRecovery()
   wireTemplateLock()
   // Workspace layouts (Wave 3): seed the saved-name cache and push the list
@@ -195,7 +200,7 @@ boot().catch(err => {
 // not through this. Containment relies on preload-bridge-only IPC + sandbox +
 // contextIsolation, not on hiding this object.
 window.__gstrap = {
-  eventBus, projectState, pageState, pluginRegistry, getCssEditor, recoveryState,
+  eventBus, projectState, pageState, pluginRegistry, getCssEditor, getMonacoPair, recoveryState,
   i18n: { t, setLocale, getLocale, getAvailableLanguages, isReady },
   // Wave 2 test surface — templates.spec.js drives these; also handy in devtools.
   templates: {

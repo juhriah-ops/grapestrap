@@ -49,6 +49,13 @@ import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.
 // and the whole feature is a silent no-op.
 import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController.js'
 
+// Same story for code completion: the suggest controller is a contribution,
+// and without it the html/css language services above compute completions
+// nobody can see. The snippet controller comes along because the suggest
+// widget inserts accepted items through a snippet session.
+import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js'
+import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js'
+
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { log } from '../log.js'
 
@@ -89,7 +96,12 @@ const COMMON_OPTIONS = {
   // calls relayoutAllMonaco() (see registerForRelayout / golden-layout-config).
   automaticLayout: false,
   bracketPairColorization: { enabled: true },
-  guides: { bracketPairs: true, indentation: true }
+  guides: { bracketPairs: true, indentation: true },
+  // Monaco's default disables quick suggestions inside strings — but CSS
+  // url("…") is a string context, and the asset-path completion provider
+  // (css-asset-completion.js) lives exactly there. Keep suggestions flowing
+  // while the user types a path.
+  quickSuggestions: { other: true, comments: false, strings: true }
 }
 
 // Set of live Monaco editors. Anything created via createMonacoPair or
@@ -145,6 +157,22 @@ export function relayoutAllMonaco() {
   for (const ed of liveEditors) {
     try { ed.layout?.() } catch (_) { /* editor may be transitioning */ }
   }
+}
+
+// Whichever Monaco editor the caret is in right now — page pair, Custom CSS
+// panel, or a file tab. menu-router's cmdFind prefers this over the active
+// tab's editor so Ctrl+F lands where the user is actually typing.
+export function getFocusedMonacoEditor() {
+  // Text focus = caret in the code. Widget focus catches the editor's own
+  // overlays (an already-open find widget's input) so Ctrl+F there re-runs
+  // find in the same editor instead of falling back to the page editor.
+  for (const ed of liveEditors) {
+    try { if (ed.hasTextFocus?.()) return ed } catch (_) { /* transitioning */ }
+  }
+  for (const ed of liveEditors) {
+    try { if (ed.hasWidgetFocus?.()) return ed } catch (_) { /* transitioning */ }
+  }
+  return null
 }
 
 export function createMonacoPair(htmlContainer, cssContainer, { html = '', css = '' } = {}) {

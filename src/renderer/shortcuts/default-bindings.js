@@ -28,6 +28,9 @@ export const DEFAULT_BINDINGS = [
   { command: 'edit:undo',             label: 'Undo',                    key: 'z', ctrl: true, shift: false, alt: false },
   { command: 'edit:duplicate',        label: 'Duplicate',               key: 'd', ctrl: true, shift: false, alt: false },
   { command: 'edit:quick-tag',        label: 'Quick Tag Editor',        key: 't', ctrl: true, shift: false, alt: false },
+  { command: 'edit:find-in-project',  label: 'Find in Project',         key: 'f', ctrl: true, shift: true,  alt: false },
+  { command: 'edit:find',             label: 'Find',                    key: 'f', ctrl: true, shift: false, alt: false },
+  { command: 'edit:replace',          label: 'Replace',                 key: 'h', ctrl: true, shift: false, alt: false },
 
   // View
   { command: 'view:mode-design',      label: 'Design View',             key: '1', ctrl: true, shift: false, alt: false },

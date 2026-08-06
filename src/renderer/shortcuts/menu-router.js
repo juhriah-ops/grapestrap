@@ -30,6 +30,7 @@ import { openProjectSettingsDialog } from '../dialogs/project-settings.js'
 import { openFindInProjectDialog } from '../dialogs/find-in-project.js'
 import { getMonacoPair } from '../panels/canvas/index.js'
 import { getFileEditor } from '../editor/file-tabs.js'
+import { getFocusedMonacoEditor } from '../editor/monaco-init.js'
 import { cmdPreviewBrowser } from '../preview.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
@@ -417,19 +418,21 @@ function selectFirst(editor, replaced) {
 
 // Edit → Find / Replace. The native-menu accelerators (Ctrl+F / Ctrl+H)
 // swallow those keys app-wide — before this was wired, Monaco's built-in
-// find widget could never open. Route the action back INTO the active
-// Monaco editor: the file tab's single editor, or the page pair's html
-// editor. Design view has no visible code pane, so switch to Split first
-// (canvas stays, code pane appears — least surprising place to land).
+// find widget could never open. Route the action back INTO a Monaco editor:
+// whichever one holds the caret (page pair, Custom CSS panel, file tab), so
+// Ctrl+F in the Custom CSS panel searches THAT stylesheet. With no editor
+// focused, fall back to the active tab's code editor; Design view has no
+// visible code pane, so switch to Split first (canvas stays, code pane
+// appears — least surprising place to land).
 async function cmdFind(replace) {
   const tab = pageState.active()
   if (!tab) {
     return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   }
-  let target
-  if (tab.kind === 'file') {
+  let target = getFocusedMonacoEditor()
+  if (!target && tab.kind === 'file') {
     target = getFileEditor()
-  } else {
+  } else if (!target) {
     if (tab.viewMode === 'design') pageState.setViewMode(tab.pageName, 'split')
     target = getMonacoPair()?.htmlEditor
   }
