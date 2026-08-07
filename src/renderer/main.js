@@ -65,6 +65,7 @@ import { createTemplate, deleteTemplate, createPage, detachActivePage } from './
 import { propagateTemplate, extractRegions, composeFromTemplate } from './panels/templates/propagate.js'
 import { getCssEditor } from './panels/custom-css/index.js'
 import { getMonacoPair } from './panels/canvas/index.js'
+import { getFileEditor } from './editor/file-tabs.js'
 import { log } from './log.js'
 
 async function boot() {
@@ -204,7 +205,7 @@ boot().catch(err => {
 // not through this. Containment relies on preload-bridge-only IPC + sandbox +
 // contextIsolation, not on hiding this object.
 window.__gstrap = {
-  eventBus, projectState, pageState, pluginRegistry, getCssEditor, getMonacoPair, recoveryState,
+  eventBus, projectState, pageState, pluginRegistry, getCssEditor, getMonacoPair, getFileEditor, recoveryState,
   i18n: { t, setLocale, getLocale, getAvailableLanguages, isReady },
   // Wave 2 test surface — templates.spec.js drives these; also handy in devtools.
   templates: {

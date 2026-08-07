@@ -64,14 +64,18 @@ test('context-menu Find opens the find widget docked in the Custom CSS panel', a
   await appWindow.click('.gstrap-cssp-host .view-lines', { button: 'right' })
   await appWindow.waitForFunction(`(${menuLabels})() !== null`, null, { timeout: 5_000 })
   // Monaco's menu ignores synthetic mouse events; drive it like a user
-  // would with the keyboard. Group '2_gstrapfind' sorts before
-  // '9_cutcopypaste', so Find is the first focusable item.
-  const first = await appWindow.evaluate(() => {
-    const host = document.querySelector('.shadow-root-host')
-    return host.shadowRoot.querySelector('.monaco-menu .action-label')?.textContent.trim()
-  })
-  expect(first).toBe('Find')
-  await appWindow.keyboard.press('ArrowDown')
+  // would with the keyboard — ArrowDown until the focused item is Find
+  // (item count/order shifts as contributions come and go), then Enter.
+  let focusedIsFind = false
+  for (let i = 0; i < 12 && !focusedIsFind; i++) {
+    await appWindow.keyboard.press('ArrowDown')
+    focusedIsFind = await appWindow.evaluate(() => {
+      const host = document.querySelector('.shadow-root-host')
+      const focused = host?.shadowRoot?.querySelector('.monaco-menu .action-item.focused .action-label')
+      return focused?.textContent.trim() === 'Find'
+    })
+  }
+  expect(focusedIsFind).toBe(true)
   await appWindow.keyboard.press('Enter')
   // The find widget is the small popup docked to the editor's top-right —
   // assert it opened inside the Custom CSS panel host specifically.

@@ -6,6 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added (power-editing sweep, 2026-08-07)
+Nine more Monaco capabilities in every code editor, all previously missing because `editor.api.js` ships no contributions:
+- **Word navigation**: Ctrl+Left/Right word jumps and Ctrl+Backspace — these did nothing before.
+- **Inline color swatches** on every CSS color value, with a click-to-open picker (hover to reach it).
+- **Hover docs**: CSS property and HTML tag documentation tooltips.
+- **Bracket matching**: matching-pair highlight + Ctrl+Shift+\ jump.
+- **Multi-cursor**: Ctrl+D select-next-occurrence, Alt+Click extra carets.
+- **Line operations**: Alt+Up/Down move line, Shift+Alt+Up/Down copy line, Ctrl+Shift+K delete line.
+- **Folding**: collapse HTML sections and CSS rules.
+- **Comment toggle**: Ctrl+/ with html/css-aware syntax.
+- **Linked tag editing**: rename `<div>` and its `</div>` follows live — powered by a GrapeStrap provider (the bundled html service ships none). Also: Go to Definition appears in the code context menu (CSS service supports it).
+Deliberately skipped: `wordHighlighter` — verified inert with the bundled html/css language services.
+
 ### Added (context menus, 2026-08-07)
 - **Right-click Find / Replace in every code editor**: the context menu's Find and Replace items open the search popup docked to the editor's top-right corner — Code, Split, Custom CSS panel, and file tabs.
 - **Right-click Cut / Copy / Paste in every code editor** — Code, Split, the Custom CSS panel, and file tabs get Monaco's native context menu with working system-clipboard actions (the context-menu and clipboard contributions are two more pieces `editor.api.js` doesn't ship).

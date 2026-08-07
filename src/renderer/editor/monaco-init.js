@@ -64,10 +64,46 @@ import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.j
 import 'monaco-editor/esm/vs/editor/contrib/contextmenu/browser/contextmenu.js'
 import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard.js'
 
+// Power-editing tier (2026-08-07 sweep — paths match editor.all.js):
+// - wordOperations: Ctrl+Left/Right word jumps, Ctrl+Backspace — absent,
+//   these core-feeling keys simply did nothing.
+// - hover: css property / html tag docs tooltips from the language workers.
+// - colorPicker: inline color swatches + picker on every CSS color value
+//   (colorContributions renders decorators; the hover participant opens the
+//   picker — needs `hover` above).
+// - bracketMatching: matching-pair highlight + Ctrl+Shift+\ jump.
+// - multicursor: Ctrl+D add-next-occurrence, Alt+Click extra carets.
+// - linesOperations: Alt+Up/Down move line, Shift+Alt+Up/Down copy line,
+//   Ctrl+Shift+K delete line.
+// - folding: collapse html sections / css rules (language-service ranges,
+//   indentation fallback).
+// - comment: Ctrl+/ language-aware comment toggle.
+// - linkedEditing: rename an html tag and its pair follows (needs the
+//   linkedEditing option in COMMON_OPTIONS — default is OFF — plus the
+//   provider registered below; the html service ships none).
+// Deliberately NOT imported: wordHighlighter — verified inert with the
+// bundled html/css services (their documentHighlight providers never
+// resolve results, and a registered provider suppresses the textual
+// fallback). Re-evaluate on a monaco bump.
+import 'monaco-editor/esm/vs/editor/contrib/wordOperations/browser/wordOperations.js'
+import 'monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution.js'
+import 'monaco-editor/esm/vs/editor/contrib/colorPicker/browser/colorContributions.js'
+import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching.js'
+import 'monaco-editor/esm/vs/editor/contrib/multicursor/browser/multicursor.js'
+import 'monaco-editor/esm/vs/editor/contrib/linesOperations/browser/linesOperations.js'
+import 'monaco-editor/esm/vs/editor/contrib/folding/browser/folding.js'
+import 'monaco-editor/esm/vs/editor/contrib/comment/browser/comment.js'
+import 'monaco-editor/esm/vs/editor/contrib/linkedEditing/browser/linkedEditing.js'
+
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { attachTagAutoClose } from './tag-autoclose.js'
+import { registerHtmlLinkedEditing } from './html-linked-editing.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
+
+// Data source for the linkedEditing contribution above — the html service
+// registers no LinkedEditingRangeProvider of its own.
+registerHtmlLinkedEditing(monaco)
 
 // Worker registration must happen BEFORE any monaco.editor.create() call.
 self.MonacoEnvironment = {
@@ -111,7 +147,9 @@ const COMMON_OPTIONS = {
   // url("…") is a string context, and the asset-path completion provider
   // (css-asset-completion.js) lives exactly there. Keep suggestions flowing
   // while the user types a path.
-  quickSuggestions: { other: true, comments: false, strings: true }
+  quickSuggestions: { other: true, comments: false, strings: true },
+  // Paired-tag rename (linkedEditing contribution) ships default-OFF.
+  linkedEditing: true
 }
 
 // Set of live Monaco editors. Anything created via createMonacoPair or
