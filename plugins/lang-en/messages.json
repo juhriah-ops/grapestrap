@@ -100,6 +100,8 @@
   "ctx.wrap-tag": "Wrap with Tag…",
   "ctx.duplicate": "Duplicate",
   "ctx.copy-html": "Copy HTML",
+  "ctx.bs-docs": "More info: Bootstrap {topic}",
+  "ctx.bs-docs-none": "No Bootstrap docs for this class",
 
   "recovery.title": "Recover unsaved changes?",
   "recovery.intro": "GrapeStrap did not shut down cleanly. Unsaved changes for “{name}” were snapshotted before it closed.",

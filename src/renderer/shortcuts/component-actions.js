@@ -14,6 +14,7 @@
 import { eventBus } from '../state/event-bus.js'
 import { getEditor } from '../editor/grapesjs-init.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
+import { bsDocsForClasses } from '../../shared/bs-docs.js'
 import { t } from '../i18n.js'
 
 /**
@@ -116,7 +117,27 @@ export function buildComponentMenuItems(component) {
     { label: t('ctx.duplicate'), accelerator: 'Ctrl+D',       action: () => duplicateComponent(component), disabled: !component || isRoot || lockedCopy },
     { label: t('ctx.copy-html'), accelerator: 'Ctrl+C',       action: () => copyComponentHtml(component),  disabled: !component },
     { separator: true },
-    { label: t('action.delete'), accelerator: 'Del',          action: () => deleteComponent(component),    disabled: !component || isRoot || lockedRemove, danger: true }
+    { label: t('action.delete'), accelerator: 'Del',          action: () => deleteComponent(component),    disabled: !component || isRoot || lockedRemove, danger: true },
+    ...bsDocsMenuItems(component?.getClasses?.() || [])
+  ]
+}
+
+/**
+ * "More info" tail for context menus: one deep-link per Bootstrap topic the
+ * given classes belong to (col-md-6 → Columns, mt-3 → Spacing, …), capped
+ * by shared/bs-docs.js. Empty when nothing matches — no separator noise.
+ * Exported for the Properties-panel class chips, which build a menu for a
+ * single class name.
+ */
+export function bsDocsMenuItems(classes) {
+  const docs = bsDocsForClasses(classes)
+  if (docs.length === 0) return []
+  return [
+    { separator: true },
+    ...docs.map(d => ({
+      label: t('ctx.bs-docs', { topic: d.topic }),
+      action: () => window.grapestrap.shell.openExternal(d.url)
+    }))
   ]
 }
 

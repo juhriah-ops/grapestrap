@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added (context menus, 2026-08-07)
+- **Right-click Cut / Copy / Paste in every code editor** — Code, Split, the Custom CSS panel, and file tabs get Monaco's native context menu with working system-clipboard actions (the context-menu and clipboard contributions are two more pieces `editor.api.js` doesn't ship).
+- **"More info" Bootstrap docs links**: right-clicking an element on the canvas (or a class chip in the Properties panel) appends deep-links into the Bootstrap 5.3 docs for the classes it carries — `col-md-6` → Columns, `mt-3` → Spacing utilities, `btn-primary` → Buttons, ~45 topics mapped. Capped at 3 per menu; unrecognized classes on a chip get a clear "no docs" entry instead of silence.
+
 ### Added (code-view assists, 2026-08-06)
 - **Tag auto-close**: typing `<div>` in the html code editor (page pair or .html/.php file tabs) inserts `</div>` after the caret, caret left between the tags. Void elements (`<br>`, `<img>`, …), self-closed tags, and an already-present close are respected; js/css models and pasted text are untouched.
 - **Split view selection sync**: selecting an element on the canvas highlights that element's whole block in the code pane and scrolls it into view. Repeated identical sections resolve to the correct copy (document-order occurrence matching); the band re-maps on every canvas→code sync and clears on deselect, tab switch, or leaving Split.

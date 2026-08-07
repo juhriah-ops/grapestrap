@@ -18,6 +18,8 @@
 
 import { eventBus } from '../../state/event-bus.js'
 import { renderStyleManager } from '../style-manager/index.js'
+import { showContextMenu } from '../../dialogs/context-menu.js'
+import { bsDocsMenuItems } from '../../shortcuts/component-actions.js'
 import { t } from '../../i18n.js'
 
 let host = null
@@ -78,7 +80,7 @@ function renderForElement() {
     <section class="gstrap-props-section">
       <h4>${escHtml(t('props.classes'))}</h4>
       <div class="gstrap-class-chips">
-        ${classes.map(c => `<span class="gstrap-chip">${escHtml(c)}<button data-remove="${escAttr(c)}" title="${escAttr(t('action.remove'))}">×</button></span>`).join('')}
+        ${classes.map(c => `<span class="gstrap-chip" data-class="${escAttr(c)}">${escHtml(c)}<button data-remove="${escAttr(c)}" title="${escAttr(t('action.remove'))}">×</button></span>`).join('')}
         <input type="text" class="gstrap-chip-input" data-field="add-class" placeholder="${escAttr(t('props.add-class-placeholder'))}">
       </div>
     </section>
@@ -105,6 +107,19 @@ function renderForElement() {
       const cls = btn.dataset.remove
       currentComponent.setClass(currentComponent.getClasses().filter(c => c !== cls))
       renderForElement()
+    })
+  })
+
+  // Right-click a class chip → "More info" deep-link into the Bootstrap
+  // docs for that class (col-md-6 → Columns, …). Unrecognized classes get
+  // a disabled explainer instead of a silent no-op (house toast rule).
+  host.querySelectorAll('.gstrap-chip[data-class]').forEach(chip => {
+    chip.addEventListener('contextmenu', evt => {
+      evt.preventDefault()
+      const items = bsDocsMenuItems([chip.dataset.class])
+      showContextMenu(evt.clientX, evt.clientY, items.length > 0
+        ? items.filter(i => !i.separator)
+        : [{ label: t('ctx.bs-docs-none'), disabled: true, action: () => {} }])
     })
   })
 
