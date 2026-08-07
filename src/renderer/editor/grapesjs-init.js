@@ -23,6 +23,7 @@ import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
 import { initDragResize } from './drag-resize.js'
 import { rewriteCssUrls, stylesheetDirOf } from '../../shared/css-urls.js'
+import { stripBodyWrapper } from '../../shared/page-html.js'
 import { log } from '../log.js'
 
 // Framework assets (Bootstrap, Bootstrap Icons, Font Awesome) are NOT loaded
@@ -520,7 +521,10 @@ export function getCanvasHtml() {
   // Pretty-print here so every consumer (project save, tab swap capture,
   // code-view sync, export) gets the same readable output. GrapesJS's
   // getHtml() returns a single line; we format once at the boundary.
-  return formatHtml(editor.getHtml() || '')
+  // stripBodyWrapper: getHtml() wraps the serialization in a `<body>` tag,
+  // but fragments are body-INNER by contract — leaving it in nested a second
+  // <body> into every composed page (nola1 2026-08-07 "double body tags").
+  return formatHtml(stripBodyWrapper(editor.getHtml() || ''))
 }
 
 // getCanvasHtmlRaw — the un-formatted single-line output. Reserved for paths
@@ -528,5 +532,5 @@ export function getCanvasHtml() {
 // an explicit escape hatch).
 export function getCanvasHtmlRaw() {
   if (!editor) return ''
-  return editor.getHtml() || ''
+  return stripBodyWrapper(editor.getHtml() || '')
 }

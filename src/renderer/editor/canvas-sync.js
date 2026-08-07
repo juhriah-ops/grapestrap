@@ -24,7 +24,7 @@ import { getEditor } from './grapesjs-init.js'
 import { formatHtml } from './format-html.js'
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
-import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument } from '../../shared/page-html.js'
+import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument, stripBodyWrapper } from '../../shared/page-html.js'
 import { log } from '../log.js'
 
 let codeEditor = null
@@ -92,7 +92,8 @@ function syncCanvasToCode() {
   // via wrapper div, never standalone). Pretty-print on the way out so the
   // Code view stays readable.
   const tab = pageState.active()
-  const body = formatHtml(editor.getHtml())
+  // stripBodyWrapper: getHtml() wraps in <body>; fragments are body-inner.
+  const body = formatHtml(stripBodyWrapper(editor.getHtml()))
   let html = body
   // Only true PAGE tabs compose the full document; library AND template tabs
   // are body-only fragments by design (project-manager.js save comment).

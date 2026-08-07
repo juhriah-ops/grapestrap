@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - **Deselect All** in the code-editor right-click menu: drops extra cursors and collapses the selection to a single caret.
 
 ### Fixed (2026-08-07)
+- **Double `<body>` tags in every saved page** (nola1 report — and removing the extra tag in Code view never stuck). GrapesJS's `getHtml()` wraps its serialization in a `<body>` tag; the capture and code-sync boundaries stored it verbatim into the body-inner page fragment, and the page composer wrapped it again — so every page went to disk as `<body><body>…</body></body>`, the Code view showed both, and any hand-fix was overwritten by the next canvas→code sync. The wrapper is now stripped at every capture boundary, and **existing projects self-heal on open**: nested-body page files, and body-wrapped template/library files, are normalized when loaded and written clean on the next save.
 - **Ctrl+Z now undoes CODE edits when you're typing in a code editor** (nola1 report: "Ctrl+Z doesn't work in code view / feels inconsistent"). The global shortcut captured the key before Monaco saw it and always rewound the canvas undo stack — code edits were un-undoable and an unrelated canvas change could revert instead. Undo/redo now route to whichever editor holds the caret; design-view undo still drives the canvas UndoManager.
 
 ### Added (power-editing sweep, 2026-08-07)

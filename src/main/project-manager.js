@@ -33,7 +33,7 @@
 import { promises as fsp } from 'node:fs'
 import { dirname, join, basename, extname, resolve, relative, sep } from 'node:path'
 import { app } from 'electron'
-import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument } from '../shared/page-html.js'
+import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument, stripBodyWrapper } from '../shared/page-html.js'
 import { migrateLegacyAssetUrls } from '../shared/css-urls.js'
 import { copyFilesIdempotent } from './copy-tasks.js'
 import { getStarter, applyStarter } from './starters/index.js'
@@ -581,7 +581,10 @@ export async function loadProject(manifestPath) {
       // is impossible until the template is re-saved. The renderer toasts a
       // warning off the missingFile flag (renderer/main.js project:opened).
       try {
-        const html = await fsp.readFile(join(site, tpl.file), 'utf8')
+        // stripBodyWrapper: pre-fix builds captured GrapesJS's <body>-wrapped
+        // serialization into template files — heal on load (same policy as
+        // extractPageFromFullHtml for pages).
+        const html = stripBodyWrapper(await fsp.readFile(join(site, tpl.file), 'utf8'))
         return { ...tpl, html }
       } catch (err) {
         console.warn(`[grapestrap] template file unreadable: ${tpl.file} (${err?.code || err?.message})`)
@@ -591,7 +594,7 @@ export async function loadProject(manifestPath) {
   )
   const libraryItems = await Promise.all(
     (manifest.libraryItems || []).map(async item => {
-      const html = await fsp.readFile(join(site, item.file), 'utf8')
+      const html = stripBodyWrapper(await fsp.readFile(join(site, item.file), 'utf8'))
       return { ...item, html }
     })
   )

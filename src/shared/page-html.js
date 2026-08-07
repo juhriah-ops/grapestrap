@@ -182,16 +182,46 @@ export function extractPageFromFullHtml(fullHtml) {
   const html = String(fullHtml ?? '')
   const bodyMatch = /<body\b[^>]*>([\s\S]*)<\/body\s*>/i.exec(html)
   if (!bodyMatch) {
-    // No <body> tag → body-only fragment. Return as-is with empty head.
-    return { body: html, head: emptyHead() }
+    // No <body> tag → body-only fragment. Strip a stray wrapper anyway —
+    // fragments captured by pre-fix builds can carry one.
+    return { body: stripBodyWrapper(html), head: emptyHead() }
   }
-  // Trim trailing framework scripts injected by composeFullPageHtml.
+  // Trim trailing framework scripts injected by composeFullPageHtml, then
+  // heal nested wrappers: pre-fix builds captured GrapesJS's `<body>`-wrapped
+  // serialization into the fragment, and compose wrapped it AGAIN — every
+  // saved page carried `<body><body>`. Loading is the healing moment.
   const rawBody = bodyMatch[1]
-  const body = stripGstrapBodyTrailers(rawBody)
+  const body = stripBodyWrapper(stripGstrapBodyTrailers(rawBody))
 
   const headMatch = /<head\b[^>]*>([\s\S]*?)<\/head\s*>/i.exec(html)
   const headInner = headMatch ? headMatch[1] : ''
   return { body: body.trim() + '\n', head: parseHead(headInner) }
+}
+
+/**
+ * Unwrap top-level `<body …>…</body>` shells from a fragment, repeatedly.
+ *
+ * GrapesJS's editor.getHtml() wraps its serialization in a `<body>` tag, but
+ * every GrapeStrap fragment (page/template/library html in memory, on disk,
+ * and in the Code view) is body-INNER by contract — composeFullPageHtml adds
+ * the real tag at write time. Applied at the canvas capture boundary
+ * (grapesjs-init getCanvasHtml, canvas-sync) and at load (above + template/
+ * library reads) so legacy nested-body files self-heal. Anchored: a body tag
+ * that isn't the outermost shell (user content) is never touched.
+ */
+export function stripBodyWrapper(html) {
+  const original = String(html ?? '')
+  let out = original
+  let unwrapped = false
+  for (;;) {
+    const m = /^\s*<body\b[^>]*>([\s\S]*)<\/body\s*>\s*$/i.exec(out)
+    if (!m) break
+    out = m[1]
+    unwrapped = true
+  }
+  // Byte-identical pass-through when there was nothing to unwrap — callers
+  // (template/library load) compare fragments verbatim.
+  return unwrapped ? out.trim() : original
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

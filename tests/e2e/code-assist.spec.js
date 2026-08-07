@@ -110,6 +110,12 @@ test('css url() completion: global stylesheet gets ../images/…, inline page st
     const { pageState } = window.__gstrap
     pageState.setViewMode(pageState.active().pageName, 'split')
   })
+  // The switch fires an async canvas→code sync that REWRITES the pair's css
+  // model — on a slow runner it landed after our setValue and clobbered the
+  // test text (CI flake, run 31142164620). Wait for it to land first.
+  await appWindow.waitForFunction(() =>
+    (window.__gstrap.getMonacoPair()?.cssEditor?.getValue() || '').includes('box-sizing'),
+  null, { timeout: 10_000 })
   await appWindow.evaluate(() => {
     const ed = window.__gstrap.getMonacoPair().cssEditor
     ed.setValue('h1 { background: url(')
