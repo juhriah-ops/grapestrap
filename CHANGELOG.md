@@ -4,7 +4,7 @@ All notable changes to GrapeStrap will be documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning follows [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [v0.1.1] — 2026-08-07
 
 ### Added (2026-08-07)
 - **Deselect All** in the code-editor right-click menu: drops extra cursors and collapses the selection to a single caret.
