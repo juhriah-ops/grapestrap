@@ -39,7 +39,7 @@ const menuLabels = () => {
 async function expectMenuWithClipboard(appWindow) {
   await appWindow.waitForFunction(`(${menuLabels})() !== null`, null, { timeout: 5_000 })
   const labels = await appWindow.evaluate(menuLabels)
-  for (const want of ['Cut', 'Copy', 'Paste']) expect(labels).toContain(want)
+  for (const want of ['Cut', 'Copy', 'Paste', 'Find', 'Replace']) expect(labels).toContain(want)
   await appWindow.keyboard.press('Escape')
   await appWindow.waitForFunction(`(${menuLabels})() === null`, null, { timeout: 3_000 })
 }
@@ -53,6 +53,31 @@ test('right-click in the Split html editor and the Custom CSS editor shows Cut/C
   await appWindow.evaluate(() => document.querySelector('.lm_tab[title="Custom CSS"]')?.click())
   await appWindow.click('.gstrap-cssp-host .view-lines', { button: 'right' })
   await expectMenuWithClipboard(appWindow)
+
+  await app.close()
+})
+
+test('context-menu Find opens the find widget docked in the Custom CSS panel', async () => {
+  const { app, appWindow } = await seededSplit()
+
+  await appWindow.evaluate(() => document.querySelector('.lm_tab[title="Custom CSS"]')?.click())
+  await appWindow.click('.gstrap-cssp-host .view-lines', { button: 'right' })
+  await appWindow.waitForFunction(`(${menuLabels})() !== null`, null, { timeout: 5_000 })
+  // Monaco's menu ignores synthetic mouse events; drive it like a user
+  // would with the keyboard. Group '2_gstrapfind' sorts before
+  // '9_cutcopypaste', so Find is the first focusable item.
+  const first = await appWindow.evaluate(() => {
+    const host = document.querySelector('.shadow-root-host')
+    return host.shadowRoot.querySelector('.monaco-menu .action-label')?.textContent.trim()
+  })
+  expect(first).toBe('Find')
+  await appWindow.keyboard.press('ArrowDown')
+  await appWindow.keyboard.press('Enter')
+  // The find widget is the small popup docked to the editor's top-right —
+  // assert it opened inside the Custom CSS panel host specifically.
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('.gstrap-cssp-host .find-widget.visible'),
+    null, { timeout: 5_000 })
 
   await app.close()
 })

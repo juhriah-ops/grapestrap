@@ -66,6 +66,7 @@ import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard.js'
 
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { attachTagAutoClose } from './tag-autoclose.js'
+import { t } from '../i18n.js'
 import { log } from '../log.js'
 
 // Worker registration must happen BEFORE any monaco.editor.create() call.
@@ -171,6 +172,29 @@ export function relayoutAllMonaco() {
 // Whichever Monaco editor the caret is in right now — page pair, Custom CSS
 // panel, or a file tab. menu-router's cmdFind prefers this over the active
 // tab's editor so Ctrl+F lands where the user is actually typing.
+// Right-click Find/Replace: the find contribution registers the actions but
+// doesn't surface them in the context menu. Add explicit items — picked from
+// the menu they open the find widget, the small popup docked to the
+// editor's top-right corner. Labels resolve at attach time (all editors are
+// created after initI18n() in boot). Own menu group so they sit between the
+// navigation entries and Cut/Copy/Paste.
+export function attachFindContextItems(editor) {
+  editor.addAction({
+    id: 'gstrap.ctx-find',
+    label: t('menu.edit.find'),
+    contextMenuGroupId: '2_gstrapfind',
+    contextMenuOrder: 1,
+    run: ed => ed.getAction('actions.find')?.run()
+  })
+  editor.addAction({
+    id: 'gstrap.ctx-replace',
+    label: t('menu.edit.replace'),
+    contextMenuGroupId: '2_gstrapfind',
+    contextMenuOrder: 2,
+    run: ed => ed.getAction('editor.action.startFindReplaceAction')?.run()
+  })
+}
+
 export function getFocusedMonacoEditor() {
   // Text focus = caret in the code. Widget focus catches the editor's own
   // overlays (an already-open find widget's input) so Ctrl+F there re-runs
@@ -194,6 +218,8 @@ export function createMonacoPair(htmlContainer, cssContainer, { html = '', css =
   registerForRelayout(htmlEditor)
   registerForRelayout(cssEditor)
   attachTagAutoClose(htmlEditor)
+  attachFindContextItems(htmlEditor)
+  attachFindContextItems(cssEditor)
 
   return { htmlEditor, cssEditor, htmlModel, cssModel }
 }
@@ -209,6 +235,7 @@ export function createMonacoSingle(container) {
   // File tabs swap models of many languages through this one editor; the
   // hook checks the model's language per keystroke (html/php only).
   attachTagAutoClose(editor)
+  attachFindContextItems(editor)
   return editor
 }
 

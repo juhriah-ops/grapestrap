@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 ## [Unreleased]
 
 ### Added (context menus, 2026-08-07)
+- **Right-click Find / Replace in every code editor**: the context menu's Find and Replace items open the search popup docked to the editor's top-right corner — Code, Split, Custom CSS panel, and file tabs.
 - **Right-click Cut / Copy / Paste in every code editor** — Code, Split, the Custom CSS panel, and file tabs get Monaco's native context menu with working system-clipboard actions (the context-menu and clipboard contributions are two more pieces `editor.api.js` doesn't ship).
 - **"More info" Bootstrap docs links**: right-clicking an element on the canvas (or a class chip in the Properties panel) appends deep-links into the Bootstrap 5.3 docs for the classes it carries — `col-md-6` → Columns, `mt-3` → Spacing utilities, `btn-primary` → Buttons, ~45 topics mapped. Capped at 3 per menu; unrecognized classes on a chip get a clear "no docs" entry instead of silence.
 
