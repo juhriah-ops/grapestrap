@@ -333,12 +333,22 @@ async function cmdExport() {
   }
 }
 
+// Undo/redo route to WHERE THE USER IS EDITING. The renderer Ctrl+Z
+// keybinding captures the key before Monaco's own handler ever sees it, so
+// until this check existed, undo while typing in a code editor rewound the
+// CANVAS undo stack instead of the code — the nola1 "Ctrl+Z doesn't work in
+// code view / feels inconsistent" report. Focused Monaco → model undo;
+// otherwise the GrapesJS component UndoManager (design view).
 function cmdUndo() {
+  const focused = getFocusedMonacoEditor()
+  if (focused) return focused.trigger('gstrap', 'undo', {})
   const um = pluginRegistry.bound.editor?.UndoManager
   if (!um) return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   um.undo()
 }
 function cmdRedo() {
+  const focused = getFocusedMonacoEditor()
+  if (focused) return focused.trigger('gstrap', 'redo', {})
   const um = pluginRegistry.bound.editor?.UndoManager
   if (!um) return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   um.redo()

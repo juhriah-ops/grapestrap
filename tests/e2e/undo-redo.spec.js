@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject, selectFirstByTag } from './helpers.js'
+import { launch, openSeedProject, selectFirstByTag, dismissWelcome } from './helpers.js'
 
 const canvasHtml = appWindow => appWindow.evaluate(
   () => window.__gstrap.pluginRegistry.bound?.editor?.getHtml() || '')
@@ -201,4 +201,72 @@ test('Undo/redo: undo does not leak content across page tabs', async () => {
   expect(aboutOnDisk).toContain(SENT_B)
 
   await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+// Regression (nola1 2026-08-07): the renderer Ctrl+Z keybinding captures the
+// key before Monaco sees it and edit:undo always rewound the CANVAS undo
+// stack — typing in a code editor could not be undone, and a stray canvas
+// change got undone instead. cmdUndo/cmdRedo now route to the focused
+// Monaco editor first.
+test('Undo/redo in a focused code editor rewinds the code, not the canvas', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-undo-code-'))
+  const { app, appWindow } = await launch()
+  await dismissWelcome(appWindow)
+  await openSeedProject(appWindow, join(projectDir, 'undocode.gstrap'))
+
+  const SENTINEL = 'canvas-must-survive'
+  await appWindow.evaluate(s => {
+    window.__gstrap.pluginRegistry.bound.editor.getWrapper()
+      .append(`<p data-testid="u2">${s}</p>`)
+  }, SENTINEL)
+
+  // Type in the Custom CSS editor, then undo through the REAL command route.
+  await appWindow.evaluate(() => document.querySelector('.lm_tab[title="Custom CSS"]')?.click())
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.getCssEditor()
+    ed.setValue('')
+    ed.setPosition({ lineNumber: 1, column: 1 })
+    ed.focus()
+    ed.trigger('keyboard', 'type', { text: '.typed-marker { color: red; }' })
+  })
+  // Auto-closing brackets split the typed burst into a few undo stops —
+  // undo like a user would, until the typing is gone (bounded). The point
+  // under test is ROUTING: every undo lands in the css model, none in the
+  // canvas stack.
+  for (let i = 0; i < 6; i++) {
+    const gone = await appWindow.evaluate(() => {
+      window.__gstrap.eventBus.emit('command', 'edit:undo')
+      return !window.__gstrap.getCssEditor().getValue().includes('.typed-marker')
+    })
+    if (gone) break
+  }
+  const afterUndo = await appWindow.evaluate(() => ({
+    css: window.__gstrap.getCssEditor().getValue(),
+    canvas: window.__gstrap.pluginRegistry.bound.editor.getHtml()
+  }))
+  expect(afterUndo.css).not.toContain('.typed-marker')
+  expect(afterUndo.canvas).toContain(SENTINEL)   // canvas stack untouched
+
+  for (let i = 0; i < 6; i++) {
+    const back = await appWindow.evaluate(() => {
+      window.__gstrap.eventBus.emit('command', 'edit:redo')
+      return window.__gstrap.getCssEditor().getValue().includes('.typed-marker')
+    })
+    if (back) break
+  }
+  const afterRedo = await appWindow.evaluate(() => window.__gstrap.getCssEditor().getValue())
+  expect(afterRedo).toContain('.typed-marker')
+
+  // Design-view undo still drives the GrapesJS UndoManager: blur the code
+  // editor, undo, the canvas append reverts.
+  await appWindow.evaluate(() => {
+    const active = document.activeElement
+    if (active?.blur) active.blur()
+  })
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('command', 'edit:undo'))
+  const canvasAfter = await appWindow.evaluate(
+    () => window.__gstrap.pluginRegistry.bound.editor.getHtml())
+  expect(canvasAfter).not.toContain(SENTINEL)
+
+  await app.close()
 })

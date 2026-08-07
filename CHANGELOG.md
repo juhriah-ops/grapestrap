@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added (2026-08-07)
+- **Deselect All** in the code-editor right-click menu: drops extra cursors and collapses the selection to a single caret.
+
+### Fixed (2026-08-07)
+- **Ctrl+Z now undoes CODE edits when you're typing in a code editor** (nola1 report: "Ctrl+Z doesn't work in code view / feels inconsistent"). The global shortcut captured the key before Monaco saw it and always rewound the canvas undo stack — code edits were un-undoable and an unrelated canvas change could revert instead. Undo/redo now route to whichever editor holds the caret; design-view undo still drives the canvas UndoManager.
+
 ### Added (power-editing sweep, 2026-08-07)
 Nine more Monaco capabilities in every code editor, all previously missing because `editor.api.js` ships no contributions:
 - **Word navigation**: Ctrl+Left/Right word jumps and Ctrl+Backspace — these did nothing before.
