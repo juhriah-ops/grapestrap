@@ -39,7 +39,7 @@ const menuLabels = () => {
 async function expectMenuWithClipboard(appWindow) {
   await appWindow.waitForFunction(`(${menuLabels})() !== null`, null, { timeout: 5_000 })
   const labels = await appWindow.evaluate(menuLabels)
-  for (const want of ['Cut', 'Copy', 'Paste', 'Find', 'Replace']) expect(labels).toContain(want)
+  for (const want of ['Cut', 'Copy', 'Paste', 'Find', 'Replace', 'Deselect All']) expect(labels).toContain(want)
   await appWindow.keyboard.press('Escape')
   await appWindow.waitForFunction(`(${menuLabels})() === null`, null, { timeout: 3_000 })
 }
@@ -82,6 +82,29 @@ test('context-menu Find opens the find widget docked in the Custom CSS panel', a
   await appWindow.waitForFunction(
     () => !!document.querySelector('.gstrap-cssp-host .find-widget.visible'),
     null, { timeout: 5_000 })
+
+  await app.close()
+})
+
+test('Deselect All collapses multi-cursor selections to a single caret', async () => {
+  const { app, appWindow } = await seededSplit()
+
+  await appWindow.evaluate(() => document.querySelector('.lm_tab[title="Custom CSS"]')?.click())
+  const state = await appWindow.evaluate(async () => {
+    const ed = window.__gstrap.getCssEditor()
+    ed.setValue('.hero { color: red; }\n.footer { color: red; }\n')
+    ed.focus()
+    // Two cursors with selections via Ctrl+D on 'color'.
+    ed.setSelection({ startLineNumber: 1, startColumn: 9, endLineNumber: 1, endColumn: 14 })
+    ed.trigger('e2e', 'editor.action.addSelectionToNextFindMatch', {})
+    const before = ed.getSelections().length
+    await ed.getAction('gstrap.ctx-deselect').run()
+    const after = ed.getSelections()
+    return { before, after: after.length, empty: after[0].isEmpty() }
+  })
+  expect(state.before).toBe(2)
+  expect(state.after).toBe(1)
+  expect(state.empty).toBe(true)
 
   await app.close()
 })

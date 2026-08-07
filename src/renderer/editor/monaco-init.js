@@ -210,13 +210,14 @@ export function relayoutAllMonaco() {
 // Whichever Monaco editor the caret is in right now — page pair, Custom CSS
 // panel, or a file tab. menu-router's cmdFind prefers this over the active
 // tab's editor so Ctrl+F lands where the user is actually typing.
-// Right-click Find/Replace: the find contribution registers the actions but
-// doesn't surface them in the context menu. Add explicit items — picked from
-// the menu they open the find widget, the small popup docked to the
-// editor's top-right corner. Labels resolve at attach time (all editors are
-// created after initI18n() in boot). Own menu group so they sit between the
-// navigation entries and Cut/Copy/Paste.
-export function attachFindContextItems(editor) {
+// GrapeStrap's own context-menu tail for every code editor: Find/Replace
+// (the find contribution registers the actions but doesn't surface them in
+// the menu — picked, they open the find widget docked to the editor's
+// top-right) and Deselect All (collapses every extra cursor and selection
+// back to a single caret; Monaco ships no menu item for it). Labels resolve
+// at attach time (all editors are created after initI18n() in boot). Own
+// menu groups so they sit between the navigation entries and Cut/Copy/Paste.
+export function attachEditorContextItems(editor) {
   editor.addAction({
     id: 'gstrap.ctx-find',
     label: t('menu.edit.find'),
@@ -230,6 +231,18 @@ export function attachFindContextItems(editor) {
     contextMenuGroupId: '2_gstrapfind',
     contextMenuOrder: 2,
     run: ed => ed.getAction('editor.action.startFindReplaceAction')?.run()
+  })
+  editor.addAction({
+    id: 'gstrap.ctx-deselect',
+    label: t('ctx.deselect-all'),
+    contextMenuGroupId: '3_gstrapselect',
+    contextMenuOrder: 1,
+    run: ed => {
+      // Drop secondary cursors first, then collapse the surviving
+      // selection to its caret. Both are no-ops when nothing is selected.
+      ed.trigger('gstrap', 'removeSecondaryCursors', {})
+      ed.trigger('gstrap', 'cancelSelection', {})
+    }
   })
 }
 
@@ -256,8 +269,8 @@ export function createMonacoPair(htmlContainer, cssContainer, { html = '', css =
   registerForRelayout(htmlEditor)
   registerForRelayout(cssEditor)
   attachTagAutoClose(htmlEditor)
-  attachFindContextItems(htmlEditor)
-  attachFindContextItems(cssEditor)
+  attachEditorContextItems(htmlEditor)
+  attachEditorContextItems(cssEditor)
 
   return { htmlEditor, cssEditor, htmlModel, cssModel }
 }
@@ -273,7 +286,7 @@ export function createMonacoSingle(container) {
   // File tabs swap models of many languages through this one editor; the
   // hook checks the model's language per keystroke (html/php only).
   attachTagAutoClose(editor)
-  attachFindContextItems(editor)
+  attachEditorContextItems(editor)
   return editor
 }
 

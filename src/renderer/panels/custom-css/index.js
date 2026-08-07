@@ -22,7 +22,7 @@
  * liveEditors) is structurally impossible. Event subscriptions are wire-once.
  */
 
-import { monaco, registerForRelayout, attachFindContextItems } from '../../editor/monaco-init.js'
+import { monaco, registerForRelayout, attachEditorContextItems } from '../../editor/monaco-init.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 
@@ -64,7 +64,7 @@ export function renderCustomCss(host) {
     scrollBeyondLastLine: false
   })
   registerForRelayout(cssEditor)
-  attachFindContextItems(cssEditor)
+  attachEditorContextItems(cssEditor)
 
   // Live preview: every edit updates projectState.current.globalCSS AND
   // emits 'project:css-changed' (debounced). grapesjs-init listens on that
