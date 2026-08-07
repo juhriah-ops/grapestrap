@@ -6,6 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Fixed (project switching, 2026-08-06)
+- **Opening a project while another is open now actually switches** (nola1 report: Custom CSS followed the new project but the canvas kept showing the old one, and further opens changed nothing). `projectState.set()` never tore the outgoing project down: its tabs survived, and since most projects name their first page `index`, opening the new project re-focused the stale tab and the canvas swap's same-name guard skipped the load. Worse, the next tab switch could capture the old project's canvas into the new project's same-named page. `set()` over an open project now runs the full close (tabs closed with capture into the outgoing project, canvas blanked, file-tab Monaco models disposed via `project:closed` — which previously never fired anywhere). Git status re-pulls on open so the switched-to project's branch cell paints immediately.
+
 ### Added (code assist, 2026-08-06)
 - **Code completion while typing** in every code surface — Code view, Split view, Custom CSS panel, and file tabs. The html/css language services were already computing completions (tags, properties, values), but the Monaco suggest controller is a contribution `editor.api.js` doesn't ship, so no dropdown could ever render. Quick suggestions stay on inside strings so path-typing keeps suggesting.
 - **Image autocomplete inside css `url(...)`**: typing `background: url(` pops the project's images (Asset Manager cache — fresh drops appear without restart) and inserts the correct relative path for the stylesheet being edited — `../images/<name>` in the global stylesheet, document-relative `assets/images/<name>` in inline page styles, file-relative in css file tabs.

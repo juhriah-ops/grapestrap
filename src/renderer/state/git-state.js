@@ -30,4 +30,12 @@ export function initGitState() {
     gitState.latest = null
     eventBus.emit('git:status-changed', null)
   })
+  // Project switch: main pushes the new project's status while its open IPC
+  // is still in flight — BEFORE projectState.set() runs the old project's
+  // teardown (its project:closed just wiped gitState). Pull once on opened
+  // so the incoming project's cell paints without waiting for a watcher
+  // event. Fire-and-forget: a non-repo project resolves to {repo:false}.
+  eventBus.on('project:opened', () => {
+    window.grapestrap.git.refresh().catch(() => {})
+  })
 }

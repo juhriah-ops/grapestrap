@@ -13,6 +13,7 @@
  */
 
 import { eventBus } from './event-bus.js'
+import { pageState } from './page-state.js'
 
 class ProjectState {
   constructor() {
@@ -25,7 +26,16 @@ class ProjectState {
     this.manifestDirty = false  // metadata changes (favicon, etc.)
   }
 
+  // Opening over an already-open project is a real switch: tear the old one
+  // down first. Without this, the outgoing project's tabs survived — and
+  // since most projects name their first page "index", pageState.open() on
+  // the new project re-focused the STALE tab, swapToTab's same-name guard
+  // skipped the canvas load (old project kept showing), and the next tab
+  // switch captured the old canvas into the NEW project's same-named page.
+  // Reported on nola1 2026-08-06: "opened another project — Custom CSS
+  // updated but design view is still the last project".
   set(project) {
+    if (this.current) this.clear()
     this.current = project
     this.dirtyPages.clear()
     this.dirtyTemplates.clear()
@@ -38,6 +48,13 @@ class ProjectState {
 
   clear() {
     const had = !!this.current
+    // Close tabs BEFORE dropping current: each close's capture-on-switch
+    // writes into the outgoing project's objects (then discarded with it),
+    // never into the incoming one. project:closed after teardown blanks the
+    // canvas and disposes file-tab Monaco models (editor/file-tabs.js) —
+    // models are keyed by site-relative path, so they'd otherwise resurface
+    // verbatim in the next project's same-named files.
+    pageState.closeAll()
     this.current = null
     this.dirtyPages.clear()
     this.dirtyTemplates.clear()
