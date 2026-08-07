@@ -51,6 +51,7 @@ import { renderInsertPanel } from './panels/insert/index.js'
 import { renderPropertyStrip } from './panels/properties-strip/index.js'
 import { wireMenuActions } from './shortcuts/menu-router.js'
 import { registerCssAssetCompletion } from './editor/css-asset-completion.js'
+import { wireCodeSelectHighlight } from './editor/code-select-highlight.js'
 import { wireKeybindings } from './shortcuts/keybindings.js'
 import { wireToasts } from './dialogs/toasts.js'
 import { openPreferencesDialog } from './dialogs/preferences.js'
@@ -110,6 +111,9 @@ async function boot() {
   // Language-level provider (not per-editor): every css model — Custom CSS
   // panel, page pair, css file tabs — gets url() image completion.
   registerCssAssetCompletion()
+  // Split view: canvas selection → highlight the element's block in the
+  // code pane (Dreamweaver contract).
+  wireCodeSelectHighlight()
   wireRecovery()
   wireTemplateLock()
   // Workspace layouts (Wave 3): seed the saved-name cache and push the list

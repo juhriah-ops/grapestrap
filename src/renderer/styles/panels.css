@@ -208,3 +208,10 @@
   padding: 0 4px;
   line-height: 1;
 }
+
+/* Design-selection highlight band in the Split-view code pane
+   (editor/code-select-highlight.js Monaco decoration). */
+.gstrap-code-sel-highlight {
+  background: rgba(63, 185, 80, 0.16);
+  border-radius: 2px;
+}

@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added (code-view assists, 2026-08-06)
+- **Tag auto-close**: typing `<div>` in the html code editor (page pair or .html/.php file tabs) inserts `</div>` after the caret, caret left between the tags. Void elements (`<br>`, `<img>`, …), self-closed tags, and an already-present close are respected; js/css models and pasted text are untouched.
+- **Split view selection sync**: selecting an element on the canvas highlights that element's whole block in the code pane and scrolls it into view. Repeated identical sections resolve to the correct copy (document-order occurrence matching); the band re-maps on every canvas→code sync and clears on deselect, tab switch, or leaving Split.
+
 ### Fixed (project switching, 2026-08-06)
 - **Opening a project while another is open now actually switches** (nola1 report: Custom CSS followed the new project but the canvas kept showing the old one, and further opens changed nothing). `projectState.set()` never tore the outgoing project down: its tabs survived, and since most projects name their first page `index`, opening the new project re-focused the stale tab and the canvas swap's same-name guard skipped the load. Worse, the next tab switch could capture the old project's canvas into the new project's same-named page. `set()` over an open project now runs the full close (tabs closed with capture into the outgoing project, canvas blanked, file-tab Monaco models disposed via `project:closed` — which previously never fired anywhere). Git status re-pulls on open so the switched-to project's branch cell paints immediately.
 

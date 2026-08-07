@@ -57,6 +57,7 @@ import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js
 import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js'
 
 import { pluginRegistry } from '../plugin-host/registry.js'
+import { attachTagAutoClose } from './tag-autoclose.js'
 import { log } from '../log.js'
 
 // Worker registration must happen BEFORE any monaco.editor.create() call.
@@ -184,6 +185,7 @@ export function createMonacoPair(htmlContainer, cssContainer, { html = '', css =
 
   registerForRelayout(htmlEditor)
   registerForRelayout(cssEditor)
+  attachTagAutoClose(htmlEditor)
 
   return { htmlEditor, cssEditor, htmlModel, cssModel }
 }
@@ -196,6 +198,9 @@ export function createMonacoPair(htmlContainer, cssContainer, { html = '', css =
 export function createMonacoSingle(container) {
   const editor = monaco.editor.create(container, { ...COMMON_OPTIONS, model: null })
   registerForRelayout(editor)
+  // File tabs swap models of many languages through this one editor; the
+  // hook checks the model's language per keystroke (html/php only).
+  attachTagAutoClose(editor)
   return editor
 }
 
