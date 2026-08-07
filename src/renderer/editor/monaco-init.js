@@ -52,9 +52,17 @@ import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController.js'
 // Same story for code completion: the suggest controller is a contribution,
 // and without it the html/css language services above compute completions
 // nobody can see. The snippet controller comes along because the suggest
-// widget inserts accepted items through a snippet session.
+// widget inserts accepted items through a suggest session.
 import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js'
 import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js'
+
+// Right-click Cut / Copy / Paste in every code editor (Code, Split, Custom
+// CSS panel, file tabs). contextmenu renders Monaco's own menu; clipboard
+// registers the three actions it lists (paste reads through
+// navigator.clipboard — Electron grants clipboard access by default, no
+// permission handler needed).
+import 'monaco-editor/esm/vs/editor/contrib/contextmenu/browser/contextmenu.js'
+import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard.js'
 
 import { pluginRegistry } from '../plugin-host/registry.js'
 import { attachTagAutoClose } from './tag-autoclose.js'
