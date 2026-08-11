@@ -66,6 +66,7 @@ import { propagateTemplate, extractRegions, composeFromTemplate } from './panels
 import { getCssEditor } from './panels/custom-css/index.js'
 import { getMonacoPair } from './panels/canvas/index.js'
 import { getFileEditor } from './editor/file-tabs.js'
+import { wrapperIndexForY, decideDropPlacement, isContainerTag, CONTAINER_TAGS } from './editor/placement.js'
 import { log } from './log.js'
 
 async function boot() {
@@ -220,5 +221,10 @@ window.__gstrap = {
   preview: previewTestSurface,
   // Wave 3 test surface — git-status.spec.js reads the latest pushed payload
   // (refresh itself is driven through the public window.grapestrap.git bridge).
-  git: gitState
+  git: gitState,
+  // Chunk A2/A3 test surface — insert-zones.spec.js computes expected
+  // placements independently (from rects it reads via getBoundingClientRect
+  // inside the same evaluate() call) using the SAME pure functions the app
+  // uses, rather than duplicating the zone math in the spec file.
+  placement: { wrapperIndexForY, decideDropPlacement, isContainerTag, containerTags: [...CONTAINER_TAGS] }
 }

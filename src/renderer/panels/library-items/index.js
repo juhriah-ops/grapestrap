@@ -1,6 +1,17 @@
 /**
  * GrapeStrap — Library Items panel
  *
+ * PATH: src/renderer/panels/library-items/index.js
+ * ROLE: Left-column panel listing library items in the active project —
+ *       create/insert/edit/rename/delete, and the propagate-on-save wiring.
+ * DEPENDS: state/project-state.js, state/page-state.js, state/event-bus.js,
+ *          editor/grapesjs-init.js, editor/placement.js, dialogs/text-prompt.js,
+ *          ./lock.js, ./propagate.js, i18n.js
+ * CREATED: 2026-05-04
+ * UPDATED: 2026-08-11 — cmdInsert now goes through the shared
+ *          resolvePlacement/insertAtPlacement (editor/placement.js) instead
+ *          of a locally-duplicated CONTAINER_TAGS/append-at-anchor copy.
+ *
  * Lists all library items in the active project. From here the user can:
  *   - "+ New" — create an empty item, give it a name, opens it in a new
  *     canvas tab so they can build the content.
@@ -9,7 +20,7 @@
  *     instance referencing the new item.
  *   - "Insert" on a row — inserts the item into the active page at the
  *     selection point (anchor-aware, mirrors the Insert panel placement
- *     rules).
+ *     rules via editor/placement.js).
  *   - Double-click a row — opens the item in a canvas tab.
  *   - Right-click a row — Rename / Delete.
  *
@@ -25,6 +36,7 @@ import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { resolvePlacement, insertAtPlacement, tagOf } from '../../editor/placement.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
 import { wireLibraryLock } from './lock.js'
 import { propagateLibraryItem } from './propagate.js'
@@ -162,21 +174,8 @@ function cmdInsert(id) {
   const item = projectState.current.libraryItems.find(it => it.id === id)
   if (!item) return
   const html = makeWrapperHtml(item, item.html || '')
-  const anchor = editor.getSelected?.()
-  const wrapper = editor.getWrapper()
-  let added
-  if (!anchor || anchor === wrapper) {
-    added = wrapper.append(html)
-  } else {
-    const tag = tagOf(anchor)
-    if (CONTAINER_TAGS.has(tag)) {
-      added = anchor.append(html)
-    } else {
-      const parent = anchor.parent?.() || wrapper
-      const idx = parent.components().indexOf(anchor)
-      added = parent.append(html, { at: idx + 1 })
-    }
-  }
+  const placement = resolvePlacement(editor, editor.getSelected?.())
+  const { added } = insertAtPlacement(editor, placement, html)
   const first = Array.isArray(added) ? added[0] : added
   if (first) editor.select(first)
   eventBus.emit('canvas:content-changed')
@@ -268,15 +267,6 @@ function requireProject() {
   }
   return true
 }
-
-function tagOf(component) {
-  return (component.get?.('tagName') || '').toLowerCase()
-}
-
-const CONTAINER_TAGS = new Set([
-  'div', 'section', 'article', 'main', 'aside',
-  'header', 'footer', 'nav', 'form', 'ul', 'ol'
-])
 
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c])

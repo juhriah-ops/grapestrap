@@ -5,6 +5,14 @@
  * ROLE: Insert panel: tile click, placement rules, drag-and-drop, and insert flash specs
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-11 — DnD synthetic events now carry real clientX/clientY
+ *          (chunk A2 replaced coordinate-agnostic placement with drop
+ *          zones); leaf-anchor preview assertions moved from the dashed
+ *          .gstrap-drop-target outline to the new .gstrap-insert-line
+ *          (leaves no longer get the dashed outline — see
+ *          editor/placement.js); added a wrapper-landing flash case and a
+ *          body-drop index assertion. Alt+Click zone coverage lives in the
+ *          new tests/e2e/insert-zones.spec.js, not here.
  */
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
@@ -59,7 +67,10 @@ test('Insert panel: clicking a tile inserts the block into the canvas', async ()
 
 test('Insert placement: container selection appends INSIDE; leaf selection inserts AFTER', async () => {
   // Regression for "not consistent on what it attaches to". Verifies the
-  // 2026-05-03 placement rule:
+  // 2026-05-03 placement rule (now editor/placement.js's no-coordinate,
+  // no-before-flag branch — the default click behavior is unchanged by
+  // chunks A1-A3; Alt+Click's `before: true` variant is covered in
+  // insert-zones.spec.js):
   //   - select <main> (container)  → next insert appends INSIDE main
   //   - select <h1>   (leaf)       → next insert lands as a sibling AFTER
   //                                  the h1, inside its parent.
@@ -145,6 +156,13 @@ test('Insert DnD: drop on a container appends inside; drop on a leaf appends as 
   // drag/drop events with a real DataTransfer in the iframe document.
   // The placement logic + drop preview class wiring still get exercised
   // end-to-end inside the renderer process.
+  //
+  // Since chunk A2, the drop zone depends on WHERE inside the target the
+  // pointer is (decideDropPlacement in editor/placement.js), not just which
+  // element it's over — so these synthetic events now carry a real
+  // clientX/clientY taken from the target's own getBoundingClientRect(),
+  // computed inside the iframe document (same coordinate space the drag
+  // listeners see).
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-dnd-'))
   const projectPath = join(projectDir, 'd.gstrap')
 
@@ -169,35 +187,50 @@ test('Insert DnD: drop on a container appends inside; drop on a leaf appends as 
     return !!(d && d.__gstrapDropWired)
   }, null, { timeout: 6_000 })
 
-  // ── Drop on <main> (container): should append INSIDE ──────────────────────
+  // ── Drop on <main> (container), pointer at its CENTER: should append
+  //    INSIDE — the middle-zone case must survive the switch from
+  //    coordinate-agnostic placement to decideDropPlacement's 3-zone split. ──
   const dropOnContainer = await appWindow.evaluate(({ blockId }) => {
     const ed = window.__gstrap.pluginRegistry.bound.editor
     const doc = ed.Canvas.getFrameEl().contentDocument
     const mainEl = doc.querySelector('main')
     if (!mainEl) return { error: 'main element not found' }
     const childCountBefore = mainEl.children.length
+    const rect = mainEl.getBoundingClientRect()
+    const clientX = rect.left + rect.width / 2
+    const clientY = rect.top + rect.height / 2
     const dt = new DataTransfer()
     dt.setData('application/x-grapestrap-block', blockId)
     mainEl.dispatchEvent(new DragEvent('dragover', {
-      bubbles: true, cancelable: true, dataTransfer: dt
+      bubbles: true, cancelable: true, dataTransfer: dt, clientX, clientY
     }))
     const previewSet = mainEl.classList.contains('gstrap-drop-target')
+    const lineVisibleDuringHover = doc.querySelector('.gstrap-insert-line.is-visible') !== null
     mainEl.dispatchEvent(new DragEvent('drop', {
-      bubbles: true, cancelable: true, dataTransfer: dt
+      bubbles: true, cancelable: true, dataTransfer: dt, clientX, clientY
     }))
     return {
       previewSet,
+      lineVisibleDuringHover,
       previewClearedAfterDrop: !mainEl.classList.contains('gstrap-drop-target'),
       childCountDelta: mainEl.children.length - childCountBefore,
       newSelParentTag: (ed.getSelected()?.parent?.()?.get?.('tagName') || '').toLowerCase()
     }
   }, { blockId })
   expect(dropOnContainer.previewSet).toBe(true)
+  // The dashed outline (container "inside" zone) and the insertion line are
+  // mutually exclusive — center-of-container must never show the line.
+  expect(dropOnContainer.lineVisibleDuringHover).toBe(false)
   expect(dropOnContainer.previewClearedAfterDrop).toBe(true)
   expect(dropOnContainer.childCountDelta).toBe(1)
   expect(dropOnContainer.newSelParentTag).toBe('main')
 
-  // ── Drop on <h1> (leaf): should land as a sibling, in the same parent ─────
+  // ── Drop on <h1> (leaf), pointer in its LOWER half: leaves split at the
+  //    midpoint (decideDropPlacement), so the lower half is the 'after'
+  //    zone — same outcome as the old coordinate-agnostic always-after leaf
+  //    rule, but now it's coordinate-driven. Leaves show the insertion LINE,
+  //    not the dashed outline (that's reserved for a container's "inside"
+  //    zone) — chunk A2 fixed the no-feedback gap this replaces. ──
   const dropOnLeaf = await appWindow.evaluate(({ blockId }) => {
     const ed = window.__gstrap.pluginRegistry.bound.editor
     const doc = ed.Canvas.getFrameEl().contentDocument
@@ -206,31 +239,37 @@ test('Insert DnD: drop on a container appends inside; drop on a leaf appends as 
     const parentEl = h1.parentElement
     const childCountBefore = parentEl.children.length
     const h1IndexBefore = [...parentEl.children].indexOf(h1)
+    const rect = h1.getBoundingClientRect()
+    const clientX = rect.left + rect.width / 2
+    const clientY = rect.top + rect.height * 0.75 // lower half → 'after'
     const dt = new DataTransfer()
     dt.setData('application/x-grapestrap-block', blockId)
     h1.dispatchEvent(new DragEvent('dragover', {
-      bubbles: true, cancelable: true, dataTransfer: dt
+      bubbles: true, cancelable: true, dataTransfer: dt, clientX, clientY
     }))
-    // For a leaf anchor the preview should be on the PARENT (which is what
-    // would actually receive the new sibling), not on the leaf itself.
+    const lineVisible = doc.querySelector('.gstrap-insert-line.is-visible') !== null
     const parentPreview = parentEl.classList.contains('gstrap-drop-target')
-    const leafPreview   = h1.classList.contains('gstrap-drop-target')
+    const leafPreview = h1.classList.contains('gstrap-drop-target')
     h1.dispatchEvent(new DragEvent('drop', {
-      bubbles: true, cancelable: true, dataTransfer: dt
+      bubbles: true, cancelable: true, dataTransfer: dt, clientX, clientY
     }))
     const sel = ed.getSelected()
     const selParent = sel.parent()
     return {
+      lineVisible,
       parentPreview,
       leafPreview,
+      lineHiddenAfterDrop: doc.querySelector('.gstrap-insert-line.is-visible') === null,
       childCountDelta: parentEl.children.length - childCountBefore,
       newSelIdx: selParent.components().indexOf(sel),
       h1IndexBefore,
       sameParent: selParent.getEl() === parentEl
     }
   }, { blockId })
-  expect(dropOnLeaf.parentPreview).toBe(true)
+  expect(dropOnLeaf.lineVisible).toBe(true)
+  expect(dropOnLeaf.parentPreview).toBe(false)
   expect(dropOnLeaf.leafPreview).toBe(false)
+  expect(dropOnLeaf.lineHiddenAfterDrop).toBe(true)
   expect(dropOnLeaf.childCountDelta).toBe(1)
   expect(dropOnLeaf.sameParent).toBe(true)
   expect(dropOnLeaf.newSelIdx).toBe(dropOnLeaf.h1IndexBefore + 1)
@@ -275,6 +314,24 @@ test('Insert flash: destination container gets a brief outline highlight', async
   })
   expect(cleared).toBe(true)
 
+  // ── Wrapper-landing case (chunk A3): with nothing selected, the anchor is
+  //    the wrapper itself. Before A3 this skipped the flash entirely
+  //    (flashing the whole page body is noisy); now the INSERTED component
+  //    gets the flash instead. ──
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    ed.select() // clear selection so the next insert's anchor is the wrapper
+  })
+  await appWindow.evaluate(() => {
+    document.querySelector('.gstrap-block-tile').click()
+  })
+  const wrapperLandingFlashed = await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const sel = ed.getSelected()
+    return sel?.getEl?.()?.classList?.contains('gstrap-insert-flash') || false
+  })
+  expect(wrapperLandingFlashed).toBe(true)
+
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
@@ -316,26 +373,42 @@ test('Insert panel drag: dropping a block on the canvas inserts a component (not
 
   // Simulate the dragstart → drop flow. Dragstart is fired on the bottom
   // Insert tile, which sets window.__gstrapDragBlockId. Drop is fired on the
-  // canvas iframe contentDocument's body.
+  // canvas iframe contentDocument's body — the no-anchor/wrapper case, whose
+  // placement is now coordinate-driven (chunk A2's wrapperIndexForY) instead
+  // of a plain end-of-page append, so this also asserts the new component
+  // landed at the SAME index wrapperIndexForY would independently compute
+  // for the same clientY over the same top-level children (window.__gstrap.
+  // placement is the app's own test surface for that function — see main.js).
   const result = await appWindow.evaluate(blockId => {
     window.__gstrapDragBlockId = blockId
     const ed = window.__gstrap.pluginRegistry.bound.editor
     const doc = ed.Canvas.getFrameEl().contentDocument
+    const wrapper = ed.getWrapper()
+    const dropClientY = 100
+    const childRects = wrapper.components().models
+      .map(c => c.getEl?.())
+      .filter(Boolean)
+      .map(el => el.getBoundingClientRect())
+    const expectedIndex = window.__gstrap.placement.wrapperIndexForY(childRects, dropClientY)
     // Drop event with no usable dataTransfer — exercises the iframe-boundary
     // case where the custom MIME got stripped.
     const dt = new DataTransfer()
     const dropEvt = new DragEvent('drop', {
       bubbles: true, cancelable: true, dataTransfer: dt,
-      clientX: 100, clientY: 100
+      clientX: 100, clientY: dropClientY
     })
     // Target the body so we land on the page wrapper.
     doc.body.dispatchEvent(dropEvt)
+    const wrapperAfter = ed.getWrapper().components()
+    const newSel = ed.getSelected()
     // Read the canvas html to confirm the block content rendered (not the
     // block id pasted as text).
     return {
       html: ed.getHtml() || '',
-      count: ed.getWrapper().components().length,
-      bodyText: doc.body.textContent || ''
+      count: wrapperAfter.length,
+      bodyText: doc.body.textContent || '',
+      expectedIndex,
+      actualIndex: wrapperAfter.indexOf(newSel)
     }
   }, blockId)
 
@@ -344,6 +417,9 @@ test('Insert panel drag: dropping a block on the canvas inserts a component (not
   // And the literal block id must NOT appear as a stray text node in body
   // — that's the bug signature.
   expect(result.bodyText).not.toContain(blockId)
+  // The new component landed at the index wrapperIndexForY predicts for the
+  // same drop coordinate over the same pre-drop layout.
+  expect(result.actualIndex).toBe(result.expectedIndex)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })

@@ -255,6 +255,7 @@
   "insert.from-selection": "From Selection",
   "insert.no-snippets": "No snippets yet. Select something on the canvas, then click \"From Selection.\"",
   "insert.toast.no-content": "Block \"{id}\" has no content.",
+  "insert.alt-hint": "Alt+Click inserts at the top of the page (or before the selection)",
 
   "am.images": "Images",
   "am.fonts": "Fonts",

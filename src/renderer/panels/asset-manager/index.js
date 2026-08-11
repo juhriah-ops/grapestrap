@@ -1,6 +1,17 @@
 /**
  * GrapeStrap — Asset Manager panel
  *
+ * PATH: src/renderer/panels/asset-manager/index.js
+ * ROLE: Third tab in the left-column GL stack (next to Project + Library).
+ *       Lists files inside the project's `assets/{images,fonts,videos}/`
+ *       directories; click an image tile to insert it into the canvas.
+ * DEPENDS: state/project-state.js, state/event-bus.js,
+ *          editor/grapesjs-init.js, editor/placement.js, i18n.js
+ * CREATED: 2026-05-04
+ * UPDATED: 2026-08-11 — click-insert now goes through the shared
+ *          resolvePlacement/insertAtPlacement (editor/placement.js) instead
+ *          of a locally-duplicated CONTAINER_TAGS/append-at-anchor copy.
+ *
  * Lives as a third tab in the left-column GL stack (next to Project +
  * Library). Lists files inside the project's `assets/{images,fonts,videos}/`
  * directories. Source-of-truth is the filesystem — every paint re-reads via
@@ -21,7 +32,7 @@
  * Per-tile:
  *   - **Click an image** — inserts `<img src="assets/images/<name>" alt="">`
  *     into the canvas at the current selection point (anchor-aware, mirrors
- *     the Insert panel placement rules).
+ *     the Insert panel placement rules via editor/placement.js).
  *   - **× delete** — removes the file from disk.
  *
  * Drag-out to canvas in v0.0.3; click-insert is the v0.0.2 surface.
@@ -30,6 +41,7 @@
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { resolvePlacement, insertAtPlacement } from '../../editor/placement.js'
 import { t } from '../../i18n.js'
 
 // Per-kind message keys (Wave 4 sweep). Titles/empties are per-kind keys, not
@@ -41,11 +53,6 @@ const KINDS = [
   { id: 'fonts',  labelKey: 'am.fonts',  addTitleKey: 'am.add-fonts-title',  emptyKey: 'am.empty-fonts',  addedKey: 'am.toast.added-font'  },
   { id: 'videos', labelKey: 'am.videos', addTitleKey: 'am.add-videos-title', emptyKey: 'am.empty-videos', addedKey: 'am.toast.added-video' }
 ]
-
-const CONTAINER_TAGS = new Set([
-  'div', 'section', 'main', 'article', 'aside',
-  'header', 'footer', 'nav', 'form', 'ul', 'ol'
-])
 
 let host = null
 let assetsByKind = { images: [], fonts: [], videos: [] }
@@ -284,21 +291,8 @@ function onTileClicked(kind, name) {
 }
 
 function insertAtSelection(editor, html) {
-  const wrapper = editor.getWrapper()
-  const anchor = editor.getSelected()
-  let added
-  if (!anchor || anchor === wrapper) {
-    added = wrapper.append(html)
-  } else {
-    const tag = (anchor.get('tagName') || '').toLowerCase()
-    if (CONTAINER_TAGS.has(tag)) {
-      added = anchor.append(html)
-    } else {
-      const parent = anchor.parent?.() || wrapper
-      const idx = parent.components().indexOf(anchor)
-      added = parent.append(html, { at: idx + 1 })
-    }
-  }
+  const placement = resolvePlacement(editor, editor.getSelected())
+  const { added } = insertAtPlacement(editor, placement, html)
   const first = Array.isArray(added) ? added[0] : added
   if (first) editor.select(first)
   eventBus.emit('canvas:content-changed')
