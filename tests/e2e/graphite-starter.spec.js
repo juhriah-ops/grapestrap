@@ -15,6 +15,8 @@
  *       duplicated here.
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-08-02
+ * UPDATED: 2026-08-11 — added selectedPages narrowing specs (2-page subset +
+ *                       []-fails-open pin) and a project:starter-page IPC spec
  */
 import { test, expect } from '@playwright/test'
 import { promises as fsp } from 'node:fs'
@@ -38,6 +40,24 @@ async function createGraphiteProject(appWindow, projectPath) {
     pageState.open(project.pages[0].name)
     return { pageNames: project.pages.map(p => p.name) }
   }, projectPath)
+}
+
+// Variant of createGraphiteProject that threads selectedPages through to
+// project.new() — kept separate from the helper above (rather than adding an
+// optional param to it) so the existing calls/pin above stay byte-identical.
+async function createGraphiteProjectWithSelection(appWindow, projectPath, selectedPages) {
+  await appWindow.waitForFunction(
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 })
+  return await appWindow.evaluate(async ({ path, selectedPages }) => {
+    const project = await window.grapestrap.project.new({
+      name: 'graphitetest', location: path, templateId: 'graphite', selectedPages
+    })
+    const { projectState, pageState } = window.__gstrap
+    projectState.set(project)
+    pageState.open(project.pages[0].name)
+    return { pageNames: project.pages.map(p => p.name) }
+  }, { path: projectPath, selectedPages })
 }
 
 const fileExists = p => fsp.access(p).then(() => true, () => false)
@@ -290,4 +310,69 @@ test('Export: flat index.html links the vendored bootstrap, vendor tree ships, t
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
   await fsp.rm(outDir, { recursive: true, force: true })
+})
+
+test('selectedPages: a 2-page subset writes only those pages; shared vendor bundle stays unconditional', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-graphite-'))
+  const projectPath = join(projectDir, 'graphite.gstrap')
+
+  const { app, appWindow } = await launch()
+  const { pageNames } = await createGraphiteProjectWithSelection(
+    appWindow, projectPath, ['index', 'left-sidebar'])
+  expect(pageNames).toEqual(['index', 'left-sidebar'])
+
+  const manifest = JSON.parse(await fsp.readFile(projectPath, 'utf8'))
+  expect(manifest.pages).toHaveLength(2)
+  expect(manifest.pages.map(p => p.name)).toEqual(['index', 'left-sidebar'])
+
+  const site = join(projectDir, 'site')
+  expect(await fileExists(join(site, 'pages', 'elements.html'))).toBe(false)
+
+  // Shared infrastructure (vendor bundle) is unconditional in applyStarter —
+  // an excluded page re-added later via New Page must find it already there.
+  expect(await fileExists(join(site, 'assets', 'vendor', 'bootstrap', 'bootstrap.min.css'))).toBe(true)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('selectedPages: [] fails open to all 5 pages (same posture as omitted)', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-graphite-'))
+  const projectPath = join(projectDir, 'graphite.gstrap')
+
+  const { app, appWindow } = await launch()
+  const { pageNames } = await createGraphiteProjectWithSelection(appWindow, projectPath, [])
+  expect(pageNames).toEqual(['index', 'elements', 'left-sidebar', 'right-sidebar', 'no-sidebar'])
+
+  const manifest = JSON.parse(await fsp.readFile(projectPath, 'utf8'))
+  expect(manifest.pages).toHaveLength(5)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('project:starter-page IPC: returns one page\'s body/scripts, null for an unknown page or a non-registry starter id', async () => {
+  const { app, appWindow } = await launch()
+  await appWindow.waitForFunction(
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 })
+
+  const noSidebar = await appWindow.evaluate(() =>
+    window.grapestrap.project.starterPage('graphite', 'no-sidebar'))
+  expect(typeof noSidebar.body).toBe('string')
+  expect(noSidebar.body.length).toBeGreaterThan(0)
+  expect(noSidebar.customScripts.map(s => s.src)).toContain('assets/js/main.js')
+
+  const unknownPage = await appWindow.evaluate(() =>
+    window.grapestrap.project.starterPage('graphite', 'no-such-page'))
+  expect(unknownPage).toBeNull()
+
+  // 'blank' is not a STARTERS registry entry (same fail-open contract as
+  // getStarter) — the lookup fails at the starter-id stage, before pageName
+  // is even consulted.
+  const blankStarter = await appWindow.evaluate(() =>
+    window.grapestrap.project.starterPage('blank', 'index'))
+  expect(blankStarter).toBeNull()
+
+  await app.close()
 })

@@ -386,7 +386,7 @@ function guessAssetKind(ext) {
   return null
 }
 
-export async function createProject({ targetPath, name, templateId = 'blank' }) {
+export async function createProject({ targetPath, name, templateId = 'blank', selectedPages }) {
   const projectDir = dirname(targetPath)
   const site = siteDir(projectDir)
   await fsp.mkdir(projectDir, { recursive: true })
@@ -459,8 +459,11 @@ export async function createProject({ targetPath, name, templateId = 'blank' }) 
   if (starter) {
     // Writes site/templates/*.gstrap-tpl, site/pages/*.html (full HTML via
     // composeFullPageHtml), text assets, vendor deps; appends the matching
-    // manifest entries and stamps metadata.starter.
-    await applyStarter({ site, starter, manifest })
+    // manifest entries and stamps metadata.starter. selectedPages narrows
+    // which pages get written — see applyStarter's doc block for the
+    // fail-open + shared-assets rationale (templates/assets/vendorDeps/
+    // bundle stay unconditional regardless of the selection).
+    await applyStarter({ site, starter, manifest, selectedPages })
   } else {
     const indexHtml = renderBlankIndex(name)
     manifest.pages.push({

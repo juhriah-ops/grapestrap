@@ -29,7 +29,7 @@ import {
   deleteWorkspace, renameWorkspace
 } from './workspace-store.js'
 import { startPreview, refreshPreview, stopPreview } from './preview-server.js'
-import { listStarters } from './starters/index.js'
+import { listStarters, getStarterPage } from './starters/index.js'
 import { bindGitStatus, notifyChange as notifyGitChange, refreshNow as refreshGitStatus } from './git-status.js'
 
 let pluginRegistryRef = null
@@ -71,7 +71,7 @@ export function registerIpcHandlers({ pluginRegistry }) {
   ipcMain.handle('prefs:set', (_e, key, value) => { setPref(key, value); return true })
 
   // ─── Projects ──────────────────────────────────────────────────────────────
-  ipcMain.handle('project:new', async (_e, { name, location, templateId }) => {
+  ipcMain.handle('project:new', async (_e, { name, location, templateId, selectedPages }) => {
     // `location` is the full manifest path. When omitted, we ask the user
     // for a PARENT folder (not a save-as path), then create a new
     // <slug>/ subfolder inside it and put the .gstrap there. This matches
@@ -95,14 +95,19 @@ export function registerIpcHandlers({ pluginRegistry }) {
       await fsp.mkdir(projectFolder, { recursive: true })
       target = join(projectFolder, `${slug}.gstrap`)
     }
-    await createProject({ targetPath: target, name, templateId })
+    await createProject({ targetPath: target, name, templateId, selectedPages })
     await bindProjectWatcher(target)
     log.info(`Created project: ${target}`)
     return await loadProject(target)
   })
 
-  // Starter list for the New Project dialog — ids + labels only.
+  // Starter list for the New Project dialog — ids, labels, per-page metadata.
   ipcMain.handle('project:starters', () => listStarters())
+
+  // Single starter page's editable content, for a per-page selection UI that
+  // wants to preview/describe one page without listStarters()'s HTML-free
+  // payload. null for an unknown starter id, unknown page name, or 'blank'.
+  ipcMain.handle('project:starter-page', (_e, starterId, pageName) => getStarterPage(starterId, pageName))
 
   ipcMain.handle('project:open', async (_e, providedPath) => {
     const target = providedPath || (await pickOpenProjectPath())
