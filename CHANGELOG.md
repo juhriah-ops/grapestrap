@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [v0.1.1] — 2026-08-12
+
+_Re-cut 2026-08-12 to fold in the 2026-08-11 round below; the 2026-08-07 draft release was never published._
+
 ### Added (2026-08-11)
 - **Top-of-page insertion** (nola1 report: a new navbar could never be placed at the actual top of the page). Drag placement is now zone-aware: hovering a container's top or bottom edge (25% of its height, 8–24px) inserts before/after it instead of inside, hovering above the first element on the page inserts at the very top, and a green insertion line previews the exact landing spot — including over empty body space, which previously gave no feedback at all. **Alt+Click** on an Insert tile places the block at the top of the page (or before the current selection). Asset Manager and Library Items inserts follow the same rules (one shared placement module replaces three diverged copies).
 - **Move Up / Move Down / Move to Top of Page** in the element right-click menu (canvas and DOM tree) — existing elements can finally be reordered without touching the code view. Disabled on template-locked chrome.
@@ -16,8 +20,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - **A header pasted above `<body>` in Code view was silently deleted on save** (nola1 report: "add a header section above the body and it won't save in the position"). Markup between `</head>` and `<body>` is now relocated to the top of the page body — what a browser would do — with a warning toast instead of a silent discard.
 - **Code-view edits were reverted by switching tabs before saving**: leaving a tab that was in Code or Split view captured the stale canvas over the newer code. The code edit now wins, same as it already did on save.
 - **Split view could clobber unsynced code edits**: the code pane now syncs into the canvas when it loses focus in Split view, so a design-side change no longer overwrites what was just typed.
-
-## [v0.1.1] — 2026-08-07
 
 ### Added (2026-08-07)
 - **Deselect All** in the code-editor right-click menu: drops extra cursors and collapses the selection to a single caret.
