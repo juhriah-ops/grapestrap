@@ -7,11 +7,15 @@
  *
  * `--no-sandbox` is passed only because development sandboxes/CI commonly run
  * as root. Packaged builds enforce the secure default.
+ *
+ * Global teardown sweeps leftover gstrap-* scratch dirs out of the OS tmpdir
+ * after the suite finishes.
  */
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests/e2e',
+  globalTeardown: './tests/e2e/global-teardown.js',
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,
