@@ -17,6 +17,14 @@
  *
  * In Split view, the side most recently focused is authoritative. The other side
  * updates on focus loss.
+ *
+ * UPDATED: 2026-08-11 — Workstream A chunk A5 (code-view position fixes):
+ * rebuildCanvasFromCode() now warns via toast when extractPageFromFullHtml
+ * reports strayContentMoved, takes an optional tabOverride (see its own
+ * doc comment — needed by panels/canvas/index.js#swapToTab, which must
+ * rebuild the OUTGOING tab's canvas from Monaco after pageState has already
+ * flipped to the INCOMING tab), and the split-view Monaco blur now triggers
+ * a rebuild too (bindSync's onDidBlurEditorWidget hook below).
  */
 
 import { eventBus } from '../state/event-bus.js'
@@ -25,6 +33,7 @@ import { formatHtml } from './format-html.js'
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
 import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument, stripBodyWrapper } from '../../shared/page-html.js'
+import { t } from '../i18n.js'
 import { log } from '../log.js'
 
 let codeEditor = null
@@ -52,6 +61,16 @@ export function bindSync({ htmlMonaco, cssMonaco }) {
   // Track which pane has focus
   htmlMonaco?.onDidFocusEditorWidget(() => { activeSide = 'code'  })
   cssMonaco?.onDidFocusEditorWidget(()  => { activeSide = 'code'  })
+  // Split view: the side most recently focused is authoritative (module
+  // header policy). Losing focus on the HTML Monaco while in Split mode is
+  // the moment the design pane needs to catch up to whatever was just typed
+  // — gated strictly to 'split' because Code-only mode already has its own
+  // rebuild trigger (view-mode switch back to Design; onViewModeChange
+  // below), and rebuilding on every blur in Code-only mode would be wasted
+  // work with no visible design pane to show it in.
+  htmlMonaco?.onDidBlurEditorWidget(() => {
+    if (pageState.active()?.viewMode === 'split') rebuildCanvasFromCode()
+  })
   // Canvas focus is detected via GrapesJS frame focus events
   if (editor) {
     editor.on('canvas:frame:load', () => {
@@ -115,8 +134,20 @@ function syncCanvasToCode() {
  * component tree from the current Monaco HTML/CSS.
  *
  * NOTE: this loses GrapesJS selection state. Acceptable for v0.0.1.
+ *
+ * @param {object} [tabOverride] - The pageState tab this rebuild is FOR.
+ *        Defaults to pageState.active() — correct for every existing call
+ *        site (view-mode switch, split blur, save-flush), where the active
+ *        tab genuinely is the one whose Monaco buffer is being rebuilt.
+ *        panels/canvas/index.js#swapToTab is the one exception: it must
+ *        rebuild the OUTGOING tab's canvas, but by the time its 'tab:focused'
+ *        handler runs, pageState.active() already points at the INCOMING tab
+ *        (pageState.open/focus flip activeIndex before emitting — the same
+ *        seam panels/templates/lock.js's component:add comment documents).
+ *        Without the override, the outgoing tab's parsed <head> would get
+ *        merged onto the wrong (incoming) page.
  */
-export function rebuildCanvasFromCode() {
+export function rebuildCanvasFromCode(tabOverride) {
   if (suppressCodeToCanvas) return
   const editor = getEditor()
   if (!editor || !codeEditor) return
@@ -129,10 +160,17 @@ export function rebuildCanvasFromCode() {
   // Page Properties + the next compose stay in sync with what the user
   // typed. Library tabs stay body-only.
   let bodyForCanvas = raw
-  const tab = pageState.active()
+  const tab = tabOverride ?? pageState.active()
   if ((tab?.kind ?? 'page') === 'page' && isFullHtmlDocument(raw)) {
-    const { body, head } = extractPageFromFullHtml(raw)
+    const { body, head, strayContentMoved } = extractPageFromFullHtml(raw)
     bodyForCanvas = body
+    if (strayContentMoved) {
+      // The user's raw Code-view text had markup between </head> and <body>
+      // — extractPageFromFullHtml already relocated it to the top of body
+      // (shared/page-html.js); surface that so it doesn't look like it just
+      // silently vanished.
+      eventBus.emit('toast', { type: 'warning', message: t('codeview.toast.stray-content') })
+    }
     if (projectState.current) {
       const page = projectState.current.pages?.find(p => p.name === tab?.pageName)
       if (page) {
@@ -165,6 +203,24 @@ export function rebuildCanvasFromCode() {
     // don't immediately trigger a back-sync.
     setTimeout(() => { suppressCanvasToCode = false }, 0)
   }
+}
+
+/**
+ * Synchronously clear the canvas→code suppression flag rebuildCanvasFromCode
+ * sets while it runs, instead of waiting for its own one-tick timeout.
+ *
+ * Needed by panels/canvas/index.js#swapToTab: it calls
+ * rebuildCanvasFromCode(outgoingTab) for an OUTGOING code/split tab, then
+ * SYNCHRONOUSLY loads the INCOMING tab's html into the very same canvas
+ * (loadHtmlIntoCanvas). Left on the normal one-tick timer, that load's
+ * component events would be silently swallowed by the still-pending
+ * suppression — Monaco would stay stale for the incoming tab until its next
+ * real edit. Exported narrowly for that one caller; every other
+ * rebuildCanvasFromCode() call site (view-mode switch, split blur, save
+ * flush) has nothing synchronous after it that needs the flag released early.
+ */
+export function resumeCanvasToCodeSync() {
+  suppressCanvasToCode = false
 }
 
 /**

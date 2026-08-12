@@ -92,6 +92,7 @@
   "toast.saved-as": "Saved as new file.",
   "toast.cannot-duplicate": "This element cannot be duplicated (root or locked).",
   "toast.cannot-delete": "This element cannot be deleted (root or locked).",
+  "codeview.toast.stray-content": "Content found outside <body> was moved to the top of the page.",
 
   "action.cancel": "Cancel",
   "action.edit": "Edit",
@@ -100,6 +101,9 @@
   "ctx.wrap-tag": "Wrap with Tag…",
   "ctx.duplicate": "Duplicate",
   "ctx.copy-html": "Copy HTML",
+  "ctx.move-up": "Move Up",
+  "ctx.move-down": "Move Down",
+  "ctx.move-top": "Move to Top of Page",
   "ctx.deselect-all": "Deselect All",
   "ctx.bs-docs": "More info: Bootstrap {topic}",
   "ctx.bs-docs-none": "No Bootstrap docs for this class",
@@ -450,6 +454,7 @@
   "toast.saved": "Saved.",
   "toast.export-success": "Exported {count} page(s) to {dir}",
   "toast.command-not-wired": "Command \"{cmd}\" not yet wired in v0.0.1.",
+  "toast.starter-layout-failed": "Could not load that layout.",
 
   "fm.site-files": "Site Files",
   "file.toast.read-failed": "Could not read {path}: {error}",
@@ -468,6 +473,8 @@
   "dialog.new-page.template-none": "None — standalone page",
   "dialog.new-page.create": "Create",
   "dialog.new-page.cancel": "Cancel",
+  "dialog.new-page.group-starter": "{label} layouts",
+  "dialog.new-page.group-templates": "Master templates",
 
   "dialog.new-project.title": "New project",
   "dialog.new-project.name-label": "Project name",
@@ -477,6 +484,9 @@
   "dialog.new-project.starter-blank": "Blank — empty index page",
   "dialog.new-project.create": "Create…",
   "dialog.new-project.cancel": "Cancel",
+  "dialog.new-project.pages-label": "Pages to include",
+  "dialog.new-project.pages-select-all": "Select all",
+  "dialog.new-project.pages-required": "Select at least one page.",
 
   "dialog.about.title": "About GrapeStrap",
   "dialog.about.version-label": "Version",
@@ -489,6 +499,13 @@
   "starter.portfolio.label": "Portfolio",
   "starter.blog.label": "Blog",
   "starter.graphite.label": "Graphite",
+  "starter.graphite.page.index": "Home (index)",
+  "starter.graphite.page.elements": "Elements",
+  "starter.graphite.page.left-sidebar": "Left sidebar",
+  "starter.graphite.page.right-sidebar": "Right sidebar",
+  "starter.graphite.page.no-sidebar": "No sidebar",
+  "starter.blog.page.index": "Blog index",
+  "starter.blog.page.post": "Post",
 
   "tpl.menu.make-region": "Make Editable Region…",
   "tpl.menu.remove-region": "Remove Editable Region",

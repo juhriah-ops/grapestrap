@@ -22,6 +22,17 @@
  *
  * This module is plain JS — no Node-only or browser-only APIs at module
  * scope — so it imports cleanly from main/, renderer/, and tests.
+ *
+ * UPDATED: 2026-08-11 — extractPageFromFullHtml now also relocates stray
+ * markup found between </head> and <body> (Workstream A chunk A5): a real
+ * browser's HTML parser silently hoists any element it meets there to the
+ * top of <body>, so a page that "looked right" in DevTools could otherwise
+ * save with that markup orphaned in the Code view's raw text. The return
+ * shape gains a `strayContentMoved` boolean so callers (canvas-sync.js) can
+ * warn the user instead of the content just quietly moving. Deliberately
+ * conservative: only the </head>–<body> gap is relocated; content after
+ * </html> is left alone (rarer, and not part of this fix). See
+ * tests/unit/page-html-stray-content.test.js.
  */
 
 // Framework links emitted into every page's head. Default to the un-minified
@@ -177,25 +188,48 @@ ${bodyHtml || ''}
  * empty head. The framework + project-managed tags marked with
  * `data-grpstr-fw=…` are stripped from the head extraction (they're
  * regenerated on every compose), so they don't leak into customLinks.
+ *
+ * @returns {{body: string, head: object, strayContentMoved: boolean}}
+ *          strayContentMoved is true when non-whitespace markup was found
+ *          between </head> and <body> and relocated to the top of `body`
+ *          (see module header UPDATED note).
  */
 export function extractPageFromFullHtml(fullHtml) {
   const html = String(fullHtml ?? '')
   const bodyMatch = /<body\b[^>]*>([\s\S]*)<\/body\s*>/i.exec(html)
   if (!bodyMatch) {
     // No <body> tag → body-only fragment. Strip a stray wrapper anyway —
-    // fragments captured by pre-fix builds can carry one.
-    return { body: stripBodyWrapper(html), head: emptyHead() }
+    // fragments captured by pre-fix builds can carry one. No <body> boundary
+    // also means there's no </head>-to-<body> gap to inspect.
+    return { body: stripBodyWrapper(html), head: emptyHead(), strayContentMoved: false }
   }
   // Trim trailing framework scripts injected by composeFullPageHtml, then
   // heal nested wrappers: pre-fix builds captured GrapesJS's `<body>`-wrapped
   // serialization into the fragment, and compose wrapped it AGAIN — every
   // saved page carried `<body><body>`. Loading is the healing moment.
   const rawBody = bodyMatch[1]
-  const body = stripBodyWrapper(stripGstrapBodyTrailers(rawBody))
+  const cleanedBody = stripBodyWrapper(stripGstrapBodyTrailers(rawBody))
 
   const headMatch = /<head\b[^>]*>([\s\S]*?)<\/head\s*>/i.exec(html)
   const headInner = headMatch ? headMatch[1] : ''
-  return { body: body.trim() + '\n', head: parseHead(headInner) }
+
+  // Browser-parser relocation semantics: a real browser silently hoists any
+  // markup it meets between </head> and <body> to the TOP of <body> — so we
+  // make that explicit instead of letting stray content vanish on the next
+  // round-trip. `bodyMatch.index > headMatch.index` guards against a
+  // malformed document where body somehow precedes head (negative-length
+  // slice); real documents always satisfy it.
+  let strayMarkup = ''
+  if (headMatch && bodyMatch.index > headMatch.index) {
+    const gapStart = headMatch.index + headMatch[0].length
+    strayMarkup = html.slice(gapStart, bodyMatch.index).trim()
+  }
+
+  const body = strayMarkup
+    ? (strayMarkup + '\n' + cleanedBody).trim() + '\n'
+    : cleanedBody.trim() + '\n'
+
+  return { body, head: parseHead(headInner), strayContentMoved: !!strayMarkup }
 }
 
 /**

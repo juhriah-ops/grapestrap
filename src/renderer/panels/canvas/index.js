@@ -20,11 +20,18 @@
  * grapesjs-init re-injects base href + framework links + globalCSS. Event
  * subscriptions are wire-once (the wireLibraryLock house pattern) and read
  * module state, never a render-scoped host.
+ *
+ * UPDATED: 2026-08-11 — Workstream A chunk A5: swapToTab now rebuilds the
+ * OUTGOING tab's canvas from Monaco before capturing it, when that tab was
+ * left in Code or Split view (mirrors flushActiveTabIntoProject's
+ * save-time rule in menu-router.js). See swapToTab's own comment for why the
+ * outgoing tab is looked up via pageState.tabs/currentTabName rather than
+ * pageState.active().
  */
 
 import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml, getEditor } from '../../editor/grapesjs-init.js'
 import { createMonacoPair, bindMonacoToRegistry, relayoutAllMonaco } from '../../editor/monaco-init.js'
-import { bindSync, onViewModeChange } from '../../editor/canvas-sync.js'
+import { bindSync, onViewModeChange, rebuildCanvasFromCode, resumeCanvasToCodeSync } from '../../editor/canvas-sync.js'
 import { mountFileTabHost, activateFileTab, isFileTab } from '../../editor/file-tabs.js'
 import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
@@ -195,6 +202,28 @@ function swapToTab(tab) {
   // one is focused the hidden canvas still holds the previous page — whose
   // edits were already captured when that page lost focus.
   if (currentTabName && currentTabKind !== 'file') {
+    // If the outgoing tab was left in Code or Split view, its canvas
+    // component tree is stale relative to what the user actually typed —
+    // Monaco edits don't propagate to GrapesJS until a view-mode switch back
+    // to Design (canvas-sync.js's LOCKED sync policy). Rebuild it now so the
+    // getCanvasHtml() capture below reflects Monaco, not a stale tree.
+    // Looked up via pageState.tabs by the name THIS module already tracked
+    // (currentTabName) — NOT via pageState.active()/the incoming `tab` arg:
+    // pageState has already flipped activeIndex to the INCOMING tab by the
+    // time 'tab:focused' fires (see panels/templates/lock.js's component:add
+    // comment for the same seam), so either of those would resolve the
+    // wrong tab here.
+    const outgoingTab = pageState.tabs.find(t => t.pageName === currentTabName)
+    if (outgoingTab?.viewMode === 'code' || outgoingTab?.viewMode === 'split') {
+      rebuildCanvasFromCode(outgoingTab)
+      // rebuildCanvasFromCode leaves canvas-sync's own canvas→code sync
+      // suppressed for one tick by design (so its setComponents doesn't
+      // immediately re-trigger a redundant back-sync). Release it now,
+      // synchronously — loadHtmlIntoCanvas() below (the INCOMING tab's own
+      // load) runs before that tick elapses, and left suppressed it would
+      // silently swallow the incoming tab's first Design→Code sync.
+      resumeCanvasToCodeSync()
+    }
     const captured = getCanvasHtml()
     if (currentTabKind === 'library') {
       const item = projectState.current.libraryItems?.find(it => it.id === currentTabName)
