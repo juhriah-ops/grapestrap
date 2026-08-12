@@ -3,13 +3,17 @@
  *
  * PATH: src/renderer/panels/templates/manage.js
  * ROLE: createTemplate / deleteTemplate / createPage (from template or blank)
- *       / detachActivePage / make+remove editable region — every state
- *       mutation the templates feature performs, in one module. UI surfaces
- *       (file-manager section, new-page dialog, context menu) call in here.
+ *       / createPageFromLayout (from a starter's layout body) / detachActivePage
+ *       / make+remove editable region — every state mutation the templates
+ *       feature performs, in one module. UI surfaces (file-manager section,
+ *       new-page dialog, context menu) call in here.
  * DEPENDS: state/project-state.js, state/page-state.js, state/event-bus.js,
  *          editor/grapesjs-init.js, dialogs/text-prompt.js, i18n.js,
  *          ./propagate.js, ./lock.js
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-11 — added createPageFromLayout (New Page dialog's
+ *          starter-layout source) and extracted the push/dirty/open/notify
+ *          tail both it and createPage share into commitNewPage().
  *
  * Every entry point validates its input and returns null/false on refusal
  * (with a toast) — callers never need their own guards. Name rules for pages
@@ -140,9 +144,50 @@ export function createPage(name, templateName = null) {
     head: { title: name, description: '' },
     html
   }
+  return commitNewPage(page)
+}
+
+/**
+ * Create a page from a starter layout's fetched content (New Page dialog's
+ * "starter-layout" source — window.grapestrap.project.starterPage()). Unlike
+ * createPage()'s template path, a layout is already a fully-composed body
+ * with its own head extras, so there's no template chrome to compose against
+ * and regions{} starts empty exactly like a blank page's (self-heals on the
+ * next propagation pass, same as every other page shape here). Returns the
+ * page entry, or null on refusal.
+ */
+export function createPageFromLayout(name, layout) {
+  if (!requireProject()) return null
+  const invalid = validateNewName(name)
+  if (invalid) { toastError(invalid); return null }
+
+  const page = {
+    name,
+    file: `pages/${name}.html`,
+    templateName: null,
+    regions: {},
+    head: {
+      title: layout.title || name,
+      description: layout.description || '',
+      customMeta: [],
+      customLinks: Array.isArray(layout.customLinks) ? layout.customLinks : [],
+      customScripts: Array.isArray(layout.customScripts) ? layout.customScripts : []
+    },
+    html: layout.body || ''
+  }
+  return commitNewPage(page)
+}
+
+/**
+ * Shared tail of createPage()/createPageFromLayout(): push the page entry,
+ * mark it dirty, open its tab, and notify dirty-state listeners. Extracted
+ * so both entry points commit identically — createPage()'s own behavior is
+ * unchanged by this extraction (same four steps it always ran, in order).
+ */
+function commitNewPage(page) {
   projectState.current.pages.push(page)
-  projectState.markPageDirty(name)
-  pageState.open(name)
+  projectState.markPageDirty(page.name)
+  pageState.open(page.name)
   eventBus.emit('project:dirty-changed')
   return page
 }

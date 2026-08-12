@@ -23,7 +23,7 @@ import { showNewPageDialog } from '../dialogs/new-page.js'
 import { showNewProjectDialog } from '../dialogs/new-project.js'
 import { duplicateComponent, deleteComponent } from './component-actions.js'
 import { propagateLibraryItem } from '../panels/library-items/propagate.js'
-import { createPage, validateNewName } from '../panels/templates/manage.js'
+import { createPage, createPageFromLayout, validateNewName } from '../panels/templates/manage.js'
 import { propagateTemplate, templateRegionsMeta, refreshPageRegionsSnapshot } from '../panels/templates/propagate.js'
 import { openPagePropertiesDialog } from '../dialogs/page-properties.js'
 import { openProjectSettingsDialog } from '../dialogs/project-settings.js'
@@ -201,7 +201,7 @@ async function cmdNewProject() {
   const result = await showNewProjectDialog({ starters })
   if (!result) return
   const project = await window.grapestrap.project.new({
-    name: result.name, templateId: result.templateId
+    name: result.name, templateId: result.templateId, selectedPages: result.selectedPages
   })
   if (project) {
     projectState.set(project)
@@ -240,15 +240,36 @@ async function cmdImportFolder() {
 
 async function cmdNewPage() {
   if (!projectState.current) return eventBus.emit('toast', { type: 'warning', message: t('toast.open-project-first') })
+  // Starter-aware select: a project created from a multi-page starter (its id
+  // lives at manifest.metadata.starter — absent on blank/imported projects)
+  // gets grouped layout/template options instead of the flat template list.
+  // Best-effort lookup — an IPC failure or a stale/removed starter id just
+  // degrades to the flat markup (same fail-open posture as cmdNewProject's
+  // starter list).
+  const starterId = projectState.current.manifest?.metadata?.starter
+  let starter = null
+  if (starterId) {
+    const starters = await window.grapestrap.project.starters().catch(() => [])
+    starter = starters.find(s => s.id === starterId) || null
+  }
   // Dialog validates inline (duplicate names — Wave 0 bug #6 — and unsafe
   // charsets); page creation/composition lives in templates/manage.js so the
   // dialog stays a dumb collector.
   const result = await showNewPageDialog({
     templates: projectState.current.templates || [],
+    starter,
     validateName: validateNewName
   })
   if (!result) return
-  createPage(result.name, result.templateName)
+  const { name, source } = result
+  if (source.kind === 'blank') return createPage(name)
+  if (source.kind === 'template') return createPage(name, source.templateName)
+  // source.kind === 'starter-layout'
+  const layout = await window.grapestrap.project.starterPage(starterId, source.pageName)
+  if (!layout) {
+    return eventBus.emit('toast', { type: 'error', message: t('toast.starter-layout-failed') })
+  }
+  createPageFromLayout(name, layout)
 }
 
 // User reported on nola1 2026-05-03 that toolbar Save / Code / Split

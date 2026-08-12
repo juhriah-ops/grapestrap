@@ -9,6 +9,10 @@
 //       rules.
 // DEPENDS: nothing (pure string builder; callers own i18n + reading .value)
 // CREATED: 2026-07-12 (Wave 4)
+// UPDATED: 2026-08-11 — optional `groups` param renders <optgroup> blocks
+//                       after the flat options (New Page's starter-layout /
+//                       master-template grouping). Omitted groups produce
+//                       byte-identical output to before this change.
 // =============================================================
 
 /**
@@ -21,17 +25,28 @@
  *                                   / "Blank…"); its value is `noneValue`
  * @param {string} [opts.noneValue] — value of the first option (default '')
  * @param {Array<{value:string,label:string}>} opts.options
+ * @param {Array<{label:string,options:Array<{value:string,label:string}>}>}
+ *        [opts.groups] — rendered as <optgroup> blocks after `options`, in
+ *        array order. All label/value text passed through here is already
+ *        translated by the caller — this module only escapes for HTML.
  * @param {string} opts.dataAttr   — state hook for the caller to query,
  *                                   e.g. 'data-np-template' / 'data-np-starter'
  * @returns {string} HTML string (all dynamic text escaped here)
  */
-export function templateSelectHtml({ labelText, noneText, noneValue = '', options = [], dataAttr }) {
+export function templateSelectHtml({ labelText, noneText, noneValue = '', options = [], groups = [], dataAttr }) {
+  // Appended with no leading whitespace/newline of its own so an empty
+  // `groups` array reproduces today's markup byte-for-byte — new-page.js's
+  // starter-null path depends on that for its e2e pin.
+  const groupsHtml = groups.map(g => `<optgroup label="${escAttr(g.label)}">${
+    (g.options || []).map(o =>
+      `<option value="${escAttr(o.value)}">${escHtml(o.label)}</option>`).join('')
+  }</optgroup>`).join('')
   return `
     <label class="gstrap-prompt-label">${escHtml(labelText)}</label>
     <select class="gstrap-prompt-input" ${dataAttr}>
       <option value="${escAttr(noneValue)}">${escHtml(noneText)}</option>
       ${options.map(o =>
-        `<option value="${escAttr(o.value)}">${escHtml(o.label)}</option>`).join('')}
+        `<option value="${escAttr(o.value)}">${escHtml(o.label)}</option>`).join('')}${groupsHtml}
     </select>`
 }
 
