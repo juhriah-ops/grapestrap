@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PATH: packaging/desktop/grapestrap.metainfo.xml
+  ROLE: AppStream metadata — what GNOME Software / KDE Discover show for the
+        installed app (license, homepage, release notes). Shipped to
+        /usr/share/metainfo/ by the deb and rpm targets via fpm mappings in
+        package.json. Without this file, software centers show "Unknown
+        License" and fall back to the deb control Homepage field.
+  CREATED: 2026-08-12
+-->
+<component type="desktop-application">
+  <id>org.grapestrap.GrapeStrap</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>GrapeStrap</name>
+  <summary>Dreamweaver-style visual editor for Bootstrap 5</summary>
+  <description>
+    <p>
+      GrapeStrap is a desktop visual editor for building static Bootstrap 5
+      websites. Class-first styling, a Dreamweaver-faithful workflow with
+      design, code, and split views over the same document, master templates
+      with editable regions, and a plugin-first architecture. Your projects
+      are plain folders of HTML on disk. No subscriptions, no telemetry.
+    </p>
+  </description>
+  <launchable type="desktop-id">grapestrap.desktop</launchable>
+  <developer id="org.grapestrap">
+    <name>GrapeStrap Contributors</name>
+  </developer>
+  <url type="homepage">https://grapestrap.org</url>
+  <url type="bugtracker">https://github.com/juhriah-ops/grapestrap/issues</url>
+  <url type="vcs-browser">https://github.com/juhriah-ops/grapestrap</url>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <mediatype>application/x-grapestrap</mediatype>
+  </provides>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://grapestrap.org/assets/img/hero.png</image>
+      <caption>Editing a Graphite starter project: file tree, canvas, and Custom CSS panel</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.1.1" date="2026-08-12">
+      <description>
+        <p>
+          Zone-aware drag placement with top-of-page insertion, element
+          reordering from the right-click menu, starter page selection at
+          project creation, New Page from starter layouts, full application
+          menu wiring, Monaco code-editing assists, and fixes for code-view
+          edits lost on tab switches and headers pasted above the body.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-08-03">
+      <description>
+        <p>
+          First public release: master templates, class-snapping
+          drag-to-resize, starter templates, workspace layouts, live preview,
+          crash recovery, and full UI localization.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>

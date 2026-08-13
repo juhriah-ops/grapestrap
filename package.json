@@ -4,7 +4,7 @@
   "description": "Visual Bootstrap 5 editor for Linux. Dreamweaver alternative, MIT, no telemetry.",
   "main": "dist/main/main.js",
   "type": "module",
-  "homepage": "https://github.com/juhriah-ops/grapestrap",
+  "homepage": "https://grapestrap.org",
   "repository": {
     "type": "git",
     "url": "https://github.com/juhriah-ops/grapestrap"
@@ -96,6 +96,9 @@
       }
     },
     "deb": {
+      "fpm": [
+        "packaging/desktop/grapestrap.metainfo.xml=/usr/share/metainfo/org.grapestrap.GrapeStrap.metainfo.xml"
+      ],
       "depends": [
         "libgtk-3-0 | libgtk-3-0t64",
         "libnotify4",
@@ -105,6 +108,11 @@
         "xdg-utils",
         "libatspi2.0-0 | libatspi2.0-0t64",
         "libsecret-1-0"
+      ]
+    },
+    "rpm": {
+      "fpm": [
+        "packaging/desktop/grapestrap.metainfo.xml=/usr/share/metainfo/org.grapestrap.GrapeStrap.metainfo.xml"
       ]
     },
     "appImage": {
