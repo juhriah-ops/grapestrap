@@ -23,6 +23,14 @@
  *   - showRightTab(componentType)        — show one tab; auto-restore stack if needed
  *   - applyInitialRightTabVisibility(map) — apply persisted prefs at boot
  *
+ * Plus one stack-agnostic helper (used by menu-router for Insert → Library):
+ *   - focusPanelTab(componentType)       — bring any GL tab to the front
+ *
+ * The right-stack functions above are hide/show; focusPanelTab is pure
+ * activation and works on the left stack too — it lives here because this is
+ * where GL tab lookup and activation already live (findComponentByType +
+ * setActiveContentItem), rather than adding a second copy elsewhere.
+ *
  * Why not GL's own item.hide()? It only flips display:none inside
  * beginSizeInvalidation / endSizeInvalidation; setSize→calculateAbsoluteSizes
  * iterates ALL contentItems regardless of visibility and assigns each its
@@ -168,6 +176,33 @@ export function showRightTab(componentType) {
   const comp = findTabComponent(componentType)
   if (comp && stack && typeof stack.setActiveContentItem === 'function') {
     try { stack.setActiveContentItem(comp) } catch (_) { /* mid-transition */ }
+  }
+  return true
+}
+
+/**
+ * Bring a GL tab to the front of whatever stack it sits in.
+ *
+ * Stack-agnostic on purpose: the Library and Assets panels live in the LEFT
+ * stack, which has no hide/show story at all, so this is activation only — no
+ * body classes, no size juggling.
+ *
+ * @param {string} componentType - A registered GL componentType, e.g.
+ *        'library-items' (see golden-layout-config.js PANEL_FACTORIES)
+ * @returns {boolean} true when the tab was activated; false when the layout
+ *          isn't up yet, the panel isn't in the current arrangement (a saved
+ *          workspace may omit it), or GL was mid-transition.
+ */
+export function focusPanelTab(componentType) {
+  const component = findTabComponent(componentType)
+  const stack = component?.parent
+  if (!component || typeof stack?.setActiveContentItem !== 'function') return false
+  try {
+    stack.setActiveContentItem(component)
+  } catch (_) {
+    // Same guard as the other setActiveContentItem call sites: GL throws if
+    // the item is being re-parented (maximize/restore, workspace apply).
+    return false
   }
   return true
 }

@@ -305,7 +305,7 @@ test('New Project dialog: starter select populated, Blank default, Esc cancels',
     }
   })
   expect(state.value).toBe('blank')
-  expect(state.options).toEqual(['blank', 'landing', 'portfolio', 'blog', 'graphite'])
+  expect(state.options).toEqual(['blank', 'landing', 'portfolio', 'blog', 'graphite', 'orbit'])
   expect(state.name).toBe('My Project')
 
   await appWindow.keyboard.press('Escape')

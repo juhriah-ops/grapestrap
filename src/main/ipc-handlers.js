@@ -10,13 +10,14 @@
 
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { promises as fsp } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 
 import { log } from './logger.js'
 import { getPref, setPref } from './prefs.js'
 import { xdg } from './platform/xdg.js'
+import { copyFilesIdempotent } from './copy-tasks.js'
 import {
-  setProjectRoot,
+  setProjectRoot, getProjectRoot,
   readFile, writeFile, deleteFile, copyAsset, listDir, exists
 } from './file-operations.js'
 import {
@@ -278,6 +279,13 @@ export function registerIpcHandlers({ pluginRegistry }) {
     return out
   })
 
+  // ─── Bundled section assets ────────────────────────────────────────────────
+  // Inserting a bundled Library section that ships images copies them out of
+  // the app's own starters/ bundle into the open project. Renderer-supplied
+  // paths are treated as hostile even though today's only caller is in-repo
+  // section data — see copySectionAssets for both containment guards.
+  ipcMain.handle('sections:copy-assets', (_e, assets) => copySectionAssets(assets))
+
   // ─── Workspace layouts (Wave 3) ────────────────────────────────────────────
   // All validation (name charset, preset shadowing, slug collisions, shape)
   // lives in workspace-store.js — main never trusts renderer input.
@@ -310,6 +318,88 @@ export function registerIpcHandlers({ pluginRegistry }) {
   })
 
   log.info('IPC handlers registered')
+}
+
+// ─── Bundled section assets ──────────────────────────────────────────────────
+
+/**
+ * Copy a bundled section's images from the app bundle into the open project.
+ *
+ * Every task is `{ from, to }` where `from` is app-root-relative (it must land
+ * inside <appRoot>/starters/, the only tree the app ships as copyable payload)
+ * and `to` is site-relative (it must land inside <project>/site/assets/). Both
+ * checks run on the RESOLVED path with a path.sep-terminated prefix compare —
+ * never on the raw input string — so "..", absolute paths, and a sibling
+ * directory that merely shares a name prefix ("starters-scratch/") all fall
+ * out of the same comparison. Same reasoning as platform/safe-path.js.
+ *
+ * The copy itself is copy-tasks.js' skip-if-exists helper, so re-inserting a
+ * section, or inserting into a project that was created from that same starter,
+ * leaves the on-disk image (which the user may have replaced) untouched.
+ *
+ * @param {Array<{from: string, to: string}>} assets - Bundle→project copies
+ * @returns {Promise<{attempted: number, rejected: string[], failures: string[]}>}
+ *          `rejected` are guard refusals (never copied); `failures` are copies
+ *          that were attempted and errored. Both are reason strings for the
+ *          renderer to surface — an empty pair means every asset is in place.
+ * @throws {Error} When no project is open — there is nowhere to copy into.
+ */
+async function copySectionAssets(assets) {
+  const projectRoot = getProjectRoot()
+  if (!projectRoot) throw new Error('sections:copy-assets: no project open')
+  if (!Array.isArray(assets) || assets.length === 0) {
+    return { attempted: 0, rejected: [], failures: [] }
+  }
+
+  const bundleRoot = join(app.getAppPath(), 'starters')
+  const projectAssetsRoot = join(projectRoot, 'site', 'assets')
+
+  const tasks = []
+  const rejected = []
+
+  for (const asset of assets) {
+    const from = typeof asset?.from === 'string' ? asset.from : ''
+    const to = typeof asset?.to === 'string' ? asset.to : ''
+    if (!from || !to) {
+      rejected.push(`malformed asset entry (from="${from}", to="${to}")`)
+      continue
+    }
+
+    const src = resolve(app.getAppPath(), from)
+    if (!isWithinDir(bundleRoot, src)) {
+      rejected.push(`source outside the starters bundle: ${from}`)
+      continue
+    }
+
+    const dst = resolve(projectRoot, 'site', to)
+    if (!isWithinDir(projectAssetsRoot, dst)) {
+      rejected.push(`destination outside site/assets: ${to}`)
+      continue
+    }
+
+    // Fatal flag on: a section that declares an image and silently ships
+    // without it renders as a broken box, which is worse than a warning.
+    tasks.push([src, dst, true])
+  }
+
+  if (rejected.length > 0) log.warn('sections:copy-assets rejected:', rejected.join('; '))
+
+  const failures = await copyFilesIdempotent(tasks)
+  if (failures.length > 0) log.warn('sections:copy-assets failed:', failures.join('; '))
+
+  return { attempted: tasks.length, rejected, failures }
+}
+
+/**
+ * Is an absolute path inside (or equal to) a directory?
+ * @param {string} dir - Containing directory
+ * @param {string} target - Candidate path
+ * @returns {boolean}
+ */
+function isWithinDir(dir, target) {
+  const dirAbs = resolve(dir)
+  const targetAbs = resolve(target)
+  return targetAbs === dirAbs || targetAbs.startsWith(dirAbs + sep)
 }
 
 // ─── Dialog helpers ──────────────────────────────────────────────────────────

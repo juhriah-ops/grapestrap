@@ -8,6 +8,10 @@
  * power users can type those directly into the chip input. They DO match
  * `borderSidePattern` so applyGroup will correctly clean them up if the
  * user toggles a normal side after the fact.
+ *
+ * The Custom colour row (custom-color.js) handles anything outside the BS
+ * theme palette by writing `border-color` onto the component's rule in
+ * project style.css — mutually exclusive with the `border-*` swatches.
  */
 
 import {
@@ -16,6 +20,9 @@ import {
   borderRadiusPattern, shadowPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup, readGroupAll, toggleClass } from './class-utils.js'
+import { pickSelector, isBsUtility } from './css-rule-utils.js'
+import { readProjectRule } from './bare-rule-store.js'
+import { customColorRowMarkup, wireCustomColorRow, clearCustomColor } from './custom-color.js'
 import { t } from '../../i18n.js'
 
 export const id = 'border'
@@ -29,6 +36,10 @@ export function render(host, ctx) {
   const curColor  = readGroup(component, borderColorPattern())
   const curRadius = readGroup(component, borderRadiusPattern())
   const curShadow = readGroup(component, shadowPattern())
+
+  // Free-colour value lives on the component's own rule in project style.css.
+  const selector = pickSelector(component, isBsUtility)
+  const customColor = readProjectRule(selector)['border-color'] || ''
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
@@ -65,6 +76,7 @@ export function render(host, ctx) {
         <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="${escHtml(t('action.clear'))}">×</button>
       </div>
     </div>
+    ${customColorRowMarkup({ selector, value: customColor })}
     <div class="gstrap-sm-row">
       <label class="gstrap-sm-label">${escHtml(t('sm.label.radius'))}</label>
       <div class="gstrap-sm-segs">
@@ -111,15 +123,25 @@ export function render(host, ctx) {
     applyGroup(component, borderWidthPattern(), null); requestRender()
   })
 
+  // Predetermined token wins → drop the free colour, so only one of the two
+  // ever applies to the element.
   host.querySelectorAll('[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
       const cls = `border-${btn.dataset.color}`
       applyGroup(component, borderColorPattern(), curColor === cls ? null : cls)
+      clearCustomColor(selector, 'border-color')
       requestRender()
     })
   })
   host.querySelector('[data-color-clear]')?.addEventListener('click', () => {
     applyGroup(component, borderColorPattern(), null); requestRender()
+  })
+
+  wireCustomColorRow(host, {
+    component, selector,
+    prop: 'border-color',
+    classPattern: borderColorPattern(),
+    requestRender
   })
 
   host.querySelectorAll('[data-radius]').forEach(btn => {

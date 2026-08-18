@@ -5,6 +5,10 @@
  * ROLE: Launch/seed/select/dismiss helpers + shared constants for the domain spec files (split out of smoke.spec.js in Wave 0 of the v0.1.0 campaign)
  * DEPENDS: @playwright/test (_electron)
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-17 — added fileExists + createBundledStarterProject,
+ *          pulled out of graphite-starter.spec.js when the Orbit starter
+ *          became the second bundled-asset starter (graphite/orbit both
+ *          vendor their own framework via bundleDir) — see orbit-starter.spec.js.
  */
 import { _electron as electron } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
@@ -83,6 +87,49 @@ export async function selectFirstByTag(appWindow, tag) {
     const found = find(wrapper)
     if (found) ed.select(found)
   }, tag)
+}
+
+/** True if `path` exists on disk, false for any access error (ENOENT etc). */
+export const fileExists = p => fsp.access(p).then(() => true, () => false)
+
+/**
+ * Create a project from a bundled-asset starter (one that carries its own
+ * vendored framework via bundleDir — Graphite and Orbit as of 2026-08-17) and
+ * open its first page. Generalizes graphite-starter.spec.js's original
+ * createGraphiteProject/createGraphiteProjectWithSelection into one helper
+ * parameterized by starterId, so a third bundled starter needs no new
+ * creation boilerplate — only its own starter-specific disk/manifest
+ * assertions (those stay in each starter's own spec file; the exact vendored
+ * files, image names, and framework counts are template behavior that
+ * genuinely differs per starter, so compressing THEM into a shared helper
+ * would trade readability for a few fewer lines).
+ *
+ * @param {import('@playwright/test').Page} appWindow
+ * @param {string} projectPath - Absolute .gstrap manifest path to create at
+ * @param {object} opts
+ * @param {string} opts.starterId - A STARTERS registry id (e.g. 'graphite', 'orbit')
+ * @param {string} [opts.projectName] - Defaults to `${starterId}test`
+ * @param {string[]} [opts.selectedPages] - Narrows which pages get written
+ *        (see src/main/starters/index.js#applyStarter); omitted = all pages
+ * @returns {Promise<{pageNames: string[]}>} The created project's page names,
+ *          in manifest order (page 0 is the tab opened by this helper)
+ */
+export async function createBundledStarterProject(appWindow, projectPath, { starterId, projectName, selectedPages } = {}) {
+  await appWindow.waitForFunction(
+    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
+    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 })
+  return await appWindow.evaluate(async ({ path, starterId, projectName, selectedPages }) => {
+    const config = { name: projectName || `${starterId}test`, location: path, templateId: starterId }
+    // Only thread selectedPages through when the caller actually passed one —
+    // an explicit [] (fails-open-to-all-pages regression pin) must still
+    // reach project.new() as [], not get coerced away by omission.
+    if (selectedPages !== undefined) config.selectedPages = selectedPages
+    const project = await window.grapestrap.project.new(config)
+    const { projectState, pageState } = window.__gstrap
+    projectState.set(project)
+    pageState.open(project.pages[0].name)
+    return { pageNames: project.pages.map(p => p.name) }
+  }, { path: projectPath, starterId, projectName, selectedPages })
 }
 
 // Dismiss the first-run welcome modal for real: its .gstrap-modal-overlay

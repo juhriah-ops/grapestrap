@@ -61,6 +61,14 @@ const grapestrap = {
       ipcRenderer.invoke('file:write-asset-buffer', kind, filename, bytes)
   },
 
+  // ─── Bundled Library sections ──────────────────────────────────────────────
+  // copyAssets takes [{ from, to }] — `from` app-root-relative (must be inside
+  // starters/), `to` site-relative (must be inside assets/). Main enforces both;
+  // resolves to { attempted, rejected[], failures[] }.
+  sections: {
+    copyAssets: (assets) => ipcRenderer.invoke('sections:copy-assets', assets)
+  },
+
   // ─── Watcher events from main → renderer ───────────────────────────────────
   watcher: {
     onChanged: (cb) => subscribe('file:changed', cb),

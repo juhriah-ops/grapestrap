@@ -192,6 +192,66 @@
   line-height: 18px;
 }
 
+/* Custom colour chip — the free-value affordance under each swatch row. Reads
+   its fill from --swatch, set from JS (custom-color.js) exactly like the
+   predetermined swatches, so no colour value is ever inlined in markup. */
+.gstrap-sm-custom-color {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gstrap-sm-custom-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 11px;
+  padding: 2px 9px 2px 3px;
+  cursor: pointer;
+}
+.gstrap-sm-custom-chip:hover { background: var(--bg-3); color: var(--text-1); }
+.gstrap-sm-custom-chip.is-active {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+.gstrap-sm-custom-chip-swatch {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--swatch, transparent);
+  flex: none;
+}
+.gstrap-sm-custom-chip-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Slider row — arbitrary numeric values (opacity) beside their BS step pills. */
+.gstrap-sm-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+.gstrap-sm-slider {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.gstrap-sm-slider-readout {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-width: 34px;
+  text-align: right;
+  flex: none;
+}
+
 /* ── Chunk C: Pseudo-class state bar + cascade view ──────────────────────── */
 
 .gstrap-sm-pseudo-bar {

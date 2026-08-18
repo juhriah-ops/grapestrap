@@ -31,6 +31,39 @@ export function buildApi(manifest) {
       pluginRegistry.blocks.push({ ...def, _plugin: manifest.name })
       eventBus.emit('plugin:block-registered', { plugin: manifest.name, block: def })
     },
+    /**
+     * Register a page section. Sections carrying a `group` are surfaced as
+     * bundled rows in the Library panel (left stack) and insert as free,
+     * fully editable copies — no library wrapper, no lock, no propagation.
+     *
+     * Required: `id` (unique), `label` (row text), `content` (raw HTML).
+     *
+     * Optional, all passed through untouched by validateSection:
+     *   - `group`   {string}   Library-panel group header this section files
+     *                         under, e.g. 'Orbit'. ABSENT = not shown in the
+     *                         Library panel at all (how the 12 generic
+     *                         blocks-sections defs stay Insert-panel-only).
+     *                         Group display order is first-appearance order.
+     *   - `preview` {string}   Inline SVG markup for the row's glyph, injected
+     *                          RAW (bundled-data contract — never build this
+     *                          from user input). Falls back to a default glyph.
+     *   - `css`     {Array<{marker: string, text: string}>} Stylesheet chunks
+     *                          appended to the project's globalCSS on insert,
+     *                          fenced by their marker so a re-insert is a
+     *                          no-op and user edits under a marker survive
+     *                          (editor/css-chunks.js).
+     *   - `assets`  {Array<{from: string, to: string}>} Images copied out of
+     *                          the app bundle on insert. `from` is app-root-
+     *                          relative and must sit under `starters/`; `to`
+     *                          is site-relative and must sit under `assets/`.
+     *                          Copy is skip-if-exists (IPC sections:copy-assets).
+     *   - `description` {string} Row title-attribute text (defaults to label).
+     *   - `dependencies` {string[]} Third-party JS the section needs.
+     *
+     * @param {object} def - The section definition described above
+     * @returns {void}
+     * @throws {Error} If id, label or content is missing
+     */
     registerSection(def) {
       validateSection(def)
       pluginRegistry.sections.push({ ...def, _plugin: manifest.name })

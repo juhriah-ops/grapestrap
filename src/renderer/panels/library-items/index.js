@@ -11,6 +11,22 @@
  * UPDATED: 2026-08-11 — cmdInsert now goes through the shared
  *          resolvePlacement/insertAtPlacement (editor/placement.js) instead
  *          of a locally-duplicated CONTAINER_TAGS/append-at-anchor copy.
+ * UPDATED: 2026-08-17 — panel also paints BUNDLED sections (read-only groups
+ *          below the project's own items) from pluginRegistry.sections.
+ *
+ * Two kinds of content share this panel, and they behave differently:
+ *
+ *   1. PROJECT items (top) — the user's own, saved in the project. Inserting
+ *      one drops a LINKED instance: wrapped, locked, propagated on save.
+ *   2. BUNDLED sections (below, grouped by template name) — read-only defs
+ *      registered by plugins via api.registerSection with a `group`. Inserting
+ *      one drops a FREE editable copy (editor/insert-section.js) — no wrapper,
+ *      no lock, no propagation. They are shipped starting shapes, not links.
+ *
+ * The two row types carry deliberately distinct classes and data attributes
+ * (`.gstrap-lib-item`/`data-lib-insert` vs `.gstrap-lib-bundled-item`/
+ * `data-lib-bundled-insert`) so neither selector set can ever pick up the
+ * other's rows.
  *
  * Lists all library items in the active project. From here the user can:
  *   - "+ New" — create an empty item, give it a name, opens it in a new
@@ -35,12 +51,18 @@
 import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
 import { eventBus } from '../../state/event-bus.js'
+import { pluginRegistry } from '../../plugin-host/registry.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
 import { resolvePlacement, insertAtPlacement, tagOf } from '../../editor/placement.js'
+import { insertBundledSection } from '../../editor/insert-section.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
 import { wireLibraryLock } from './lock.js'
 import { propagateLibraryItem } from './propagate.js'
 import { t } from '../../i18n.js'
+import { log } from '../../log.js'
+
+// Row glyph for a bundled section that ships no `preview` SVG of its own.
+const DEFAULT_SECTION_GLYPH = '▤'
 
 let host = null
 let eventsWired = false
@@ -62,6 +84,10 @@ function wireLibraryPanelEvents() {
   eventBus.on('project:opened',  () => paint())
   eventBus.on('project:closed',  () => paint())
   eventBus.on('library:changed', () => paint())
+  // Bundled groups come from the plugin registry. Built-in plugins activate
+  // before this panel first paints, but a user plugin registering sections
+  // later (or a re-activation) must still show up without a restart.
+  eventBus.on('plugin:section-registered', () => paint())
 }
 
 function paint() {
@@ -72,29 +98,98 @@ function paint() {
     return
   }
   const items = project.libraryItems || []
+  // One scroll region for both halves: the project list and the bundled groups
+  // scroll together, so a long list of own items never squeezes the groups
+  // below it into an unreachable sliver.
   host.innerHTML = `
     <div class="gstrap-lib-toolbar">
       <button class="gstrap-lib-btn" data-lib-new>${escHtml(t('lib.new'))}</button>
       <button class="gstrap-lib-btn" data-lib-from-selection>${escHtml(t('lib.from-selection'))}</button>
     </div>
-    ${items.length === 0
-      ? `<div class="gstrap-lib-empty">${escHtml(t('lib.empty-list'))}</div>`
-      : `<ul class="gstrap-lib-list">
-          ${items.map(it => `
-            <li class="gstrap-lib-item" data-lib-id="${escAttr(it.id)}">
-              <span class="gstrap-lib-name">${escHtml(it.name || it.id)}</span>
-              <span class="gstrap-lib-actions">
-                <button class="gstrap-lib-mini" data-lib-insert="${escAttr(it.id)}" title="${escAttr(t('lib.insert-title'))}">↵</button>
-                <button class="gstrap-lib-mini" data-lib-edit="${escAttr(it.id)}"   title="${escAttr(t('lib.edit-title'))}">✎</button>
-                <button class="gstrap-lib-mini" data-lib-rename="${escAttr(it.id)}" title="${escAttr(t('action.rename'))}">A</button>
-                <button class="gstrap-lib-mini" data-lib-delete="${escAttr(it.id)}" title="${escAttr(t('action.delete'))}">✕</button>
-              </span>
-            </li>
-          `).join('')}
-        </ul>`
-    }
+    <div class="gstrap-lib-scroll">
+      ${items.length === 0
+        ? `<div class="gstrap-lib-empty">${escHtml(t('lib.empty-list'))}</div>`
+        : `<ul class="gstrap-lib-list">
+            ${items.map(it => `
+              <li class="gstrap-lib-item" data-lib-id="${escAttr(it.id)}">
+                <span class="gstrap-lib-name">${escHtml(it.name || it.id)}</span>
+                <span class="gstrap-lib-actions">
+                  <button class="gstrap-lib-mini" data-lib-insert="${escAttr(it.id)}" title="${escAttr(t('lib.insert-title'))}">↵</button>
+                  <button class="gstrap-lib-mini" data-lib-edit="${escAttr(it.id)}"   title="${escAttr(t('lib.edit-title'))}">✎</button>
+                  <button class="gstrap-lib-mini" data-lib-rename="${escAttr(it.id)}" title="${escAttr(t('action.rename'))}">A</button>
+                  <button class="gstrap-lib-mini" data-lib-delete="${escAttr(it.id)}" title="${escAttr(t('action.delete'))}">✕</button>
+                </span>
+              </li>
+            `).join('')}
+          </ul>`
+      }
+      ${renderBundledGroups()}
+    </div>
   `
   wireEvents()
+}
+
+// ── Bundled sections (read-only groups) ────────────────────────────────────
+
+/**
+ * Markup for every bundled group, in first-appearance order. Empty string when
+ * no plugin has registered a grouped section — the panel then looks exactly
+ * as it did before this feature existed.
+ * @returns {string} HTML
+ */
+function renderBundledGroups() {
+  let html = ''
+  for (const [groupName, sections] of groupBundledSections()) {
+    html += `
+      <div class="gstrap-lib-bundled-group">
+        <div class="gstrap-lib-group-header">${escHtml(groupName)}</div>
+        <ul class="gstrap-lib-bundled-list">
+          ${sections.map(renderBundledRow).join('')}
+        </ul>
+      </div>
+    `
+  }
+  return html
+}
+
+/**
+ * Bundled sections keyed by their group header.
+ * Only sections carrying a `group` belong in this panel — the generic
+ * Insert-panel section defs deliberately have none.
+ * @returns {Map<string, object[]>} Map iteration order = group first-appearance
+ */
+function groupBundledSections() {
+  const groups = new Map()
+  for (const section of pluginRegistry.sections || []) {
+    if (!section?.group || !section?.id) continue
+    if (!groups.has(section.group)) groups.set(section.group, [])
+    groups.get(section.group).push(section)
+  }
+  return groups
+}
+
+/**
+ * One bundled row: preview glyph, label, and a single insert button.
+ * @param {object} section - A registerSection def carrying a `group`
+ * @returns {string} HTML for one <li>
+ */
+function renderBundledRow(section) {
+  // `preview` is inline SVG markup injected RAW, per the registerSection
+  // contract (plugin-host/api.js) — it is bundled plugin data, never user
+  // input. Label/description/id go through the escapers like everything else.
+  const previewMarkup = section.preview || DEFAULT_SECTION_GLYPH
+  const label = section.label || section.id
+  return `
+    <li class="gstrap-lib-bundled-item" data-lib-bundled-id="${escAttr(section.id)}"
+        title="${escAttr(section.description || label)}">
+      <span class="gstrap-lib-bundled-media">${previewMarkup}</span>
+      <span class="gstrap-lib-name">${escHtml(label)}</span>
+      <span class="gstrap-lib-actions">
+        <button class="gstrap-lib-mini" data-lib-bundled-insert="${escAttr(section.id)}"
+                title="${escAttr(t('lib.bundled-insert-title'))}">↵</button>
+      </span>
+    </li>
+  `
 }
 
 function wireEvents() {
@@ -114,6 +209,9 @@ function wireEvents() {
   })
   host.querySelectorAll('.gstrap-lib-item').forEach(li => {
     li.addEventListener('dblclick', () => cmdEdit(li.dataset.libId))
+  })
+  host.querySelectorAll('[data-lib-bundled-insert]').forEach(btn => {
+    btn.addEventListener('click', () => cmdInsertBundled(btn.dataset.libBundledInsert))
   })
 }
 
@@ -179,6 +277,33 @@ function cmdInsert(id) {
   const first = Array.isArray(added) ? added[0] : added
   if (first) editor.select(first)
   eventBus.emit('canvas:content-changed')
+}
+
+/**
+ * Insert a bundled section as a free editable copy.
+ *
+ * Gated on an open project like every other command here (the section's CSS
+ * chunks and images have nowhere to land without one). Async unlike cmdInsert:
+ * assets are copied over IPC before the markup goes in.
+ *
+ * @param {string} id - The registered section id from the row's data attribute
+ * @returns {Promise<void>}
+ */
+async function cmdInsertBundled(id) {
+  if (!requireProject()) return
+  const section = (pluginRegistry.sections || []).find(s => s.id === id)
+  if (!section) return
+  try {
+    await insertBundledSection(section)
+  } catch (err) {
+    // Editor not up, or a section def missing content — never leave the click
+    // silently doing nothing (the eventBus swallows handler throws).
+    log.error(`bundled section insert "${id}" failed:`, err)
+    eventBus.emit('toast', {
+      type: 'error',
+      message: t('lib.toast.bundled-insert-failed', { error: err?.message || err })
+    })
+  }
 }
 
 function cmdEdit(id) {

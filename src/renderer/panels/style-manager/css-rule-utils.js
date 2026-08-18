@@ -6,6 +6,9 @@
  * sub-panel writes bare-state rules through the same surgery (readBareRule /
  * writeBareRule, here since 2026-08-03). These helpers do the minimal CSS
  * string surgery — read, upsert, remove — for a single whole-selector rule.
+ * `mergeBareRuleProps` (2026-08-17) layers the read → merge → write discipline
+ * on top for panels that own one prop group inside a shared rule (custom
+ * colour chips, the opacity slider).
  * We deliberately don't pull in a full CSS AST parser: round-tripping
  * comments and complex sheets risks lossy edits the user would notice. The
  * string operations only ever touch the one rule whose ENTIRE selector is
@@ -131,6 +134,35 @@ export function writeBareRule(globalCSS, selector, props) {
   const body = propsToBody(props || {})
   const newRule = body ? `${selector} {\n${body}\n}\n` : ''
   return upsertRule(globalCSS, buildBareRuleRegex(selector), newRule)
+}
+
+/**
+ * Merge one prop group into a selector's bare-state rule, leaving every other
+ * declaration in that rule untouched.
+ *
+ * This is the "merge discipline" the Background sub-panel established, lifted
+ * into a pure function so the Custom-colour chip and the Opacity slider don't
+ * each re-implement read → strip → merge → write (and so it can be unit
+ * tested without a project in memory).
+ *
+ * A prop whose value is '' / null / undefined is REMOVED from the rule — that
+ * is how every "Clear" affordance erases just its own property. When the merge
+ * empties the rule entirely, writeBareRule drops the whole block.
+ *
+ * @param {string} globalCSS - The project stylesheet source.
+ * @param {string} selector  - Whole selector to target, e.g. '.cta-link'.
+ * @param {object} props     - Prop group to merge, e.g. { opacity: '0.5' }.
+ * @returns {string} The new stylesheet source (input unchanged if no selector).
+ */
+export function mergeBareRuleProps(globalCSS, selector, props) {
+  const base = globalCSS || ''
+  if (!selector) return base
+  const merged = readBareRule(base, selector)
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value === '' || value == null) delete merged[key]
+    else merged[key] = String(value)
+  }
+  return writeBareRule(base, selector, merged)
 }
 
 /**

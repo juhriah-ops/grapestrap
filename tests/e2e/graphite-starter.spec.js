@@ -17,50 +17,27 @@
  * CREATED: 2026-08-02
  * UPDATED: 2026-08-11 — added selectedPages narrowing specs (2-page subset +
  *                       []-fails-open pin) and a project:starter-page IPC spec
+ * UPDATED: 2026-08-17 — createGraphiteProject/createGraphiteProjectWithSelection
+ *                       and the local fileExists were pulled into helpers.js
+ *                       as createBundledStarterProject/fileExists when Orbit
+ *                       became the second bundled-asset starter, so the two
+ *                       starters' specs share one creation helper instead of
+ *                       each carrying its own copy. Behavior unchanged.
  */
 import { test, expect } from '@playwright/test'
 import { promises as fsp } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { launch, dismissWelcome, EXPECTED_PLUGIN_COUNT } from './helpers.js'
+import { launch, dismissWelcome, EXPECTED_PLUGIN_COUNT, fileExists, createBundledStarterProject } from './helpers.js'
 
-// Same seed pattern as starter-templates.spec.js's createStarterProject:
-// openSeedProject() hardcodes a blank project, so starters need their own
-// helper carrying templateId through to project.new().
-async function createGraphiteProject(appWindow, projectPath) {
-  await appWindow.waitForFunction(
-    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
-    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 })
-  return await appWindow.evaluate(async path => {
-    const project = await window.grapestrap.project.new({
-      name: 'graphitetest', location: path, templateId: 'graphite'
-    })
-    const { projectState, pageState } = window.__gstrap
-    projectState.set(project)
-    pageState.open(project.pages[0].name)
-    return { pageNames: project.pages.map(p => p.name) }
-  }, projectPath)
-}
-
-// Variant of createGraphiteProject that threads selectedPages through to
-// project.new() — kept separate from the helper above (rather than adding an
-// optional param to it) so the existing calls/pin above stay byte-identical.
-async function createGraphiteProjectWithSelection(appWindow, projectPath, selectedPages) {
-  await appWindow.waitForFunction(
-    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
-    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 })
-  return await appWindow.evaluate(async ({ path, selectedPages }) => {
-    const project = await window.grapestrap.project.new({
-      name: 'graphitetest', location: path, templateId: 'graphite', selectedPages
-    })
-    const { projectState, pageState } = window.__gstrap
-    projectState.set(project)
-    pageState.open(project.pages[0].name)
-    return { pageNames: project.pages.map(p => p.name) }
-  }, { path: projectPath, selectedPages })
-}
-
-const fileExists = p => fsp.access(p).then(() => true, () => false)
+// Thin, file-local wrappers so every test below keeps calling a one-arg
+// (or one-plus-selection-arg) helper — createBundledStarterProject itself
+// takes an options object so it reads sensibly from a THIRD starter's spec
+// too (starterId is never optional there).
+const createGraphiteProject = (appWindow, projectPath) =>
+  createBundledStarterProject(appWindow, projectPath, { starterId: 'graphite' })
+const createGraphiteProjectWithSelection = (appWindow, projectPath, selectedPages) =>
+  createBundledStarterProject(appWindow, projectPath, { starterId: 'graphite', selectedPages })
 
 test('Graphite starter: bundle assets land on disk, app-bundled framework files do not', async () => {
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-graphite-'))

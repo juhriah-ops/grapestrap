@@ -1,13 +1,36 @@
 /**
  * @grapestrap/blocks-sections
  *
- * 12 pre-built Bootstrap 5 sections. Adapted from Gramateria with hardcoded
- * Cloudinary image URLs replaced with semantic placeholders. Class-first:
- * everything uses Bootstrap utility classes, no inline styles.
+ * Two families of section content ship from this one built-in:
+ *
+ *   1. GENERIC sections (SECTIONS below) — 12 pre-built Bootstrap 5 sections,
+ *      adapted from Gramateria with hardcoded Cloudinary image URLs replaced
+ *      with semantic placeholders. Class-first: everything uses Bootstrap
+ *      utility classes, no inline styles. Registered twice, as an Insert-panel
+ *      BLOCK and as a section, and carrying no `group` — so they stay out of
+ *      the Library panel, which paints grouped sections only.
+ *
+ *   2. TEMPLATE sections (graphite-sections.js, orbit-sections.js, added
+ *      2026-08-17) — the two bundled starters' own page bands, harvested into
+ *      free editable copies. These carry a `group` (the template name), a CSS
+ *      payload, and the images they need, and appear as read-only rows in the
+ *      Library panel. Insert-panel blocks are deliberately NOT registered for
+ *      them: their CSS chunks and images only land through the Library's
+ *      insert path (renderer/editor/insert-section.js).
  *
  * Sections that need third-party JS (carousel/lightbox) declare dependencies;
  * the host injects locally bundled scripts into the canvas iframe on demand.
  */
+
+import { CSS_PARTS as GRAPHITE_CSS_PARTS, SECTIONS as GRAPHITE_SECTIONS } from './graphite-sections.js'
+import { CSS_PARTS as ORBIT_CSS_PARTS, SECTIONS as ORBIT_SECTIONS } from './orbit-sections.js'
+
+// Each template's Library group header and the two data modules behind it.
+// The `group` string is what the Library panel prints above the rows.
+const TEMPLATE_FAMILIES = [
+  { group: 'Graphite', sections: GRAPHITE_SECTIONS, cssParts: GRAPHITE_CSS_PARTS },
+  { group: 'Orbit',    sections: ORBIT_SECTIONS,    cssParts: ORBIT_CSS_PARTS }
+]
 
 export default function register(api) {
   api.log.info('registering section blocks')
@@ -27,6 +50,53 @@ export default function register(api) {
       dependencies: section.dependencies || []
     })
   }
+
+  for (const family of TEMPLATE_FAMILIES) {
+    for (const section of family.sections) {
+      api.registerSection({
+        id: section.id,
+        label: section.label,
+        content: section.content,
+        group: family.group,
+        preview: section.preview,
+        description: section.description,
+        css: resolveCssParts(section, family.cssParts),
+        assets: section.assets || []
+      })
+    }
+  }
+}
+
+/**
+ * Turn a def's `cssParts` keys into the `[{marker, text}]` shape
+ * registerSection stores and editor/css-chunks.js appends.
+ *
+ * Order is preserved from the def, which is what keeps each template's base
+ * chunk ahead of its section chunks in the project stylesheet — equal-
+ * specificity rules resolve in the section's favor because of it.
+ *
+ * A key with no entry in CSS_PARTS is dropped with a warning rather than
+ * written as an empty chunk: an empty chunk would still plant its marker, and
+ * the marker is what makes the next insert a no-op — so a typo would silently
+ * lock the section out of ever getting its rules. The data-lint unit test
+ * (tests/unit/template-sections-data.test.js) fails the build on this, so in
+ * practice the warning is a belt over a braces.
+ *
+ * @param {object} section - A def from a template's SECTIONS array
+ * @param {Object<string, string>} cssParts - That template's CSS_PARTS map
+ * @returns {Array<{marker: string, text: string}>} Chunks, in def order
+ */
+function resolveCssParts(section, cssParts) {
+  const chunks = []
+  for (const marker of section.cssParts || []) {
+    const text = cssParts[marker]
+    if (typeof text !== 'string') {
+      console.warn(`[blocks-sections] section "${section.id}" wants unknown CSS part "${marker}"`)
+      continue
+    }
+    chunks.push({ marker, text })
+  }
+  return chunks
 }
 
 const SECTIONS = [

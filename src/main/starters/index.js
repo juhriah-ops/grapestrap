@@ -12,19 +12,20 @@
 //
 //       Two flavours of starter live here. Landing/portfolio/blog are pure
 //       text: HTML strings plus a couple of node_modules vendor files pulled
-//       in by name (vendorDeps). Graphite additionally carries a BINARY ASSET
-//       BUNDLE on disk at <appRoot>/starters/<bundleDir>/ — vendored
-//       Bootstrap + Font Awesome + webfonts + photos — copied wholesale into
-//       the new project, and declares the manifest overrides that go with it
-//       (globalCSS → its own theme.css, framework → its own CSS/JS set). A
-//       starter carrying `framework` owns the project's framework outright:
-//       project-manager skips copyFrameworkAssets for it on both create and
-//       load, and the page composer emits the vendored links instead.
+//       in by name (vendorDeps). Graphite and Orbit additionally carry a
+//       BINARY ASSET BUNDLE on disk at <appRoot>/starters/<bundleDir>/ —
+//       vendored Bootstrap + Font Awesome + webfonts + photos — copied
+//       wholesale into the new project, and declare the manifest overrides
+//       that go with it (globalCSS → their own theme.css, framework → their
+//       own CSS/JS set). A starter carrying `framework` owns the project's
+//       framework outright: project-manager skips copyFrameworkAssets for it
+//       on both create and load, and the page composer emits the vendored
+//       links instead.
 // DEPENDS: node:fs, node:path, electron (app.getAppPath for vendor + bundle
 //          sources), ../../shared/page-html.js (composeFullPageHtml),
 //          ../copy-tasks.js (copyFilesIdempotent — shared with
 //          copyFrameworkAssets — and copyDirIdempotent),
-//          ./landing.js, ./portfolio.js, ./blog.js, ./graphite.js
+//          ./landing.js, ./portfolio.js, ./blog.js, ./graphite.js, ./orbit.js
 // CREATED: 2026-07-12 (Wave 4)
 // UPDATED: 2026-08-11 — listStarters() now includes per-page metadata
 //                       (name/title/description, no HTML); new
@@ -32,6 +33,9 @@
 //                       applyStarter() accepts optional selectedPages to
 //                       narrow which pages get written (templates/assets/
 //                       vendorDeps/bundle stay unconditional)
+// UPDATED: 2026-08-17 — Orbit starter registered (second bundled starter,
+//                       same shape as Graphite: bundleDir + globalCSS +
+//                       framework overrides)
 // =============================================================
 
 import { promises as fsp } from 'node:fs'
@@ -42,12 +46,13 @@ import { copyFilesIdempotent, copyDirIdempotent } from '../copy-tasks.js'
 import { landing } from './landing.js'
 import { portfolio } from './portfolio.js'
 import { blog } from './blog.js'
-// Graphite is a default export (the others are named) — it is generated
-// pure-data rather than hand-authored alongside this registry.
+// Graphite and Orbit are default exports (the others are named) — both are
+// generated pure-data rather than hand-authored alongside this registry.
 import graphite from './graphite.js'
+import orbit from './orbit.js'
 
 // Registration order = dialog display order (after the prepended Blank).
-const STARTERS = [landing, portfolio, blog, graphite]
+const STARTERS = [landing, portfolio, blog, graphite, orbit]
 const BY_ID = new Map(STARTERS.map(s => [s.id, s]))
 
 // In-project destinations mirror copyFrameworkAssets' un-min-first policy:

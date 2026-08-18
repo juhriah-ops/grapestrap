@@ -126,6 +126,15 @@ export function visibilityPattern() {
   return /^(?:in)?visible$/
 }
 
+// ── Opacity ─────────────────────────────────────────────────────────────────
+// BS5 ships five fixed steps. Anything between them is a free value the
+// Display sub-panel writes as an `opacity` declaration on the component's
+// own rule instead (see bare-rule-store.js).
+export const OPACITY = ['0', '25', '50', '75', '100']
+export function opacityPattern() {
+  return /^opacity-(?:0|25|50|75|100)$/
+}
+
 // ── Text ────────────────────────────────────────────────────────────────────
 export const TEXT_ALIGN = [
   { value: 'start',   label: 'Start'   },

@@ -4,6 +4,10 @@
  * Alignment, weight, style, decoration, transform, size, color. All
  * one-of-many groups except decoration (which is exclusive in BS5 — there's
  * no "underline + line-through" combined utility).
+ *
+ * The Custom colour row (custom-color.js) handles anything outside the BS
+ * theme palette by writing `color` onto the component's rule in project
+ * style.css — mutually exclusive with the `text-*` swatches above it.
  */
 
 import {
@@ -14,6 +18,9 @@ import {
   textSizePattern, textColorPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup } from './class-utils.js'
+import { pickSelector, isBsUtility } from './css-rule-utils.js'
+import { readProjectRule } from './bare-rule-store.js'
+import { customColorRowMarkup, wireCustomColorRow, clearCustomColor } from './custom-color.js'
 import { t } from '../../i18n.js'
 
 export const id = 'text'
@@ -29,6 +36,10 @@ export function render(host, ctx) {
   const curDeco   = readGroup(component, textDecorationPattern())
   const curSize   = readGroup(component, textSizePattern())
   const curColor  = readGroup(component, textColorPattern())
+
+  // Free-colour value lives on the component's own rule in project style.css.
+  const selector = pickSelector(component, isBsUtility)
+  const customColor = readProjectRule(selector).color || ''
 
   host.innerHTML = `
     <div class="gstrap-sm-row">
@@ -95,6 +106,7 @@ export function render(host, ctx) {
         <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="${escHtml(t('action.clear'))}">×</button>
       </div>
     </div>
+    ${customColorRowMarkup({ selector, value: customColor })}
   `
 
   // Align (responsive variant deferred — chunk A keeps Display as the single
@@ -154,15 +166,25 @@ export function render(host, ctx) {
     applyGroup(component, textSizePattern(), null); requestRender()
   })
 
+  // Predetermined token wins → drop the free colour, so only one of the two
+  // ever applies to the element.
   host.querySelectorAll('[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
       const cls = `text-${btn.dataset.color}`
       applyGroup(component, textColorPattern(), curColor === cls ? null : cls)
+      clearCustomColor(selector, 'color')
       requestRender()
     })
   })
   host.querySelector('[data-color-clear]')?.addEventListener('click', () => {
     applyGroup(component, textColorPattern(), null); requestRender()
+  })
+
+  wireCustomColorRow(host, {
+    component, selector,
+    prop: 'color',
+    classPattern: textColorPattern(),
+    requestRender
   })
 }
 

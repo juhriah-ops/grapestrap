@@ -16,6 +16,7 @@ import { pageState } from '../state/page-state.js'
 import {
   resetToDefaultLayout, applyWorkspaceByName, saveWorkspaceAs, openWorkspaceManager
 } from '../layout/workspaces.js'
+import { focusPanelTab } from '../layout/panel-visibility.js'
 import { getCanvasHtml, getEditor } from '../editor/grapesjs-init.js'
 import { rebuildCanvasFromCode } from '../editor/canvas-sync.js'
 import { showQuickTagDialog, formatComponentAsQuickTag } from '../dialogs/quick-tag.js'
@@ -31,6 +32,9 @@ import { openFindInProjectDialog } from '../dialogs/find-in-project.js'
 import { getMonacoPair } from '../panels/canvas/index.js'
 import { getFileEditor } from '../editor/file-tabs.js'
 import { getFocusedMonacoEditor } from '../editor/monaco-init.js'
+import {
+  codeHasUserEdits, lastEditOrigin, popUndoTarget, pushUndoTarget, withReplayFence
+} from '../editor/edit-origin.js'
 import { cmdPreviewBrowser } from '../preview.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
@@ -174,6 +178,13 @@ async function dispatchCommand(action, args = []) {
     // toggle path first so visibility prefs stay consistent — focusing a tab
     // in a hidden panel would otherwise be a silent no-op.
     case 'insert:focus-tab': {
+      // Insert → Library is the odd one out: there is no 'library' tab in the
+      // Insert strip (panels/insert matchesCategory has no library arm), so
+      // this used to swap the strip to an empty "no blocks" state and stop
+      // there. The Library is a GL tab in the LEFT stack — send the user to
+      // the real thing, where both their own items and the bundled section
+      // groups live.
+      if (args[0] === 'library') return focusPanelTab('library-items')
       const host = document.getElementById('gstrap-insert')
       if (host?.hidden) eventBus.emit('view:toggle-insert')
       return eventBus.emit('insert:focus-tab', args[0])
@@ -360,19 +371,112 @@ async function cmdExport() {
 // CANVAS undo stack instead of the code — the nola1 "Ctrl+Z doesn't work in
 // code view / feels inconsistent" report. Focused Monaco → model undo;
 // otherwise the GrapesJS component UndoManager (design view).
+//
+// SPLIT VIEW IS DIFFERENT (2026-08-17). With both panes on screen, focus is
+// the wrong question: the user drags a block, clicks into the code pane to
+// look at the markup, hits Ctrl+Z — focus says "code", the only history is on
+// the canvas, and nothing happens at all (measured scenario S10). So in split
+// mode we route by the most recent USER edit instead, falling through to
+// whichever stack still has work. Pure 'design' and pure 'code' modes keep
+// focus routing exactly as-is — that fix was hard-won and stays pinned by
+// tests/e2e/undo-redo.spec.js.
 function cmdUndo() {
+  const um = pluginRegistry.bound.editor?.UndoManager
+  if (isSplitRoutingActive()) {
+    const splitTarget = resolveSplitUndoTarget(um)
+    // No target means BOTH stacks are exhausted of user-made steps. Return
+    // rather than falling through to focus routing — that would hand the key
+    // to the split code pane's Monaco, which happily unwinds below the floor
+    // into the sync's own generated rewrites and desyncs the two panes.
+    if (!splitTarget) return
+    const tabKey = pageState.active().pageName
+    pushUndoTarget(tabKey, splitTarget)
+    return withReplayFence(() => (
+      splitTarget === 'code'
+        ? getMonacoPair()?.htmlEditor?.trigger('gstrap', 'undo', {})
+        : um.undo()
+    ))
+  }
   const focused = getFocusedMonacoEditor()
   if (focused) return focused.trigger('gstrap', 'undo', {})
-  const um = pluginRegistry.bound.editor?.UndoManager
   if (!um) return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   um.undo()
 }
 function cmdRedo() {
+  const um = pluginRegistry.bound.editor?.UndoManager
+  if (isSplitRoutingActive()) {
+    // Redo mirrors the undo it reverses, LIFO. Re-deriving the route from
+    // current state instead would bounce panes mid-sequence, because the undo
+    // we are undoing is exactly what changed that state.
+    const tabKey = pageState.active().pageName
+    const mirrored = popUndoTarget(tabKey)
+    if (mirrored) {
+      return withReplayFence(() => (
+        mirrored === 'code'
+          ? getMonacoPair()?.htmlEditor?.trigger('gstrap', 'redo', {})
+          : um?.redo()
+      ))
+    }
+    // No undo of ours left to mirror — fall through to whichever stack can
+    // actually redo, canvas first (it is the one the user watches).
+    if (um?.hasRedo?.()) return withReplayFence(() => um.redo())
+    const htmlEditor = getMonacoPair()?.htmlEditor
+    if (htmlEditor?.getModel?.()?.canRedo?.()) {
+      return withReplayFence(() => htmlEditor.trigger('gstrap', 'redo', {}))
+    }
+    return
+  }
   const focused = getFocusedMonacoEditor()
   if (focused) return focused.trigger('gstrap', 'redo', {})
-  const um = pluginRegistry.bound.editor?.UndoManager
   if (!um) return eventBus.emit('toast', { type: 'warning', message: noProjectMsg() })
   um.redo()
+}
+
+/**
+ * Is the active tab showing both panes, with the caret somewhere that split
+ * routing owns?
+ *
+ * Deliberately yields to a focused Monaco that is NOT the split code pane —
+ * the Custom CSS panel and file-tab editors are their own documents with their
+ * own history, and Ctrl+Z while typing in one of those must stay with it.
+ * That is the case tests/e2e/undo-redo.spec.js's focus-routing spec pins.
+ *
+ * @returns {boolean}
+ */
+function isSplitRoutingActive() {
+  if (pageState.active()?.viewMode !== 'split') return false
+  const focused = getFocusedMonacoEditor()
+  if (!focused) return true
+  const pair = getMonacoPair()
+  return focused === pair?.htmlEditor || focused === pair?.cssEditor
+}
+
+/**
+ * Which stack should a split-view undo unwind?
+ *
+ * @param {object} undoManager - The GrapesJS UndoManager (may be undefined).
+ * @returns {'design'|'code'|null} null means "not split routing — use focus".
+ *
+ * Honours the last user origin while that pane still has work of its own, then
+ * falls through. `codeHasUserEdits` is the floor check from edit-origin.js: it
+ * is false once the code pane is back to exactly what the last generated sync
+ * wrote, which stops a code-pane Ctrl+Z from ever unwinding into the sync's
+ * own rewrites.
+ */
+function resolveSplitUndoTarget(undoManager) {
+  if (!isSplitRoutingActive()) return null
+  const tab = pageState.active()
+  const model = getMonacoPair()?.htmlEditor?.getModel?.()
+  const codeAvailable = !!model?.canUndo?.() &&
+    codeHasUserEdits(tab.pageName, model.getAlternativeVersionId())
+  const designAvailable = !!undoManager?.hasUndo?.()
+
+  const origin = lastEditOrigin(tab.pageName)
+  if (origin === 'code' && codeAvailable) return 'code'
+  if (origin === 'design' && designAvailable) return 'design'
+  if (designAvailable) return 'design'
+  if (codeAvailable) return 'code'
+  return null
 }
 
 function cmdDuplicate() {

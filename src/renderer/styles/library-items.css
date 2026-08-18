@@ -47,12 +47,18 @@
   line-height: 1.5;
 }
 
+/* The single scroll region under the toolbar: project items first, bundled
+   section groups below them. The scroll lives here rather than on the list so
+   both halves move together (added with bundled sections, 2026-08-17). */
+.gstrap-lib-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
 .gstrap-lib-list {
   list-style: none;
   margin: 0;
   padding: 4px 0;
-  overflow-y: auto;
-  flex: 1 1 auto;
 }
 .gstrap-lib-item {
   display: flex;
@@ -91,6 +97,57 @@
   color: var(--text-1);
   border-color: var(--border);
 }
+
+/* Bundled sections: read-only groups of shipped, pre-formatted sections that
+   insert as free editable copies. Visually subordinate to the project's own
+   items above them — same row rhythm, quieter header, and a preview glyph in
+   place of the project rows' four action buttons. */
+.gstrap-lib-bundled-group {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.gstrap-lib-group-header {
+  padding: 6px 8px 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-3);
+  background: var(--bg-3);
+}
+.gstrap-lib-bundled-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0;
+}
+.gstrap-lib-bundled-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  cursor: default;
+}
+.gstrap-lib-bundled-item:hover { background: var(--bg-3); }
+.gstrap-lib-bundled-item:hover .gstrap-lib-actions { opacity: 1; }
+/* Fixed box so labels line up whether the section ships an SVG preview or
+   falls back to the glyph; the SVG scales into it rather than setting the row
+   height. */
+.gstrap-lib-bundled-media {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 16px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1;
+  overflow: hidden;
+}
+.gstrap-lib-bundled-media svg {
+  width: 100%;
+  height: 100%;
+}
+.gstrap-lib-bundled-item:hover .gstrap-lib-bundled-media { color: var(--accent); }
 
 /* Tab badge: small "lib" pill prefix on library tabs, distinguishes from pages. */
 .gstrap-tab.is-library .gstrap-tab-label {

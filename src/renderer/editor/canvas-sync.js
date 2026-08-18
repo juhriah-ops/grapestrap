@@ -25,6 +25,39 @@
  * rebuild the OUTGOING tab's canvas from Monaco after pageState has already
  * flipped to the INCOMING tab), and the split-view Monaco blur now triggers
  * a rebuild too (bindSync's onDidBlurEditorWidget hook below).
+ *
+ * UPDATED: 2026-08-17 — split-view undo repair. Two changes here, both aimed
+ * at the same user report ("undo needs improving, most issues are on the
+ * splitview screen"):
+ *
+ *  1. Design→Code writes no longer use `codeEditor.setValue()`. Monaco's
+ *     `setValue` runs `_commandManager.clear()` — it DESTROYS the model's undo
+ *     stack, and resets caret and scroll. In Split view this sync fires on
+ *     every canvas edit, so every canvas edit was wiping whatever the user had
+ *     typed in the code pane out of undo history and throwing the caret back
+ *     to line 1 (measured: caret line 31 → 1). Writes now go through a
+ *     prefix/suffix-trimmed `pushEditOperations` (shared/text-diff.js).
+ *
+ *     DELIBERATE CHOICE — do sync-generated states belong on Monaco's undo
+ *     stack? They are ON it, but the user can never reach them. They must be
+ *     tracked (an untracked `model.applyEdits` writes behind the undo stack's
+ *     back and leaves every older entry's offsets stale, so a later Ctrl+Z
+ *     splices garbage), and they must be unreachable (undoing a generated
+ *     rewrite would revert the code pane while the canvas keeps the change —
+ *     an unrecoverable desync). editor/edit-origin.js holds the FLOOR that
+ *     enforces the second half: a code-pane undo only unwinds edits the user
+ *     made on top of the last generated rewrite. Net effect for the user: a
+ *     code-pane Ctrl+Z reverts THEIR typing, is not erased by canvas activity,
+ *     and never walks back through a wall of generated rewrites.
+ *
+ *  2. The split-view blur rebuild is now conditional. It used to fire on EVERY
+ *     blur, and rebuildCanvasFromCode ends in `um.clear()` — so merely clicking
+ *     from the code pane onto the canvas, typing nothing, destroyed the whole
+ *     canvas undo stack (measured: 2 entries → 0, and Ctrl+Z afterwards did
+ *     nothing at all). The rebuild now runs only when the code buffer actually
+ *     differs from what the last sync put there. The code→design VIEW-SWITCH
+ *     path is deliberately left alone — its clear-on-rebuild is a pinned
+ *     product decision (tests/e2e/templates.spec.js "undo contract").
  */
 
 import { eventBus } from '../state/event-bus.js'
@@ -33,6 +66,8 @@ import { formatHtml } from './format-html.js'
 import { projectState } from '../state/project-state.js'
 import { pageState } from '../state/page-state.js'
 import { composeFullPageHtml, extractPageFromFullHtml, isFullHtmlDocument, stripBodyWrapper } from '../../shared/page-html.js'
+import { computeMinimalTextEdit } from '../../shared/text-diff.js'
+import { setCodeFloor, stampUserEdit } from './edit-origin.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
 
@@ -42,6 +77,21 @@ let activeSide = 'design'    // 'design' | 'code'
 let canvasUpdateTimer = null
 let suppressCanvasToCode = false
 let suppressCodeToCanvas = false
+
+// The exact HTML the last generated write put into the code pane (or that the
+// last rebuild consumed out of it). `null` means "unknown" — always rebuild
+// rather than risk skipping a real edit. Compared against the live buffer to
+// tell a genuine code edit from an untouched pane; see the blur hook.
+let lastSyncedCodeText = null
+
+// Set by panels/canvas/index.js immediately before it loads a different tab's
+// content into the shared canvas. The next generated write then goes through
+// setValue rather than a minimal edit, deliberately clearing Monaco's history:
+// one Monaco pair is shared by every tab, so carrying the outgoing tab's undo
+// entries into the incoming tab would let Ctrl+Z paste the previous page's
+// markup into this one. (Before this module stopped calling setValue on every
+// sync, that clear happened by accident on every single sync.)
+let codeHistoryResetPending = false
 
 const DEBOUNCE_MS = 300
 
@@ -69,7 +119,26 @@ export function bindSync({ htmlMonaco, cssMonaco }) {
   // below), and rebuilding on every blur in Code-only mode would be wasted
   // work with no visible design pane to show it in.
   htmlMonaco?.onDidBlurEditorWidget(() => {
-    if (pageState.active()?.viewMode === 'split') rebuildCanvasFromCode()
+    if (pageState.active()?.viewMode !== 'split') return
+    // Only rebuild if the user actually changed something. rebuildCanvasFromCode
+    // ends with UndoManager.clear(), so an unconditional rebuild meant that
+    // clicking from the code pane back to the canvas — reading, not editing —
+    // threw away every canvas undo step the user had. Measured 2026-08-17:
+    // stack length 2 → 0 on a focus/blur round trip with nothing typed.
+    if (lastSyncedCodeText !== null && htmlMonaco.getValue() === lastSyncedCodeText) return
+    rebuildCanvasFromCode()
+  })
+
+  // Code-pane user edits stamp this tab's undo routing origin. Generated
+  // writes are excluded via suppressCodeToCanvas (set only while THIS module
+  // is writing), and undo/redo replays via the event's own flags — neither is
+  // a user edit, and treating them as one would misroute the next Ctrl+Z and
+  // clear the redo trail mid-sequence.
+  htmlMonaco?.onDidChangeModelContent(event => {
+    if (suppressCodeToCanvas) return
+    if (event?.isUndoing || event?.isRedoing) return
+    const tab = pageState.active()
+    if (tab) stampUserEdit(tab.pageName, 'code')
   })
   // Canvas focus is detected via GrapesJS frame focus events
   if (editor) {
@@ -122,10 +191,62 @@ function syncCanvasToCode() {
   }
   const css = editor.getCss()
   suppressCodeToCanvas = true
-  if (codeEditor.getValue() !== html) codeEditor.setValue(html)
-  if (cssEditor && cssEditor.getValue() !== css) cssEditor.setValue(css)
+  // A pending reset means the shared code pane is about to show a DIFFERENT
+  // tab's document — take the destructive path on purpose, once.
+  const hardReset = codeHistoryResetPending
+  codeHistoryResetPending = false
+  writeIntoCodePane(codeEditor, html, hardReset)
+  if (cssEditor) writeIntoCodePane(cssEditor, css, hardReset)
   suppressCodeToCanvas = false
+
+  lastSyncedCodeText = html
+  // Re-floor AFTER the write: from here on, "the model differs from this
+  // version" is exactly "the user has typed something the sync didn't".
+  const tab2 = pageState.active()
+  if (tab2) setCodeFloor(tab2.pageName, codeEditor.getModel?.()?.getAlternativeVersionId?.() ?? null)
+
   eventBus.emit('sync:canvas-to-code', { html, css })
+}
+
+/**
+ * Push generated content into a Monaco editor without destroying the user's
+ * undo history, caret or scroll position.
+ *
+ * @param {object} editorInstance - A Monaco editor (html or css pane).
+ * @param {string} nextText - The content the canvas says the pane should show.
+ * @param {boolean} hardReset - True only on a tab swap: use setValue so the
+ *        outgoing tab's undo entries are dropped rather than carried over.
+ * @returns {void}
+ *
+ * Throws nothing: a model can be disposed between the debounce firing and this
+ * running (tab closed, project closed), in which case there is nothing to
+ * write and silently skipping is the correct behaviour — the next sync for the
+ * live model will carry the content.
+ */
+function writeIntoCodePane(editorInstance, nextText, hardReset) {
+  const model = editorInstance?.getModel?.()
+  if (!model) return
+  if (hardReset) {
+    if (model.getValue() !== nextText) model.setValue(nextText)
+    return
+  }
+  const edit = computeMinimalTextEdit(model.getValue(), nextText)
+  // null = already identical. Skipping matters beyond efficiency: an empty
+  // edit still pushes an undo stop, which would pile up no-op steps on the
+  // stack every time the debounce fired after a non-content change.
+  if (!edit) return
+  const range = {
+    startLineNumber: model.getPositionAt(edit.startOffset).lineNumber,
+    startColumn: model.getPositionAt(edit.startOffset).column,
+    endLineNumber: model.getPositionAt(edit.endOffset).lineNumber,
+    endColumn: model.getPositionAt(edit.endOffset).column
+  }
+  // pushEditOperations (not applyEdits): the edit MUST be recorded on the undo
+  // stack. applyEdits writes behind the stack's back, leaving every older
+  // entry's offsets pointing into text that moved — a later Ctrl+Z would then
+  // splice at the wrong place and corrupt the buffer. Recorded-but-unreachable
+  // is the contract; edit-origin.js's floor keeps the user off these entries.
+  model.pushEditOperations([], [{ range, text: edit.text }], () => null)
 }
 
 /**
@@ -154,6 +275,15 @@ export function rebuildCanvasFromCode(tabOverride) {
 
   const raw = codeEditor.getValue()
   const css = cssEditor ? cssEditor.getValue() : ''
+
+  // The canvas is about to BE this text, so it is no longer an unsynced code
+  // edit — record it as the baseline the split-view blur hook compares against
+  // and re-floor the code pane's undo routing on it.
+  lastSyncedCodeText = raw
+  const flooredTab = tabOverride ?? pageState.active()
+  if (flooredTab) {
+    setCodeFloor(flooredTab.pageName, codeEditor.getModel?.()?.getAlternativeVersionId?.() ?? null)
+  }
 
   // For pages, the Code view holds the full HTML doc (alpha.7+). Extract the
   // body for setComponents and the head fields back into the manifest so
@@ -221,6 +351,40 @@ export function rebuildCanvasFromCode(tabOverride) {
  */
 export function resumeCanvasToCodeSync() {
   suppressCanvasToCode = false
+}
+
+/**
+ * Is this module currently pushing a code→canvas rebuild through GrapesJS?
+ *
+ * panels/canvas/index.js needs it to tell a rebuild's component:add storm from
+ * a genuine user canvas edit when stamping undo-routing origin. Its existing
+ * `loadingTabName` fence covers programmatic tab LOADS but not rebuilds, which
+ * come from this module.
+ *
+ * @returns {boolean}
+ */
+export function isRebuildingFromCode() {
+  return suppressCanvasToCode
+}
+
+/**
+ * Tell the next generated write to clear the code pane's undo history instead
+ * of preserving it.
+ *
+ * Called by panels/canvas/index.js#swapToTab. One Monaco pair serves every tab
+ * (page-state.js documents a per-tab `monacoState`, but nothing has ever
+ * implemented it), so without this the incoming tab inherits the outgoing
+ * tab's undo entries and Ctrl+Z would splice the previous page's markup into
+ * this one. Pinned by tests/e2e/undo-redo.spec.js "undo does not leak content
+ * across page tabs" and its split-view sibling.
+ *
+ * @returns {void}
+ */
+export function requestCodeHistoryReset() {
+  codeHistoryResetPending = true
+  // Force the blur hook to rebuild rather than compare against the outgoing
+  // tab's text, until the next sync establishes a baseline for the new tab.
+  lastSyncedCodeText = null
 }
 
 /**

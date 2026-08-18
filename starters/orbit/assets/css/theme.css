@@ -1,0 +1,591 @@
+/*
+	File: assets/css/theme.css
+	Purpose: Theme layer over Bootstrap 5 for the "Orbit" (blue) template —
+	         typography, dark chrome navbar/footer, hero/intro bands, feature grid,
+	         staff avatars, tweet banner, sidebar widgets, ring-icon buttons.
+	         Loads after bootstrap.min.css.
+	Used by: index.html, left-sidebar.html, right-sidebar.html, two-sidebar.html,
+	         no-sidebar.html
+*/
+
+/* Palette + metrics */
+
+	:root {
+		--accent: #7C9CD0;
+		--ink: #333131;
+		--body-copy: #888787;
+		--paper: #ffffff;
+		--paper-alt: #f2f1f1;
+	}
+
+	/* In-page theme preview: the navbar swatches set data-theme on <html> so
+	   all four palette variants can be compared without opening another build.
+	   Blue is the default (:root above); the other builds ship these values. */
+	:root[data-theme="cyan"] { --accent: #56C9D6; }
+	:root[data-theme="green"] { --accent: #87BD94; }
+	:root[data-theme="red"] { --accent: #DA7E79; }
+	:root[data-theme="violet"] { --accent: #A388D0; }
+	:root[data-theme="amber"] { --accent: #D6A971; }
+	:root[data-theme="rose"] { --accent: #D687B0; }
+
+/* Base typography */
+
+	body {
+		background: var(--ink);
+		font-family: 'Roboto', sans-serif;
+		font-weight: 300;
+		font-size: 1.25rem;
+		line-height: 1.75;
+		color: var(--body-copy);
+	}
+
+	h1, h2, h3, h4, h5, h6 {
+		font-weight: 300;
+		color: var(--ink);
+	}
+
+	strong, b {
+		font-weight: 400;
+		color: var(--ink);
+	}
+
+	a {
+		color: var(--accent);
+		text-decoration: none;
+	}
+
+	h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
+		color: inherit;
+	}
+
+	@media (max-width: 1680px) {
+		body { font-size: 1.1rem; }
+	}
+
+	@media (max-width: 1280px) {
+		body { font-size: 1rem; }
+	}
+
+	@media (max-width: 767.98px) {
+		body { font-size: 0.95rem; }
+	}
+
+	/* Shared heading block used above every section's body copy */
+	.section-header {
+		margin-bottom: 2.5em;
+		text-align: center;
+	}
+
+	.section-title {
+		font-size: 2.3em;
+		font-weight: 300;
+	}
+
+	/* Subtitle line under a heading (hero + article headers) */
+	.byline {
+		display: block;
+		padding: 1.2em 0 0.5em 0;
+		font-size: 1.3em;
+		font-weight: 300;
+	}
+
+/* Navbar */
+
+	.site-navbar {
+		padding: 1em 1.5em;
+		background-color: var(--ink);
+	}
+
+		.site-navbar .site-logo {
+			letter-spacing: 1px;
+			font-size: 1.25em;
+			font-weight: 300;
+			color: #fff;
+		}
+
+		.site-navbar .nav-link {
+			margin-left: 0.7em;
+			padding: 0.35em 1.2em;
+			letter-spacing: 0.06em;
+			font-size: 0.8em;
+			color: #ccc;
+			border-radius: 0.3125rem;
+			transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out;
+		}
+
+			.site-navbar .nav-link:hover,
+			.site-navbar .nav-link:focus {
+				color: #fff;
+			}
+
+			.site-navbar .nav-link.active {
+				background-color: var(--accent);
+				color: #fff;
+			}
+
+	/* Theme picker — four accent swatches in the navbar; the active one gets a
+	   white ring. Swatch colors mirror the :root[data-theme] overrides above. */
+	.theme-picker {
+		display: flex;
+		align-items: center;
+		gap: 0.6em;
+		margin: 0;
+		padding: 0.6em 0 0.6em 1em;
+		list-style: none;
+	}
+
+		.theme-picker .theme-swatch {
+			width: 1.05em;
+			height: 1.05em;
+			padding: 0;
+			border: solid 2px rgba(255, 255, 255, 0.25);
+			border-radius: 50%;
+			cursor: pointer;
+			transition: border-color 0.25s ease-in-out, transform 0.25s ease-in-out;
+		}
+
+			.theme-picker .theme-swatch:hover,
+			.theme-picker .theme-swatch:focus {
+				border-color: rgba(255, 255, 255, 0.7);
+			}
+
+			.theme-picker .theme-swatch.is-active {
+				border-color: #fff;
+				transform: scale(1.15);
+			}
+
+			.theme-swatch[data-theme-choice="blue"] { background-color: #7C9CD0; }
+			.theme-swatch[data-theme-choice="cyan"] { background-color: #56C9D6; }
+			.theme-swatch[data-theme-choice="green"] { background-color: #87BD94; }
+			.theme-swatch[data-theme-choice="red"] { background-color: #DA7E79; }
+			.theme-swatch[data-theme-choice="violet"] { background-color: #A388D0; }
+			.theme-swatch[data-theme-choice="amber"] { background-color: #D6A971; }
+			.theme-swatch[data-theme-choice="rose"] { background-color: #D687B0; }
+
+	.site-navbar .dropdown-menu {
+		min-width: 13em;
+		padding: 0.85em;
+		background-color: var(--ink);
+		border: 0;
+		border-radius: 0.5rem;
+	}
+
+		.site-navbar .dropdown-item {
+			padding: 1em 0;
+			border-top: solid 1px rgba(255, 255, 255, 0.1);
+			letter-spacing: 0.05em;
+			font-size: 0.8em;
+			color: #ccc;
+			background-color: transparent;
+		}
+
+			.site-navbar .dropdown-item:first-child {
+				border-top: 0;
+			}
+
+			.site-navbar .dropdown-item:hover,
+			.site-navbar .dropdown-item:focus {
+				color: #fff;
+				background-color: transparent;
+			}
+
+	/* Nested dropdown (Bootstrap 5 ships one level only — this adds a second) */
+	.dropdown-submenu {
+		position: relative;
+	}
+
+		.dropdown-submenu > .dropdown-menu {
+			top: 0;
+			left: 100%;
+			margin-top: -0.85em;
+		}
+
+	@media (max-width: 767.98px) {
+		.site-navbar .navbar-collapse {
+			margin-top: 1em;
+		}
+
+		.dropdown-submenu > .dropdown-menu {
+			position: static;
+			margin-left: 1em;
+		}
+	}
+
+/* Buttons (single ghost/outline style; .text-white context flips it for photo backdrops) */
+
+	.btn-ghost {
+		display: inline-block;
+		padding: 0.5em 2em;
+		font-size: 1.2em;
+		font-weight: 300;
+		color: var(--ink);
+		background-color: transparent;
+		border: 3px solid rgba(0, 0, 0, 0.1);
+		border-radius: 0.3125rem;
+		transition: background-color 0.35s ease-in-out, border-color 0.35s ease-in-out, color 0.35s ease-in-out;
+	}
+
+		.btn-ghost:hover {
+			background-color: var(--ink);
+			border-color: var(--ink);
+			color: #fff;
+		}
+
+	.text-white .btn-ghost {
+		padding: 0.7em 2em;
+		color: #fff;
+		border-color: rgba(255, 255, 255, 0.6);
+	}
+
+		.text-white .btn-ghost:hover {
+			background-color: #fff;
+			border-color: #fff;
+			color: var(--ink);
+		}
+
+/* Ring icons (feature grid + tweet banner) */
+
+	.icon-ring {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 1.5em;
+		padding: 0.4em;
+		border-radius: 50%;
+		border: 1px solid #787777;
+	}
+
+	.icon-circle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 3em;
+		height: 3em;
+		border-radius: 50%;
+		border: 1px solid #787777;
+		font-size: 1.5em;
+		color: var(--accent);
+	}
+
+/* Hero banner (homepage only) */
+
+	/* Dark gradient layered over the photo keeps the thin-weight white type
+	   legible regardless of how bright the banner image is. */
+	.hero-banner {
+		padding: 10em 0 9em;
+		background-color: var(--ink);
+		background-image: linear-gradient(rgba(31, 35, 40, 0.55), rgba(31, 35, 40, 0.55)), url("../images/hero.jpg");
+		background-repeat: no-repeat;
+		background-position: center;
+		background-size: cover;
+	}
+
+		.hero-banner-title {
+			font-size: 3.5em;
+			font-weight: 100;
+			margin-bottom: 0.5em;
+			color: #fff; /* global heading ink would win over the header's .text-white */
+		}
+
+		.hero-banner .byline {
+			font-size: 1.5em;
+			font-weight: 100;
+			margin-bottom: 1.5em;
+		}
+
+	@media (max-width: 767.98px) {
+		.hero-banner {
+			padding: 3em 0;
+		}
+
+		.hero-banner-title {
+			font-size: 2.4em;
+		}
+
+		.hero-banner .byline {
+			font-size: 1.2em;
+		}
+	}
+
+/* Intro band (homepage only) */
+
+	.intro-band {
+		padding: 5em 0 4em;
+		background-color: var(--accent);
+		color: #fff;
+	}
+
+		.intro-band .section-title {
+			color: #fff;
+		}
+
+		.intro-band p {
+			font-size: 1.3em;
+			font-weight: 100;
+			line-height: 1.8;
+		}
+
+	@media (max-width: 767.98px) {
+		.intro-band {
+			padding: 4em 0 3em;
+		}
+
+		.intro-band p {
+			font-size: 1.1em;
+		}
+	}
+
+/* Feature grid (homepage only) */
+
+	.feature-grid-section {
+		padding: 5em 0;
+		background-color: var(--paper);
+		text-align: center;
+	}
+
+		.feature-grid-section .icon-ring,
+		.feature-grid-section .icon-circle {
+			border-color: #c9c9c9;
+		}
+
+		.feature-item h3 {
+			padding: 1em 0;
+			font-size: 1.3em;
+		}
+
+	@media (max-width: 767.98px) {
+		.feature-grid-section {
+			padding: 4em 0;
+		}
+	}
+
+/* Staff (homepage only) */
+
+	.staff-section {
+		padding: 5em 0 4em;
+		background-color: var(--paper-alt);
+		text-align: center;
+	}
+
+		.staff-list {
+			margin: 0 0 2em;
+			padding: 2em 0 1.5em;
+			list-style: none;
+			border-top: 1px solid rgba(0, 0, 0, 0.1);
+			border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+		}
+
+		.staff-avatar {
+			display: inline-block;
+			width: 160px;
+			height: 160px;
+			margin: 0 0.5em 1em;
+			background-color: var(--accent);
+			border-radius: 50%;
+			overflow: hidden;
+		}
+
+		.staff-section p {
+			font-size: 1.3em;
+		}
+
+	@media (max-width: 767.98px) {
+		.staff-section {
+			padding: 4em 0 3em;
+		}
+
+		.staff-section p {
+			font-size: 1.1em;
+		}
+	}
+
+/* Tweet banner (all pages) */
+
+	.tweet-banner {
+		padding: 8em 0;
+		background-color: var(--ink);
+		background-image: linear-gradient(rgba(31, 35, 40, 0.5), rgba(31, 35, 40, 0.5)), url("../images/crew-banner.jpg");
+		background-repeat: no-repeat;
+		background-position: center;
+		background-size: cover;
+		text-align: center;
+		color: #fff;
+	}
+
+		.tweet-banner-text {
+			display: block;
+			margin-top: 1em;
+			font-size: 1.5em;
+			line-height: 1.25;
+		}
+
+	@media (max-width: 767.98px) {
+		.tweet-banner {
+			padding: 5em 0;
+		}
+
+		.tweet-banner-text {
+			font-size: 1.1em;
+		}
+	}
+
+/* Contact (all pages) */
+
+	.contact-section {
+		padding: 5em 0;
+		background-color: var(--paper);
+		text-align: center;
+	}
+
+		.contact-form {
+			max-width: 60em;
+			margin: 0 auto;
+		}
+
+		.contact-form .form-control {
+			padding: 0.7em 1em;
+			font-weight: 300;
+			letter-spacing: 0.5px;
+			color: var(--body-copy);
+			background-color: rgba(0, 0, 0, 0.03);
+			border: 1px solid transparent;
+			border-radius: 0.375rem;
+		}
+
+			.contact-form .form-control:focus {
+				background-color: rgba(0, 0, 0, 0.04);
+				border-color: rgba(0, 0, 0, 0.05);
+				box-shadow: none;
+			}
+
+			.contact-form textarea.form-control {
+				height: 10em;
+			}
+
+	@media (max-width: 767.98px) {
+		.contact-section {
+			padding: 4em 0;
+		}
+	}
+
+/* Page main content wrapper (left/right/two/no-sidebar pages) */
+
+	.page-main {
+		background-color: var(--paper);
+	}
+
+/* Sidebar widgets (left/right/two-sidebar pages) */
+
+	.sidebar-widget + .sidebar-widget {
+		margin-top: 4em;
+	}
+
+		.sidebar-widget-title {
+			font-size: 1.6em;
+			margin-bottom: 1em;
+		}
+
+		.sidebar-link-list {
+			margin: 1em 0 0;
+			padding: 0;
+			list-style: none;
+			text-align: left;
+		}
+
+			.sidebar-link-list li {
+				border-top: 1px solid rgba(0, 0, 0, 0.1);
+				line-height: 2.5em;
+			}
+
+			.sidebar-link-list li:first-child {
+				border-top: 0;
+			}
+
+			.sidebar-link-list a {
+				color: var(--body-copy);
+			}
+
+				.sidebar-link-list a:hover {
+					text-decoration: underline;
+				}
+
+		.sidebar-widget .btn-ghost {
+			margin-top: 1.5em;
+		}
+
+/* Content article (left/right/two/no-sidebar pages) */
+
+	.content-article h3 {
+		margin: 1.5em 0;
+		font-size: 1.3em;
+	}
+
+/* Footer (all pages) */
+
+	.site-footer {
+		padding: 5em 0 4em;
+		background-color: var(--ink);
+	}
+
+		.footer-header {
+			padding-bottom: 2em;
+			margin-bottom: 2.5em;
+			text-align: center;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		}
+
+			.footer-title {
+				color: var(--accent);
+			}
+
+		.footer-link-list {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+			text-align: center;
+		}
+
+			.footer-link-list li {
+				border-top: 1px solid #403e3e;
+				line-height: 2.5em;
+			}
+
+			.footer-link-list li:first-child {
+				border-top: 0;
+			}
+
+			.footer-link-list a {
+				color: var(--body-copy);
+			}
+
+				.footer-link-list a:hover {
+					color: #fff;
+				}
+
+		.footer-social {
+			margin: 3em 0 0;
+			padding: 2em 0;
+			border-top: 1px solid rgba(255, 255, 255, 0.1);
+			border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+			text-align: center;
+		}
+
+			.footer-social-icon {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 40px;
+				height: 40px;
+				margin: 0 3px;
+				background-color: var(--accent);
+				border-radius: 50%;
+				color: var(--ink);
+				font-size: 1rem;
+			}
+
+		.footer-copyright {
+			display: block;
+			padding-top: 1.5em;
+			text-align: center;
+			font-size: 0.9em;
+		}

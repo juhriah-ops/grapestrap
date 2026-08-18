@@ -31,7 +31,11 @@
 
 import { initGrapesJS, loadHtmlIntoCanvas, getCanvasHtml, getEditor } from '../../editor/grapesjs-init.js'
 import { createMonacoPair, bindMonacoToRegistry, relayoutAllMonaco } from '../../editor/monaco-init.js'
-import { bindSync, onViewModeChange, rebuildCanvasFromCode, resumeCanvasToCodeSync } from '../../editor/canvas-sync.js'
+import {
+  bindSync, onViewModeChange, rebuildCanvasFromCode, resumeCanvasToCodeSync,
+  isRebuildingFromCode, requestCodeHistoryReset
+} from '../../editor/canvas-sync.js'
+import { stampUserEdit, resetTabOrigin, resetAllOrigins } from '../../editor/edit-origin.js'
 import { mountFileTabHost, activateFileTab, isFileTab } from '../../editor/file-tabs.js'
 import { projectState } from '../../state/project-state.js'
 import { pageState } from '../../state/page-state.js'
@@ -154,6 +158,9 @@ function wireCanvasEvents() {
 
   eventBus.on('tab:focused', tab => swapToTab(tab))
   eventBus.on('tab:closed',  tab => {
+    // Undo routing is per tab; a reopened tab must start with a clean slate
+    // rather than inherit the closed one's origin and floor.
+    if (tab?.pageName) resetTabOrigin(tab.pageName)
     if (tab?.pageName === currentTabName) {
       currentTabName = null
       loadingTabName = 'about:blank'
@@ -166,6 +173,7 @@ function wireCanvasEvents() {
     }
   })
   eventBus.on('project:closed', () => {
+    resetAllOrigins()
     currentTabName = null
     loadingTabName = 'about:blank'
     loadHtmlIntoCanvas('')
@@ -188,6 +196,12 @@ function wireCanvasEvents() {
     } else {
       projectState.markPageDirty(currentTabName)
     }
+    // Same fences the dirty flag trusts, plus the code→canvas rebuild: a
+    // rebuild's setComponents storm reaches this handler too, and stamping it
+    // as a design edit would aim the next split-view Ctrl+Z at the canvas when
+    // the user's actual last action was typing in the code pane.
+    if (isRebuildingFromCode()) return
+    stampUserEdit(currentTabName, 'design')
   })
 }
 
@@ -288,6 +302,14 @@ function swapToTab(tab) {
   }
 
   loadingTabName = tab.pageName
+  // The SAME contract on the code side: one Monaco pair serves every tab, so
+  // the incoming tab must not inherit the outgoing tab's undo entries. Until
+  // 2026-08-17 this happened for free — every design→code sync called setValue,
+  // which clears Monaco's history — but the sync now preserves history on
+  // purpose, so the swap has to ask for the clear explicitly. Also drops the
+  // incoming tab's stale undo-routing origin.
+  requestCodeHistoryReset()
+  resetTabOrigin(tab.pageName)
   // Fence the swap out of undo history: without this, GrapesJS records the
   // setComponents reset, and undo on the incoming tab restores the OUTGOING
   // page's component tree — which then saves under the wrong page file.

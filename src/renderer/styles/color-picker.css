@@ -7,13 +7,26 @@
 
    Swatches are pure HTML buttons; per-swatch background comes from a
    data-cp-color attribute via attr() — keeps the markup class-only with no
-   inline styles. Theme colors and recent colors share the same primitive. */
+   inline styles. Theme colors and recent colors share the same primitive.
+
+   The visual selector (spectrum + hue strip) is drawn entirely with layered
+   CSS gradients — no canvas. Everything that has to change at runtime travels
+   as a custom property set on the CONTAINER (--cp-hue, --cp-thumb-x,
+   --cp-thumb-y, --cp-color), the same idiom the swatches use; the thumbs read
+   those vars, so no color or coordinate is ever written into a style
+   attribute on the thumb itself. */
 
 .gstrap-cp-popover {
   position: fixed;
   z-index: 12000;
   min-width: 240px;
   max-width: 280px;
+  /* With the spectrum the popover is ~380px tall — taller than the gap above
+     or below a trigger near the edge of a short window. Cap it to the viewport
+     and scroll the overflow so the palette and the action buttons can never
+     end up somewhere the user cannot reach. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   background: var(--bg-2);
   color: var(--text-1);
   border: 1px solid var(--border);
@@ -67,6 +80,115 @@
   min-width: 0;
 }
 .gstrap-cp-input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* ── Visual selector: saturation/brightness spectrum ─────────────────────── */
+
+/* Layer order matters: the black overlay paints over the white overlay, which
+   paints over the flat hue. That stack is the canonical HSV square — pure hue
+   top-right, white top-left, black along the bottom edge. Each gradient fades
+   to a zero-alpha form of its OWN color (`rgb(255 255 255 / 0)`, not
+   `transparent`) so it interpolates through white rather than through
+   transparent black, which would grey the midpoint. */
+.gstrap-cp-spectrum {
+  position: relative;
+  height: 140px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: crosshair;
+  touch-action: none;          /* pointer drags must not scroll the popover */
+  background-color: var(--cp-hue, #ff0000);
+  background-image:
+    linear-gradient(to top, rgb(0 0 0 / 1), rgb(0 0 0 / 0)),
+    linear-gradient(to right, rgb(255 255 255 / 1), rgb(255 255 255 / 0));
+}
+
+/* ── Visual selector: hue strip ──────────────────────────────────────────── */
+
+.gstrap-cp-hue {
+  position: relative;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: ew-resize;
+  touch-action: none;
+  background-image: linear-gradient(
+    to right,
+    #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%,
+    #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%
+  );
+}
+
+/* Both thumbs sit on whatever the container reports; --cp-color fills them
+   with the color under the thumb so they read as a lens. The white ring plus
+   the dark box-shadow keeps them legible over any hue AND over the dark
+   panel background when the thumb is parked at an edge. */
+.gstrap-cp-spectrum-thumb,
+.gstrap-cp-hue-thumb {
+  position: absolute;
+  pointer-events: none;        /* the container owns the pointer, not the thumb */
+  border: 2px solid #ffffff;
+  background: var(--cp-color, transparent);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.65), 0 1px 3px rgb(0 0 0 / 0.5);
+}
+.gstrap-cp-spectrum-thumb {
+  left: var(--cp-thumb-x, 100%);
+  top: var(--cp-thumb-y, 0%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.gstrap-cp-hue-thumb {
+  left: var(--cp-thumb-x, 0%);
+  top: 50%;
+  width: 8px;
+  height: 18px;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Visual selector: R / G / B numeric fields ───────────────────────────── */
+
+.gstrap-cp-channels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.gstrap-cp-channel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.gstrap-cp-channel-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.gstrap-cp-channel-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 3px 4px;
+  /* Spinners would eat half the width of a 50px field — the strip and the
+     spectrum are the coarse controls, these three are for exact values. */
+  appearance: textfield;
+}
+.gstrap-cp-channel-input::-webkit-inner-spin-button,
+.gstrap-cp-channel-input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.gstrap-cp-channel-input:focus {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }

@@ -1,7 +1,9 @@
 /**
  * GrapeStrap — Style Manager: Background sub-panel
  *
- * Color (BS theme tokens), subtle variants (BS5.3+), gradient toggle, and a
+ * Color (BS theme tokens), subtle variants (BS5.3+), a Custom row for any
+ * colour outside the theme palette (see custom-color.js — writes
+ * `background-color` into the same rule), gradient toggle, and a
  * "Background image" row that lets the user pick from project assets and
  * writes a CSS rule into the project's globalCSS scoped by the selected
  * component's first non-BS class (or id) — same pattern the pseudo-class
@@ -21,6 +23,7 @@ import { applyGroup, readGroup, toggleClass } from './class-utils.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
 import { pickSelector, isBsUtility, readBareRule, writeBareRule } from './css-rule-utils.js'
+import { customColorRowMarkup, wireCustomColorRow, clearCustomColor } from './custom-color.js'
 import { toDocumentRelativeUrl, stylesheetDirOf } from '../../../shared/css-urls.js'
 import { t } from '../../i18n.js'
 
@@ -30,6 +33,7 @@ export const labelKey = 'sm.panel.background'
 const BG_SIZES = ['', 'cover', 'contain', 'auto']
 const BG_POSITIONS = ['', 'center', 'top', 'bottom', 'left', 'right']
 const BG_REPEATS = ['', 'no-repeat', 'repeat', 'repeat-x', 'repeat-y']
+const BG_ATTACHMENTS = ['', 'scroll', 'fixed', 'local']
 
 export function render(host, ctx) {
   const { component, requestRender } = ctx
@@ -44,6 +48,8 @@ export function render(host, ctx) {
   const currentBgSize     = bgRule['background-size']     || ''
   const currentBgPosition = bgRule['background-position'] || ''
   const currentBgRepeat   = bgRule['background-repeat']   || ''
+  const currentBgAttachment = bgRule['background-attachment'] || ''
+  const currentBgColor    = bgRule['background-color']    || ''
 
   // Project images for the picker.
   const images = listProjectImages()
@@ -70,6 +76,7 @@ export function render(host, ctx) {
         <button class="gstrap-sm-pill gstrap-sm-clear" data-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
+    ${customColorRowMarkup({ selector, value: currentBgColor })}
     <div class="gstrap-sm-row">
       <label class="gstrap-sm-label">${escHtml(t('sm.label.effect'))}</label>
       <div class="gstrap-sm-grid">
@@ -115,16 +122,20 @@ export function render(host, ctx) {
             ${selectRow(t('sm.label.size'),     'bg-size',     BG_SIZES,     currentBgSize)}
             ${selectRow(t('sm.label.position'), 'bg-position', BG_POSITIONS, currentBgPosition)}
             ${selectRow(t('sm.label.repeat'),   'bg-repeat',   BG_REPEATS,   currentBgRepeat)}
+            ${selectRow(t('sm.label.attachment'), 'bg-attachment', BG_ATTACHMENTS, currentBgAttachment)}
           </div>
         ` : ''}
       `}
     </div>
   `
 
+  // Picking a predetermined token drops any free colour written to the rule,
+  // so the two surfaces can never both claim the element's background.
   host.querySelectorAll('[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
       const cls = `bg-${btn.dataset.color}`
       applyGroup(component, bgColorPattern(), cur === cls ? null : cls)
+      clearCustomColor(selector, 'background-color')
       requestRender()
     })
   })
@@ -132,8 +143,15 @@ export function render(host, ctx) {
     btn.addEventListener('click', () => {
       const cls = `bg-${btn.dataset.subtle}`
       applyGroup(component, bgColorPattern(), cur === cls ? null : cls)
+      clearCustomColor(selector, 'background-color')
       requestRender()
     })
+  })
+  wireCustomColorRow(host, {
+    component, selector,
+    prop: 'background-color',
+    classPattern: bgColorPattern(),
+    requestRender
   })
   host.querySelector('[data-clear]')?.addEventListener('click', () => {
     applyGroup(component, bgColorPattern(), null); requestRender()
@@ -153,7 +171,10 @@ export function render(host, ctx) {
         'background-image':    `url("${btn.dataset.bgPick}")`,
         'background-size':     currentBgSize     || 'cover',
         'background-position': currentBgPosition || 'center',
-        'background-repeat':   currentBgRepeat   || 'no-repeat'
+        'background-repeat':   currentBgRepeat   || 'no-repeat',
+        // Re-picking an image shouldn't drop a chosen attachment, since it's
+        // now one of the five declarations this row strips-then-rewrites.
+        ...(currentBgAttachment ? { 'background-attachment': currentBgAttachment } : {})
       })
       requestRender()
     })
@@ -175,6 +196,15 @@ export function render(host, ctx) {
   })
 }
 
+// The five declarations the background-image row owns. Stripping exactly
+// these (rather than every `background-*` key, as this did before 2026-08-17)
+// keeps a Clear honest without eating `background-color`, which the Custom
+// colour row owns in the same rule.
+const BG_IMAGE_PROPS = [
+  'background-image', 'background-size', 'background-position', 'background-repeat',
+  'background-attachment'
+]
+
 function writeBgRule(selector, props) {
   if (!selector || !projectState.current) return
   // Reading the existing rule preserves any non-background properties the
@@ -182,10 +212,7 @@ function writeBgRule(selector, props) {
   // the bare-state rule, but a hand-edited globalCSS could).
   const css = projectState.current.globalCSS || ''
   const existing = readBareRule(css, selector) || {}
-  // Strip every `background-*` key first so a Clear truly clears.
-  for (const k of Object.keys(existing)) {
-    if (k.startsWith('background-')) delete existing[k]
-  }
+  for (const k of BG_IMAGE_PROPS) delete existing[k]
   const merged = { ...existing, ...props }
   projectState.current.globalCSS = writeBareRule(css, selector, merged)
   projectState.markCssDirty()
