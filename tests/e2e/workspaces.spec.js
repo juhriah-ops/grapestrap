@@ -5,9 +5,12 @@
  * ROLE: Wave 3 workspace-layouts specs — listener-leak fire-once (failing-first
  *       against da11442), editor-identity survival, geometry round-trip,
  *       relaunch persistence, presets, splitter floor after apply, collapsed
- *       right-stack round-trip, corrupt-layout fail-open, delete/rename
+ *       right-stack round-trip, corrupt-layout fail-open, delete/rename,
+ *       core-panel injection into pre-feature layouts
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-18 — Bootstrap panel: 4th right tab in the collapse spec,
+ *          plus the ensureCorePanels injection spec
  */
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
@@ -351,11 +354,12 @@ test('workspace saved with all right tabs hidden round-trips the collapse', asyn
   const canvasBaseline = await canvasStackWidth()
   expect(rightBaseline).toBeGreaterThan(100)
 
-  // Hide all three right tabs → stack collapses. DOM is already hidden by
-  // default prefs; hide the other two.
+  // Hide every right tab → stack collapses. DOM is already hidden by
+  // default prefs; hide the other three.
   await appWindow.evaluate(() => {
     window.__gstrap.eventBus.emit('view:toggle-properties')
     window.__gstrap.eventBus.emit('view:toggle-custom-css')
+    window.__gstrap.eventBus.emit('view:toggle-bootstrap-css')
   })
   await appWindow.waitForTimeout(250)
   expect(await rightStackWidth()).toBeLessThan(10)
@@ -488,4 +492,46 @@ test('workspace delete, rename, and name validation', async () => {
   expect((await call('delete', 'test-e'))?.ok).toBe(false)
 
   await app.close()
+})
+
+// ─── Spec 10 — pre-feature layouts gain new core panels on apply ─────────────
+test('a workspace saved before the Bootstrap panel existed gains it on apply', async () => {
+  // validateSpec only rejects UNKNOWN componentTypes, so a layout that merely
+  // LACKS a panel applies cleanly — and used to leave the user permanently
+  // without that tab (its View toggle a silent no-op). ensureCorePanels
+  // injects it next to its right-stack siblings before the floors are stamped.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-ws-inject-'))
+  const { app, appWindow, xdgRoot } = await launch()
+  await openSeedProject(appWindow, join(projectDir, 'inject.gstrap'))
+
+  // Build the "old" file from a real capture, then strip the panel out of it —
+  // that keeps the config well-formed in every other respect.
+  expect((await appWindow.evaluate(() => window.__gstrap.workspaces.save('legacy')))?.ok).toBe(true)
+  const file = join(xdgRoot, 'state', 'GrapeStrap', 'workspaces', 'legacy.json')
+  const record = JSON.parse(await fsp.readFile(file, 'utf8'))
+  const stripPanel = node => {
+    if (!node || typeof node !== 'object' || !Array.isArray(node.content)) return
+    node.content = node.content.filter(child => child.componentType !== 'bootstrap-css')
+    node.content.forEach(stripPanel)
+  }
+  stripPanel(record.gl.root)
+  delete record.visibility.bootstrapCssVisible
+  expect(JSON.stringify(record)).not.toContain('bootstrap-css')
+  await fsp.writeFile(file, JSON.stringify(record), 'utf8')
+
+  expect((await appWindow.evaluate(() => window.__gstrap.workspaces.apply('legacy')))?.ok).toBe(true)
+  await appWindow.waitForTimeout(300)
+
+  const after = await appWindow.evaluate(() => ({
+    hosts: document.querySelectorAll('.gstrap-bscss-host').length,
+    rightTabTitles: [...document.querySelectorAll('.lm_item.lm_stack:has(.gstrap-dom-host) .lm_tab')]
+      .map(tab => tab.getAttribute('title'))
+  }))
+  expect(after.hosts).toBe(1)
+  // Injected beside its siblings, and titled with the same i18n string the
+  // tab-hide CSS selects on.
+  expect(after.rightTabTitles).toContain('Bootstrap')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
 })

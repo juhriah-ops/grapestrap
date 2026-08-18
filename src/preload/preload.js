@@ -69,6 +69,16 @@ const grapestrap = {
     copyAssets: (assets) => ipcRenderer.invoke('sections:copy-assets', assets)
   },
 
+  // ─── Behaviors runtime ─────────────────────────────────────────────────────
+  // ensure() puts the app-bundled behaviors runtime pair (gstrap-behaviors.js /
+  // .css) into the open project, refreshing a copy whose version tag is older
+  // than the bundled one. Takes no arguments — there is nothing project-
+  // specific to pass. Resolves to { copied[], skipped[] }; rejects when no
+  // project is open or a copy fails.
+  behaviors: {
+    ensure: () => ipcRenderer.invoke('behaviors:ensure')
+  },
+
   // ─── Watcher events from main → renderer ───────────────────────────────────
   watcher: {
     onChanged: (cb) => subscribe('file:changed', cb),

@@ -7,6 +7,21 @@
  *                  tag injected into the canvas iframe in grapesjs-init.js)
  *   3. bootstrap — rules from any other stylesheet (BS5 + GrapesJS internals)
  *
+ * UPDATED: 2026-08-18 (F3a jump-to-rule) — every rule now also carries the
+ * ORIGIN of the sheet it came from, which is finer-grained than the three
+ * display groups above: the "bootstrap" bucket holds the real Bootstrap sheet,
+ * a starter's own theme.css, vendored sheets and GrapesJS internals alike, and
+ * right-clicking each of those has to offer something different. The groups
+ * stay as they are (they answer "who wins the cascade"); origin answers "where
+ * is this rule written", and is what the context menu routes on:
+ *   project   → the Custom CSS panel
+ *   bootstrap → the Bootstrap panel (the app-managed sheet, identified by the
+ *               data-grapestrap-bootstrap stamp so a live-preview blob href
+ *               never hides it)
+ *   other     → a file under site/ opens in the code lane; anything else
+ *               (CDN, <style> tag) gets a disabled explainer instead of a
+ *               menu item that would go nowhere.
+ *
  * Implementation is deliberately lightweight:
  *   - walks `iframeDocument.styleSheets`, calling `.matches(selector)` on the
  *     selected element for each rule's selectorText
@@ -25,10 +40,21 @@
  */
 
 import { getEditor } from '../../editor/grapesjs-init.js'
+import { projectState } from '../../state/project-state.js'
+import { showContextMenu } from '../../dialogs/context-menu.js'
+import { openSiteFile } from '../file-manager/index.js'
+import { jumpToCssRule } from './css-jump.js'
 import { t } from '../../i18n.js'
 
 export const id = 'cascade'
 export const labelKey = 'sm.panel.cascade'
+
+// Hosts that already carry the delegated contextmenu listener. render() runs
+// again on the SAME host whenever an open sub-panel is repainted without a
+// full paint() (canvas:content-changed, assets:changed), so a listener added
+// per render would stack up; a WeakSet keeps the flag off the markup and lets
+// a discarded host be collected with it.
+const menuWiredHosts = new WeakSet()
 
 export function render(host, ctx) {
   const { component } = ctx
@@ -64,6 +90,7 @@ export function render(host, ctx) {
     ${renderGroup('project',   t('sm.cascade-project'),   groups.project,   winners)}
     ${renderGroup('bootstrap', t('sm.cascade-bootstrap'), groups.bootstrap, winners)}
   `
+  wireRuleContextMenu(host)
 }
 
 function renderGroup(groupId, label, rules, winners) {
@@ -72,7 +99,8 @@ function renderGroup(groupId, label, rules, winners) {
     <div class="gstrap-sm-cascade-group" data-cascade-group="${groupId}">
       <div class="gstrap-sm-label">${escapeHtml(label)}</div>
       ${rules.map(r => `
-        <div class="gstrap-sm-cascade-rule">
+        <div class="gstrap-sm-cascade-rule" data-selector="${escapeHtml(r.selector)}"
+             data-origin="${escapeHtml(r.origin)}"${r.href ? ` data-href="${escapeHtml(r.href)}"` : ''}>
           <div class="gstrap-sm-cascade-selector">${escapeHtml(r.selector)}</div>
           ${Object.entries(r.props).map(([k, v]) => {
             const overridden = winners[k] && winners[k].id !== r.id
@@ -108,7 +136,7 @@ function collectCascade(doc, el) {
       const k = el.style[i]
       props[k] = el.style.getPropertyValue(k)
     }
-    inline.push({ id: ruleId++, selector: '(inline)', props })
+    inline.push({ id: ruleId++, selector: '(inline)', props, origin: 'inline', href: null })
   }
 
   // 2 + 3. Stylesheets.
@@ -116,19 +144,42 @@ function collectCascade(doc, el) {
     let rules
     try { rules = sheet.cssRules } catch { continue }
     if (!rules) continue
-    const sheetEl = sheet.ownerNode
-    const isProject =
-      sheetEl?.dataset?.grapestrapGlobalcss != null ||
-      sheetEl?.id === 'gstrap-global-css' ||
-      sheetEl?.getAttribute?.('data-grapestrap-globalcss') === ''
+    const { origin, href } = sheetOrigin(sheet)
 
     walkRules(rules, el, hit => {
-      const target = isProject ? project : bootstrap
-      target.push({ id: ruleId++, selector: hit.selector, props: hit.props })
+      const target = origin === 'project' ? project : bootstrap
+      target.push({ id: ruleId++, selector: hit.selector, props: hit.props, origin, href })
     })
   }
 
   return { inline, project, bootstrap }
+}
+
+/**
+ * Classify one stylesheet: where is it written, and can we get the user there?
+ *
+ * Bootstrap is recognised by the stamp grapesjs-init puts on whichever <link>
+ * currently carries it — during a live preview that link's href is a blob:
+ * URL, so keying on the href alone would lose it mid-edit. The href test is
+ * only a fallback for a canvas painted before the stamp existed.
+ *
+ * @param {CSSStyleSheet} sheet - A sheet from the canvas document
+ * @returns {{origin: 'project'|'bootstrap'|'other', href: string|null}}
+ *          href is the sheet's resolved absolute URL, null for <style> tags.
+ */
+function sheetOrigin(sheet) {
+  const sheetEl = sheet.ownerNode
+  const isProject =
+    sheetEl?.dataset?.grapestrapGlobalcss != null ||
+    sheetEl?.id === 'gstrap-global-css' ||
+    sheetEl?.getAttribute?.('data-grapestrap-globalcss') === ''
+  if (isProject) return { origin: 'project', href: null }
+
+  const href = sheet.href || null
+  const isBootstrap =
+    sheetEl?.hasAttribute?.('data-grapestrap-bootstrap') ||
+    (typeof href === 'string' && href.split(/[?#]/)[0].endsWith('assets/css/bootstrap.css'))
+  return { origin: isBootstrap ? 'bootstrap' : 'other', href }
 }
 
 function walkRules(rules, el, emit, depth = 0) {
@@ -204,6 +255,103 @@ function computeWinners(groups) {
     }
   }
   return winners
+}
+
+// ─── Right-click a rule → go to where it is written ──────────────────────────
+
+/**
+ * Attach the delegated contextmenu handler to a cascade host, once per host.
+ * @param {HTMLElement} host - The sub-panel body element
+ */
+function wireRuleContextMenu(host) {
+  if (menuWiredHosts.has(host)) return
+  menuWiredHosts.add(host)
+  host.addEventListener('contextmenu', evt => {
+    const row = evt.target.closest('.gstrap-sm-cascade-rule')
+    if (!row) return
+    const items = buildRuleMenuItems(row.dataset)
+    if (!items.length) return
+    evt.preventDefault()
+    showContextMenu(evt.clientX, evt.clientY, items)
+  })
+}
+
+/**
+ * The menu for one cascade row, chosen by the rule's origin.
+ *
+ * Every origin yields exactly one item — enabled when we can actually go
+ * somewhere, disabled-with-a-reason when we can't. An inline `style=""`
+ * declaration has no rule to visit at all and yields nothing, so the row just
+ * doesn't open a menu.
+ *
+ * @param {DOMStringMap} rowData - The row's data-selector / -origin / -href
+ * @returns {Array<object>} showContextMenu items (possibly empty)
+ */
+function buildRuleMenuItems({ selector, origin, href }) {
+  if (!selector) return []
+  // An element.style declaration has no rule anywhere to visit — it is written
+  // on the element the user already has selected.
+  if (origin === 'inline') return []
+
+  if (origin === 'project') {
+    return [{
+      label: t('ctx.goto-custom-css'),
+      action: () => jumpToCssRule('custom-css', selector)
+    }]
+  }
+
+  if (origin === 'bootstrap') {
+    // Belt-and-braces: a vendored-framework project has no editable Bootstrap
+    // buffer, so there is no panel content to jump into even though the sheet
+    // looks like Bootstrap by its href.
+    const editable = typeof projectState.current?.bootstrapCSS === 'string'
+    return [{
+      label: t('ctx.goto-bootstrap-css'),
+      disabled: !editable,
+      action: () => jumpToCssRule('bootstrap-css', selector)
+    }]
+  }
+
+  const relPath = siteRelativePath(href, projectState.current?.projectDir)
+  if (relPath) {
+    return [{
+      label: t('ctx.open-in-code-view', { file: relPath }),
+      action: () => openSiteFile(relPath)
+    }]
+  }
+  return [{
+    label: t('ctx.rule-external', { origin: href || t('ctx.origin-inline-style') }),
+    disabled: true
+  }]
+}
+
+/**
+ * Turn a canvas stylesheet URL into the site-relative path the code lane opens.
+ *
+ * The canvas <base> is `file://<projectDir>/site/`, so a sheet the project owns
+ * resolves to a file: URL underneath it. Anything else — a CDN, a sheet from
+ * outside the project tree — returns null and the caller shows the disabled
+ * explainer instead.
+ *
+ * @param {string|null} href - Absolute sheet URL (CSSStyleSheet.href)
+ * @param {string|undefined} projectDir - Open project's directory
+ * @returns {string|null} e.g. 'assets/css/theme.css'
+ */
+function siteRelativePath(href, projectDir) {
+  if (!href || !projectDir) return null
+  let pathname
+  try {
+    const url = new URL(href)
+    if (url.protocol !== 'file:') return null
+    // Percent-decoded: a project dir with a space in it is written %20 in the
+    // URL but plainly in projectDir, and the two must be comparable.
+    pathname = decodeURIComponent(url.pathname)
+  } catch {
+    return null   // not a parseable absolute URL — treat as external
+  }
+  const sitePrefix = projectDir.replace(/\/?$/, '/') + 'site/'
+  if (!pathname.startsWith(sitePrefix)) return null
+  return pathname.slice(sitePrefix.length) || null
 }
 
 function escapeHtml(s) {

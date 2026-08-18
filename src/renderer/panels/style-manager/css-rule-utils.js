@@ -8,7 +8,10 @@
  * string surgery — read, upsert, remove — for a single whole-selector rule.
  * `mergeBareRuleProps` (2026-08-17) layers the read → merge → write discipline
  * on top for panels that own one prop group inside a shared rule (custom
- * colour chips, the opacity slider).
+ * colour chips, the opacity slider). `findSelectorRange` (2026-08-18) is the
+ * read-only counterpart: it locates a selector for jump-to-rule instead of
+ * editing it, and reuses the same anchoring so navigation can't land on a
+ * rule the writers would refuse to touch.
  * We deliberately don't pull in a full CSS AST parser: round-tripping
  * comments and complex sheets risks lossy edits the user would notice. The
  * string operations only ever touch the one rule whose ENTIRE selector is
@@ -163,6 +166,54 @@ export function mergeBareRuleProps(globalCSS, selector, props) {
     else merged[key] = String(value)
   }
   return writeBareRule(base, selector, merged)
+}
+
+// ─── Selector lookup (read-only, for jump-to-rule) ───────────────────────────
+// Jump-to-rule (F3a) needs WHERE a selector is written, not what it declares:
+// Cascade rows and class chips hand a selector to css-jump.js, which turns the
+// offset range into a Monaco selection. It reuses the anchoring above rather
+// than a fresh regex — a jump that put the caret on `.hero .item` when the user
+// asked for `.item` would be the same tail-match lie the writers were fixed
+// for, only rendered as a caret position instead of a clobbered rule.
+
+// SELECTOR_BOUNDARY plus `,`: a selector that is one member of a comma group
+// (`.a, .btn, .c { … }`) is a legitimate place to SEND someone, even though the
+// writers refuse to touch it (they replace whole rules; navigation only reads).
+// The same widening means a grouped selector nested in an @media block IS
+// reachable, while a lone first-rule-in-block still isn't — see the caveat on
+// SELECTOR_BOUNDARY. Both are honest for navigation: the offset returned is a
+// real occurrence of the selector either way.
+const SELECTOR_GROUP_BOUNDARY = '(^|[};,]|\\*\\/)'
+
+/**
+ * Locate a selector's own text inside a stylesheet.
+ *
+ * Two passes, best first:
+ *   1. whole-selector rule — `selector` followed by `{` (the shape the writers
+ *      own), boundary-anchored exactly as readBareRule is;
+ *   2. comma-group member — `selector` followed by `,` or `{`, allowing a
+ *      preceding comma as the boundary.
+ * The pseudo/attribute/combinator spelling is passed through verbatim, so the
+ * caller decides what it is asking for (`.btn`, `.btn:hover`, `a[href]`).
+ *
+ * @param {string} cssText - Full stylesheet source to search
+ * @param {string} selector - Selector text, exactly as it should appear
+ * @returns {{start: number, end: number}|null} Offsets of the SELECTOR
+ *          occurrence (not the rule body), or null when it is not written in
+ *          this sheet — callers render a disabled menu item or toast rather
+ *          than jumping somewhere arbitrary.
+ */
+export function findSelectorRange(cssText, selector) {
+  if (!cssText || !selector) return null
+  const escaped = escapeSelector(selector)
+  const wholeSelector = new RegExp(`${SELECTOR_BOUNDARY}(\\s*)${escaped}\\s*\\{`)
+  const groupMember = new RegExp(`${SELECTOR_GROUP_BOUNDARY}(\\s*)${escaped}\\s*[,{]`)
+  const match = wholeSelector.exec(cssText) || groupMember.exec(cssText)
+  if (!match) return null
+  // Groups 1 + 2 are the boundary char and the whitespace before the selector;
+  // skipping both puts `start` on the selector's first character.
+  const start = match.index + match[1].length + match[2].length
+  return { start, end: start + selector.length }
 }
 
 /**

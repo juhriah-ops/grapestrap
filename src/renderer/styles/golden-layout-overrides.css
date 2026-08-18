@@ -49,10 +49,16 @@
    `.lm_tab` in the strip and the `.lm_content` host both go display:none.
    The stack stays visible for the remaining tabs.
 
-   For DOM / Properties / Custom CSS (right stack), if ALL three end up
-   hidden, panel-visibility.js additionally collapses the whole right
+   For DOM / Properties / Custom CSS / Bootstrap (right stack), if EVERY one
+   ends up hidden, panel-visibility.js additionally collapses the whole right
    stack via size redistribution so the canvas reclaims its 26%. Showing
-   any of the three brings the stack back. */
+   any one of them brings the stack back.
+
+   The `.lm_tab[title="…"]` selectors match GL's RENDERED tab title, which is
+   the i18n value stamped by golden-layout-config.js stampPanelTitles — i.e.
+   the `panel.*` strings in plugins/lang-en/messages.json. Change one of those
+   values and the matching rule below stops applying (the tab would stay
+   visible with its content hidden). Keep the two in step. */
 
 body.is-hide-file-manager .lm_tab[title="Project"]      { display: none !important; }
 body.is-hide-file-manager .lm_content.gstrap-fm-host    { display: none !important; }
@@ -65,6 +71,10 @@ body.is-hide-properties   .lm_content.gstrap-props-host { display: none !importa
 
 body.is-hide-custom-css   .lm_tab[title="Custom CSS"]   { display: none !important; }
 body.is-hide-custom-css   .lm_content.gstrap-cssp-host  { display: none !important; }
+
+/* Title string is `panel.bootstrap-css` in messages.json — "Bootstrap". */
+body.is-hide-bootstrap-css .lm_tab[title="Bootstrap"]    { display: none !important; }
+body.is-hide-bootstrap-css .lm_content.gstrap-bscss-host { display: none !important; }
 
 /* Hide the splitter adjacent to a panel hidden via panel-visibility.js so we
    don't leave a 5px hairline in the freed slot. The class `is-gstrap-hidden`

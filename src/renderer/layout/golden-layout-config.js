@@ -5,12 +5,12 @@
  * of these separate views should all be on the right as tabs in one panel
  * like the library and assets"):
  *
- *   ┌─────────────────┬──────────────────────────┬────────────────────┐
- *   │ Project │ Lib │ │  CANVAS / CODE / SPLIT   │ DOM │ Props │ CSS  │
- *   │ Asset           │                          │                    │
- *   └─────────────────┴──────────────────────────┴────────────────────┘
+ *   ┌─────────────────┬──────────────────────────┬─────────────────────────┐
+ *   │ Project │ Lib │ │  CANVAS / CODE / SPLIT   │ DOM │ Props │ CSS │ BS  │
+ *   │ Asset           │                          │                         │
+ *   └─────────────────┴──────────────────────────┴─────────────────────────┘
  *      LEFT STACK              CENTER                  RIGHT STACK
- *      (3 tabs)                                        (3 tabs)
+ *      (3 tabs)                                        (4 tabs)
  *
  * Each pane registers with Golden Layout under a unique component name. Plugins
  * can register additional panels via `api.registerPanel({ id, ... })` which adds
@@ -33,6 +33,7 @@ import { renderDomTree }     from '../panels/dom-tree/index.js'
 import { renderCanvas }      from '../panels/canvas/index.js'
 import { renderProperties }  from '../panels/properties-side/index.js'
 import { renderCustomCss }   from '../panels/custom-css/index.js'
+import { renderBootstrapCss } from '../panels/bootstrap-css/index.js'
 import { renderLibraryItems } from '../panels/library-items/index.js'
 import { renderAssetManager } from '../panels/asset-manager/index.js'
 import { relayoutAllMonaco } from '../editor/monaco-init.js'
@@ -46,25 +47,34 @@ let layout = null
 //
 // The values are PER TAB, and GL v2's splitter-drag bounds SUM them across a
 // stack's tabs (onSplitterDragStart → calculateContentItemsTotalMinSize) even
-// though tabs display one at a time. Our side stacks hold 3 tabs each, so the
-// per-tab floor must be the intended per-stack floor ÷ 3. The original 180/120
-// per tab gave the stacks a 540px effective floor: in any window where a
-// sidebar sat below that, GL clamped EVERY splitter drag to a positive offset
-// — the sidebar jumped out to 540px no matter which way you dragged, and
-// dragStop persisted the bigger percentage ("snaps then sticks" on alpha.9,
-// "only gets larger" windowed on 2026-07-06). If a stack gains/loses tabs,
-// re-derive these.
+// though tabs display one at a time. So a tab's floor must be its stack's
+// intended floor ÷ that stack's tab count. The original 180/120 per tab gave
+// the stacks a 540px effective floor: in any window where a sidebar sat below
+// that, GL clamped EVERY splitter drag to a positive offset — the sidebar
+// jumped out to 540px no matter which way you dragged, and dragStop persisted
+// the bigger percentage ("snaps then sticks" on alpha.9, "only gets larger"
+// windowed on 2026-07-06).
+//
+// The two side stacks stopped holding the same number of tabs on 2026-08-18
+// (the Bootstrap panel made the right stack 4), hence separate counts: reusing
+// the left stack's ÷3 on a 4-tab stack would put the right stack's effective
+// floor back at 240px and reintroduce exactly that regression. If a stack
+// gains or loses a tab, update its count here.
 const STACK_MIN_W = 180
 const STACK_MIN_H = 120
-const SIDE_STACK_TABS = 3
-const PANEL_MIN_W = STACK_MIN_W / SIDE_STACK_TABS
-const PANEL_MIN_H = STACK_MIN_H / SIDE_STACK_TABS
+const LEFT_STACK_TAB_COUNT = 3    // Project / Library / Assets
+const RIGHT_STACK_TAB_COUNT = 4   // DOM / Properties / Custom CSS / Bootstrap
+const LEFT_PANEL_MIN_W = STACK_MIN_W / LEFT_STACK_TAB_COUNT
+const LEFT_PANEL_MIN_H = STACK_MIN_H / LEFT_STACK_TAB_COUNT
+const RIGHT_PANEL_MIN_W = STACK_MIN_W / RIGHT_STACK_TAB_COUNT
+const RIGHT_PANEL_MIN_H = STACK_MIN_H / RIGHT_STACK_TAB_COUNT
 const CANVAS_MIN_W = 320
 const CANVAS_MIN_H = 240
 
 // Wave 3: workspaces.js re-stamps floors from these at every apply
-// (normalizeFloors — the ÷3 above generalised to ÷N per stack at apply time,
-// exactly what the comment above asks for when a stack gains/loses tabs).
+// (normalizeFloors — the ÷N above computed from each stack's actual tab count
+// at apply time, exactly what the comment above asks for when a stack
+// gains/loses tabs).
 // Persisted minWidths in saved layouts are never trusted.
 export const LAYOUT_FLOORS = {
   stackMinW: STACK_MIN_W,
@@ -84,7 +94,22 @@ const PANEL_TITLE_KEYS = {
   'canvas':        'panel.canvas',
   'dom-tree':      'panel.dom-tree',
   'properties':    'panel.properties',
-  'custom-css':    'panel.custom-css'
+  'custom-css':    'panel.custom-css',
+  'bootstrap-css': 'panel.bootstrap-css'
+}
+
+/**
+ * The rendered tab title for a panel. Single source of truth so anything that
+ * builds a GL node outside this module (workspaces.js ensureCorePanels) stamps
+ * the same string stampPanelTitles would — the tab-hide CSS in
+ * golden-layout-overrides.css matches on that title, so a mismatch silently
+ * breaks the View toggle for that panel.
+ * @param {string} componentType - Key of PANEL_FACTORIES
+ * @returns {string} Localised title, or the componentType when unknown
+ */
+export function getPanelTitle(componentType) {
+  const key = PANEL_TITLE_KEYS[componentType]
+  return key ? t(key) : componentType
 }
 
 function stampPanelTitles(node) {
@@ -108,11 +133,11 @@ const DEFAULT_CONFIG = {
         width: 18,
         content: [
           { type: 'component', componentType: 'file-manager',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
+            isClosable: false, minWidth: LEFT_PANEL_MIN_W, minHeight: LEFT_PANEL_MIN_H },
           { type: 'component', componentType: 'library-items',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
+            isClosable: false, minWidth: LEFT_PANEL_MIN_W, minHeight: LEFT_PANEL_MIN_H },
           { type: 'component', componentType: 'asset-manager',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
+            isClosable: false, minWidth: LEFT_PANEL_MIN_W, minHeight: LEFT_PANEL_MIN_H }
         ]
       },
       // CENTER — Canvas / Code / Split (single component, but a stack so it
@@ -125,21 +150,25 @@ const DEFAULT_CONFIG = {
             isClosable: false, minWidth: CANVAS_MIN_W, minHeight: CANVAS_MIN_H }
         ]
       },
-      // RIGHT STACK — DOM / Properties / Custom CSS as tabs (consolidated
-      // per nola1 user 2026-05-05). Properties is the default-active tab
-      // since it's the most common edit surface; DOM is the secondary
-      // outline view; Custom CSS is the project-global stylesheet editor.
+      // RIGHT STACK — DOM / Properties / Custom CSS / Bootstrap as tabs
+      // (consolidated per nola1 user 2026-05-05). Properties is the
+      // default-active tab since it's the most common edit surface; DOM is the
+      // secondary outline view; Custom CSS is the project-global stylesheet
+      // editor; Bootstrap (2026-08-18) is the project's own copy of the
+      // framework sheet.
       {
         type: 'stack',
         width: 26,
         activeItemIndex: 1,
         content: [
           { type: 'component', componentType: 'dom-tree',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
+            isClosable: false, minWidth: RIGHT_PANEL_MIN_W, minHeight: RIGHT_PANEL_MIN_H },
           { type: 'component', componentType: 'properties',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H },
+            isClosable: false, minWidth: RIGHT_PANEL_MIN_W, minHeight: RIGHT_PANEL_MIN_H },
           { type: 'component', componentType: 'custom-css',
-            isClosable: false, minWidth: PANEL_MIN_W, minHeight: PANEL_MIN_H }
+            isClosable: false, minWidth: RIGHT_PANEL_MIN_W, minHeight: RIGHT_PANEL_MIN_H },
+          { type: 'component', componentType: 'bootstrap-css',
+            isClosable: false, minWidth: RIGHT_PANEL_MIN_W, minHeight: RIGHT_PANEL_MIN_H }
         ]
       }
     ]
@@ -157,7 +186,8 @@ const PANEL_FACTORIES = {
   'dom-tree':      renderDomTree,
   'canvas':        renderCanvas,
   'properties':    renderProperties,
-  'custom-css':    renderCustomCss
+  'custom-css':    renderCustomCss,
+  'bootstrap-css': renderBootstrapCss
 }
 
 export function initGoldenLayout(host) {
@@ -306,7 +336,7 @@ export function applyLayoutConfig(config) {
   layout.loadLayout(config)
 }
 
-/** componentTypes a workspace config may reference (the 7 built-in panels). */
+/** componentTypes a workspace config may reference (the 8 built-in panels). */
 export function getRegisteredComponentTypes() {
   return Object.keys(PANEL_FACTORIES)
 }

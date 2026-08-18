@@ -2,21 +2,21 @@
  * GrapeStrap — GL panel visibility (tab hide + auto-collapse stack)
  *
  * After the 2026-05-05 right-side consolidation (DOM / Properties / Custom CSS
- * are now three tabs in a single right-side stack — same pattern as Project /
- * Library / Assets on the left), per-panel visibility is just hiding a tab in
- * its stack. Two pieces:
+ * — joined by Bootstrap on 2026-08-18 — are tabs in a single right-side stack,
+ * same pattern as Project / Library / Assets on the left), per-panel
+ * visibility is just hiding a tab in its stack. Two pieces:
  *
  *   1. Each panel's "hide" state is a body class. CSS rules in
  *      golden-layout-overrides.css turn off both the .lm_tab in the strip and
  *      the .lm_content host for that panel's componentType. The stack stays
  *      visible for the remaining tabs; no layout gap.
  *
- *   2. If ALL three right-side tabs are hidden, the entire right stack would
+ *   2. If EVERY right-side tab is hidden, the entire right stack would
  *      otherwise sit there as an empty 26%-wide column with just a tab strip
  *      and nothing inside. So we additionally collapse the stack itself via
  *      the size-redistribute trick from alpha.10: zero its `size`, boost
  *      visible siblings (the canvas), then `requestFullRelayout()`. Restoring
- *      any of the three panels reverses the stack collapse.
+ *      any one of the panels reverses the stack collapse.
  *
  * Caller surface (used by view-toggles.js):
  *   - hideRightTab(componentType)        — hide one tab; auto-collapse stack if needed
@@ -39,10 +39,15 @@
 
 import { getLayout, requestFullRelayout } from './golden-layout-config.js'
 
+// Every right-stack panel and the body class that hides it. allRightTabsHidden
+// and activateAnyVisibleTab derive from this map, so adding a panel here is
+// all the stack-collapse logic needs — but the matching display:none rules in
+// styles/golden-layout-overrides.css are NOT derived and must be added too.
 const RIGHT_TAB_CLASSES = {
-  'dom-tree':   { bodyClass: 'is-hide-dom-tree' },
-  'properties': { bodyClass: 'is-hide-properties' },
-  'custom-css': { bodyClass: 'is-hide-custom-css' }
+  'dom-tree':      { bodyClass: 'is-hide-dom-tree' },
+  'properties':    { bodyClass: 'is-hide-properties' },
+  'custom-css':    { bodyClass: 'is-hide-custom-css' },
+  'bootstrap-css': { bodyClass: 'is-hide-bootstrap-css' }
 }
 
 // Snapshot of sibling sizes when the right stack itself is collapsed. WeakMap
@@ -66,7 +71,8 @@ function findRightStack() {
   const root = layout.rootItem
   if (!root) return null
   const dom = findComponentByType(root, 'dom-tree')
-  // The stack containing DOM (and Properties + Custom CSS) is dom.parent.
+  // The stack containing DOM (plus Properties, Custom CSS, Bootstrap) is
+  // dom.parent.
   return dom?.parent || null
 }
 

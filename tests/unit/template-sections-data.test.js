@@ -13,6 +13,9 @@
  * DEPENDS: node:test, node:assert, node:fs, both data modules,
  *          plugins/blocks-sections/index.js (read as text — see below)
  * CREATED: 2026-08-17
+ * UPDATED: 2026-08-18 — BOOTSTRAP_EXACT/BOOTSTRAP_PATTERNS extended for the
+ *          two harvested navbar defs (collapse/dropdown/offcanvas classes,
+ *          navbar-expand-*).
  *
  * The data modules import nothing, so `node --test` loads them directly with
  * no bundler in front (same reasoning as css-chunks.test.js). index.js is read
@@ -54,11 +57,17 @@ const BOOTSTRAP_EXACT = new Set([
   'navbar', 'navbar-brand', 'navbar-nav', 'nav-item', 'nav-link',
   'list-unstyled', 'list-inline', 'list-inline-item', 'list-group', 'list-group-item',
   'visually-hidden', 'ratio', 'img-fluid', 'rounded', 'rounded-circle', 'border',
-  'row', 'container', 'container-fluid', 'clearfix'
+  'row', 'container', 'container-fluid', 'clearfix',
+  // Navbar sections (graphite-navbar, orbit-navbar, 2026-08-18)
+  'navbar-toggler', 'navbar-toggler-icon', 'navbar-collapse', 'collapse',
+  'dropdown', 'dropdown-toggle', 'dropdown-menu', 'dropdown-item',
+  'sticky-top', 'fixed-top',
+  'offcanvas', 'offcanvas-end', 'offcanvas-header', 'offcanvas-title', 'offcanvas-body'
 ])
 
 const BREAKPOINT = '(sm|md|lg|xl|xxl)'
 const BOOTSTRAP_PATTERNS = [
+  new RegExp(`^navbar-expand(-${BREAKPOINT})?$`),
   new RegExp(`^container-${BREAKPOINT}$`),
   new RegExp(`^col(-${BREAKPOINT})?(-(auto|1[0-2]|[1-9]))?$`),
   new RegExp(`^offset(-${BREAKPOINT})?-(0|1[01]|[1-9])$`),

@@ -6,9 +6,13 @@
 //       resolves the keys and hands the result to api.registerSection.
 // SOURCE: src/main/starters/graphite.js (page bodies) +
 //         starters/graphite/assets/css/theme.css (rules)
-// HARVESTED: 2026-08-17
+// HARVESTED: 2026-08-17 (navbar added 2026-08-18)
 // DEPENDS: nothing — no imports, no runtime behavior, no DOM.
 // CREATED: 2026-08-17
+// UPDATED: 2026-08-18 — added graphite-navbar. Page chrome was deliberately
+//          excluded from the original harvest; it lands now that the
+//          behaviors runtime (assets/behaviors/gstrap-behaviors.js/.css) has
+//          somewhere to plug in (`behaviors: true`, data-gs-nav-* attrs).
 //
 // Same harvest rules as orbit-sections.js (read that header first — the
 // namespace, chunk, var(--gs-accent), url("../images/…") and asset-declaration
@@ -36,6 +40,21 @@
 //   - The carousel is a <section> carrying Bootstrap's own carousel classes,
 //     not the source's <div> — every def here is a page-level band, and
 //     insert-section.js keys its sibling placement on exactly that.
+//   - The navbar def is rooted on a <header> wrapping BOTH the <nav> and its
+//     off-canvas mobile mirror — neither works without the other, and the
+//     wrapper is what keeps them one page band for insert-section.js's
+//     sibling-placement rule. `fixed-top`/`is-overlay`/`data-nav-overlay` are
+//     starter chrome (they assume a body padding-top and a hero band directly
+//     underneath) and are stripped; the def's description names the in-app
+//     recipe for the same "floats over a hero" look. `.dropdown-submenu`
+//     becomes the `data-gs-nav-submenu` attribute the shipped behaviors
+//     runtime keys on (assets/behaviors/gstrap-behaviors.js/.css) — the
+//     runtime owns the toggle click, the flyout position, and the mobile
+//     fallback, so none of that machinery is in this file's CSS chunk. Two
+//     rule groups were body-level in the source theme.css (not nested under
+//     `.site-navbar`): the submenu chevron and the whole off-canvas panel.
+//     Both are re-scoped under `.gs-graphite-navbar` here so they cannot
+//     paint an unrelated `.dropdown-item` elsewhere on the page.
 // =============================================================
 
 /**
@@ -420,6 +439,143 @@ export const CSS_PARTS = {
 .gs-graphite-form .form-check-input:focus {
   border-color: var(--gs-accent);
   box-shadow: 0 0 0 0.2rem rgba(68, 68, 68, 0.15);
+}`,
+
+  // Root nav bar + its off-canvas mobile mirror. Harvested in-flow (no
+  // fixed-top/is-overlay): the source's overlay skin depends on a body
+  // padding-top and a hero band directly underneath it, which is page chrome
+  // a bundled section has no business assuming. Recreate the "floats over a
+  // hero" look with `sticky-top` (Style Manager's Position group) plus
+  // `data-gs-nav-scroll="solid"` from the Navbar sub-panel instead — that
+  // swaps in this same solid skin once the page scrolls past the hero, with
+  // no CSS here to carry for it.
+  'graphite-navbar': `.gs-graphite-nav {
+  --gs-graphite-navbar-height: 3.5em;
+  min-height: var(--gs-graphite-navbar-height);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 0 0.15em 0 rgba(0, 0, 0, 0.2);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease, min-height 0.3s ease;
+}
+/* graphite-base's ".gs-graphite a" gives every anchor a dotted underline —
+   right for inline text links, wrong for anchors that are really UI controls.
+   The source resets that list (.navbar-brand, .nav-link, .dropdown-item,
+   .nav-panel-link among others) at the site root; graphite-base predates this
+   section and only carries the subset OTHER sections needed, so the navbar
+   ones are reset here instead of widening a shared chunk for one section. */
+.gs-graphite-nav .gs-graphite-navlogo,
+.gs-graphite-nav .nav-link,
+.gs-graphite-nav .dropdown-item,
+.gs-graphite-navbar .gs-graphite-navpanel-link {
+  border-bottom: 0;
+}
+.gs-graphite-nav .gs-graphite-navlogo {
+  font-family: 'Raleway', Helvetica, sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--gs-accent);
+}
+.gs-graphite-nav .nav-link {
+  font-family: 'Raleway', Helvetica, sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gs-accent);
+  padding: 0.5em 0.9em;
+}
+.gs-graphite-nav .nav-link:hover,
+.gs-graphite-nav .nav-link.active {
+  color: var(--gs-accent);
+  box-shadow: inset 0 -2px 0 0 var(--gs-accent);
+}
+.gs-graphite-nav .gs-graphite-navcta {
+  background: var(--gs-accent);
+  color: var(--gs-graphite-on-dark);
+  border-radius: 0;
+  padding: 0.5em 1.25em;
+  margin-left: 0.5em;
+}
+.gs-graphite-nav .gs-graphite-navcta:hover {
+  background: #575757;
+  box-shadow: none;
+}
+/* Desktop nav row: plain flex row — mobile uses the off-canvas panel instead
+   of Bootstrap's Collapse component, so this never collapses. */
+.gs-graphite-nav .gs-graphite-navlinks {
+  display: none;
+}
+@media (min-width: 768px) {
+  .gs-graphite-nav .gs-graphite-navlinks {
+    display: flex;
+    align-items: center;
+  }
+}
+.gs-graphite-nav .dropdown-menu {
+  border: 0;
+  border-radius: 0;
+  box-shadow: 0 0.1em 0.3em 0 rgba(0, 0, 0, 0.2);
+  padding: 0.5em 0;
+  min-width: 13em;
+}
+.gs-graphite-nav .dropdown-item {
+  font-family: 'Raleway', Helvetica, sans-serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.75em 1.25em;
+  color: var(--gs-accent);
+}
+.gs-graphite-nav .dropdown-item:hover,
+.gs-graphite-nav .dropdown-item:focus {
+  background: var(--gs-graphite-paper-alt);
+  color: var(--gs-accent);
+}
+/* Nested-submenu chevron only — open/close and flyout position are the
+   behaviors runtime's job (gstrap-behaviors.css), keyed on the same
+   [data-gs-nav-submenu] attribute. Scoped to this section: the source rule
+   was body-level (a bare .dropdown-submenu selector), and left bare here it
+   would mark every submenu on the page, Orbit's included, with this glyph. */
+.gs-graphite-navbar [data-gs-nav-submenu] > .dropdown-item::after {
+  content: '\\f105';
+  font-family: 'Font Awesome 7 Free';
+  font-weight: 900;
+  float: right;
+  margin-left: 0.5em;
+}
+/* Off-canvas mobile mirror — also body-level in the source (a sibling of
+   .site-navbar, not a descendant of it), so it gets the same section scoping. */
+.gs-graphite-navbar .gs-graphite-navpanel {
+  width: 20em;
+  max-width: 85%;
+  background: var(--gs-graphite-paper);
+}
+.gs-graphite-navbar .gs-graphite-navpanel-list,
+.gs-graphite-navbar .gs-graphite-navpanel-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.gs-graphite-navbar .gs-graphite-navpanel-list ul {
+  padding-left: 1.25em;
+}
+.gs-graphite-navbar .gs-graphite-navpanel-link {
+  display: block;
+  padding: 0.85em 0;
+  border-top: solid 1px var(--gs-graphite-border);
+  font-family: 'Raleway', Helvetica, sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--gs-accent);
+}
+.gs-graphite-navbar .gs-graphite-navpanel-list li:first-child > .gs-graphite-navpanel-link {
+  border-top: 0;
+}
+.gs-graphite-navbar .gs-graphite-navpanel-link:hover {
+  color: #777777;
 }`
 }
 
@@ -711,5 +867,79 @@ export const SECTIONS = [
     </ul>
   </div>
 </footer>`
+  },
+
+  {
+    id: 'graphite-navbar',
+    label: 'Navbar',
+    description: 'Top nav with a two-level dropdown and an off-canvas mobile panel. For the overlay-over-a-hero look, add sticky-top and set data-gs-nav-scroll="solid" from the Navbar panel.',
+    cssParts: ['graphite-base', 'graphite-navbar'],
+    behaviors: true,
+    preview: '<svg viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="1" width="20" height="3.6" fill="currentColor" opacity="0.08"/><rect x="1" y="1" width="20" height="3.6"/><path d="M2.4 2.8h3"/><path d="M9.5 2.8h2M13 2.8h2"/><path d="M18 2h2M18 2.8h2M18 3.6h2"/></svg>',
+    content: `<header class="gs-sec gs-graphite gs-graphite-navbar">
+  <nav class="navbar navbar-expand-md gs-graphite-nav" data-gs-nav-autoclose="offcanvas">
+    <div class="container-fluid">
+      <a class="navbar-brand gs-graphite-navlogo" href="#">Graphite</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#nav-panel" aria-controls="nav-panel" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="gs-graphite-navlinks justify-content-end w-100">
+        <ul class="navbar-nav align-items-md-center">
+          <li class="nav-item"><a class="nav-link active" href="#" aria-current="page">Home</a></li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Page Layouts</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="#">Left Sidebar</a></li>
+              <li><a class="dropdown-item" href="#">Right Sidebar</a></li>
+              <li><a class="dropdown-item" href="#">No Sidebar</a></li>
+              <li data-gs-nav-submenu>
+                <a class="dropdown-item dropdown-toggle" href="#" role="button" aria-expanded="false">Submenu</a>
+                <ul class="dropdown-menu">
+                  <li><a class="dropdown-item" href="#">Option One</a></li>
+                  <li><a class="dropdown-item" href="#">Option Two</a></li>
+                  <li><a class="dropdown-item" href="#">Option Three</a></li>
+                  <li><a class="dropdown-item" href="#">Option Four</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item"><a class="nav-link" href="#">Elements</a></li>
+          <li class="nav-item"><a class="nav-link gs-graphite-navcta" href="#">Sign Up</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="offcanvas offcanvas-end gs-graphite-navpanel" tabindex="-1" id="nav-panel" aria-labelledby="nav-panel-label">
+    <div class="offcanvas-header">
+      <h2 class="offcanvas-title visually-hidden" id="nav-panel-label">Site navigation</h2>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+      <ul class="gs-graphite-navpanel-list">
+        <li><a class="gs-graphite-navpanel-link" href="#">Home</a></li>
+        <li>
+          <a class="gs-graphite-navpanel-link" href="#">Page Layouts</a>
+          <ul>
+            <li><a class="gs-graphite-navpanel-link" href="#">Left Sidebar</a></li>
+            <li><a class="gs-graphite-navpanel-link" href="#">Right Sidebar</a></li>
+            <li><a class="gs-graphite-navpanel-link" href="#">No Sidebar</a></li>
+            <li>
+              <a class="gs-graphite-navpanel-link" href="#">Submenu</a>
+              <ul>
+                <li><a class="gs-graphite-navpanel-link" href="#">Option One</a></li>
+                <li><a class="gs-graphite-navpanel-link" href="#">Option Two</a></li>
+                <li><a class="gs-graphite-navpanel-link" href="#">Option Three</a></li>
+                <li><a class="gs-graphite-navpanel-link" href="#">Option Four</a></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li><a class="gs-graphite-navpanel-link" href="#">Elements</a></li>
+        <li><a class="gs-graphite-navpanel-link" href="#">Sign Up</a></li>
+      </ul>
+    </div>
+  </div>
+</header>`
   }
 ]

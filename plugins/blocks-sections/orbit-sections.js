@@ -6,9 +6,13 @@
 //       resolves the keys and hands the result to api.registerSection.
 // SOURCE: src/main/starters/orbit.js (page bodies) +
 //         starters/orbit/assets/css/theme.css (rules)
-// HARVESTED: 2026-08-17
+// HARVESTED: 2026-08-17 (navbar added 2026-08-18)
 // DEPENDS: nothing — no imports, no runtime behavior, no DOM.
 // CREATED: 2026-08-17
+// UPDATED: 2026-08-18 — added orbit-navbar. Page chrome was deliberately
+//          excluded from the original harvest; it lands now that the
+//          behaviors runtime (assets/behaviors/gstrap-behaviors.js/.css) has
+//          somewhere to plug in (`behaviors: true`, data-gs-nav-* attrs).
 //
 // How the harvest was done, and the rules it followed:
 //
@@ -43,6 +47,18 @@
 //     rewritten — that machinery does not come along with the section.
 //   - The 8-item feature grid ships as 4 items (one clean row at the lg
 //     breakpoint); the source's extra four were tour filler.
+//   - The navbar def is the single <nav> element — Bootstrap's own Collapse
+//     component IS the mobile panel here, so unlike Graphite there is no
+//     off-canvas sibling to wrap it with. The starter's `<ul class=
+//     "theme-picker">` (the seven accent swatches, localStorage, and the
+//     data-theme wiring in main.js) is starter machinery and does not ship;
+//     the six-entry link list trims to four items plus the Components
+//     dropdown, keeping the dropdown's own nested "Layouts" submenu intact so
+//     the section still demonstrates the two-level menu. `.dropdown-submenu`
+//     becomes the `data-gs-nav-submenu` attribute the shipped behaviors
+//     runtime keys on (assets/behaviors/gstrap-behaviors.js/.css); the
+//     runtime owns the toggle click and the flyout position, which is why
+//     neither survives into this file's CSS chunk.
 // =============================================================
 
 /**
@@ -356,6 +372,70 @@ export const CSS_PARTS = {
 }
 .gs-orbit-widget .gs-orbit-btn-ghost {
   margin-top: 1.5em;
+}`,
+
+  // The single-element navbar — Bootstrap's own Collapse handles the mobile
+  // panel, so there is no off-canvas companion chunk the way Graphite needs
+  // one. Everything here was already scoped under `.site-navbar` in the
+  // source, so a straight rename to `.gs-orbit-nav` is the whole job — no
+  // body-level rules to re-scope. Nested-submenu open/close and flyout
+  // position are the behaviors runtime's job (gstrap-behaviors.css); the
+  // theme-picker and its seven swatch colors are starter machinery and do
+  // not ship with the section.
+  'orbit-navbar': `.gs-orbit-nav {
+  padding: 1em 1.5em;
+  background-color: var(--gs-orbit-ink);
+}
+.gs-orbit-nav .gs-orbit-navlogo {
+  letter-spacing: 1px;
+  font-size: 1.25em;
+  font-weight: 300;
+  color: #fff;
+}
+.gs-orbit-nav .nav-link {
+  margin-left: 0.7em;
+  padding: 0.35em 1.2em;
+  letter-spacing: 0.06em;
+  font-size: 0.8em;
+  color: #ccc;
+  border-radius: 0.3125rem;
+  transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out;
+}
+.gs-orbit-nav .nav-link:hover,
+.gs-orbit-nav .nav-link:focus {
+  color: #fff;
+}
+.gs-orbit-nav .nav-link.active {
+  background-color: var(--gs-accent);
+  color: #fff;
+}
+.gs-orbit-nav .dropdown-menu {
+  min-width: 13em;
+  padding: 0.85em;
+  background-color: var(--gs-orbit-ink);
+  border: 0;
+  border-radius: 0.5rem;
+}
+.gs-orbit-nav .dropdown-item {
+  padding: 1em 0;
+  border-top: solid 1px rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.05em;
+  font-size: 0.8em;
+  color: #ccc;
+  background-color: transparent;
+}
+.gs-orbit-nav .dropdown-item:first-child {
+  border-top: 0;
+}
+.gs-orbit-nav .dropdown-item:hover,
+.gs-orbit-nav .dropdown-item:focus {
+  color: #fff;
+  background-color: transparent;
+}
+@media (max-width: 767.98px) {
+  .gs-orbit-nav .navbar-collapse {
+    margin-top: 1em;
+  }
 }`
 }
 
@@ -663,5 +743,46 @@ export const SECTIONS = [
     <div class="gs-orbit-footer-copyright">&copy; Orbit. All rights reserved.</div>
   </div>
 </footer>`
+  },
+
+  {
+    id: 'orbit-navbar',
+    label: 'Navbar',
+    description: 'Top nav with a Components dropdown (nested Layouts submenu), collapsing to the built-in Bootstrap mobile panel.',
+    cssParts: ['orbit-base', 'orbit-navbar'],
+    behaviors: true,
+    preview: '<svg viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1"><rect x="1" y="1" width="20" height="3.6" fill="currentColor" opacity="0.85"/><path d="M2.4 2.8h3" stroke-opacity="0.5"/><path d="M9.5 2.8h2M13 2.8h2" stroke-opacity="0.5"/><path d="M18 2h2M18 2.8h2M18 3.6h2" stroke-opacity="0.5"/></svg>',
+    content: `<nav class="gs-sec gs-orbit gs-orbit-navbar navbar navbar-expand-md gs-orbit-nav" data-gs-nav-autoclose="collapse">
+  <div class="container-fluid">
+    <a class="navbar-brand gs-orbit-navlogo" href="#">Orbit</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav-links" aria-controls="nav-links" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div id="nav-links" class="collapse navbar-collapse justify-content-end">
+      <ul class="navbar-nav">
+        <li class="nav-item"><a class="nav-link active" href="#" aria-current="page">Home</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" id="navDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Components</a>
+          <ul class="dropdown-menu" aria-labelledby="navDropdown">
+            <li><a class="dropdown-item" href="#">Hero Banner</a></li>
+            <li><a class="dropdown-item" href="#">Accent Band</a></li>
+            <li><a class="dropdown-item" href="#">Feature Grid</a></li>
+            <li data-gs-nav-submenu>
+              <a class="dropdown-item dropdown-toggle" href="#" id="navDropdownSubmenu" role="button" aria-expanded="false">Layouts</a>
+              <ul class="dropdown-menu" aria-labelledby="navDropdownSubmenu">
+                <li><a class="dropdown-item" href="#">Left Sidebar</a></li>
+                <li><a class="dropdown-item" href="#">Right Sidebar</a></li>
+                <li><a class="dropdown-item" href="#">Two Sidebar</a></li>
+                <li><a class="dropdown-item" href="#">No Sidebar</a></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="#">Left Sidebar</a></li>
+        <li class="nav-item"><a class="nav-link" href="#">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>`
   }
 ]

@@ -7,8 +7,10 @@
  * helpers handle "remove all from this group, then apply the chosen one."
  *
  * Keeping the enumerations here (instead of inline in each sub-panel) means:
- *   - Cascade view, Bootstrap autocomplete (v0.0.2), and any plugin can read
- *     the same lists without copy-paste drift.
+ *   - Cascade view, the Properties panel's add-class typeahead (F6 —
+ *     panels/properties-side/class-suggestions.js consumes
+ *     allEnumeratedClasses() below as one of its suggestion sources), and
+ *     any plugin can read the same lists without copy-paste drift.
  *   - The 1.0 → 5.x version bump is one file.
  */
 
@@ -349,3 +351,86 @@ export function maxWidthPattern() { return /^mw-100$/ }
 export function maxHeightPattern(){ return /^mh-100$/ }
 export function vwPattern()       { return /^vw-100$/ }
 export function vhPattern()       { return /^vh-100$/ }
+
+// ── Aggregator (F6 — class typeahead) ────────────────────────────────────────
+
+/**
+ * Every class this module knows how to build, flattened into one set of real
+ * class-name strings ('col-6', 'mt-3', 'bg-primary-subtle', 'rounded-pill',
+ * …) by running each group through its own builder function above. This is
+ * the STATIC suggestion source for the Properties panel's add-class
+ * typeahead (class-suggestions.js) — it works even for a project whose
+ * bootstrapCSS buffer is undefined (a Graphite/Orbit starter that vendors
+ * its own framework), where there is no real Bootstrap sheet to extract
+ * classes from at all.
+ *
+ * Deliberately base-breakpoint only (no `-sm-`/`-md-`/… cross product): a
+ * project's actual bootstrapCSS sheet, when present, is extracted verbatim
+ * by class-suggestions.js and already contains every real breakpoint
+ * variant Bootstrap ships — generating them here too would just be a second,
+ * harder-to-keep-correct copy of the same data for no suggestion the sheet
+ * doesn't already offer.
+ *
+ * @returns {Set<string>} Every enumerated class name, deduped
+ */
+export function allEnumeratedClasses() {
+  const classes = new Set()
+
+  // Grid
+  classes.add('col')
+  COL_SIZES.forEach(size => classes.add(colClass(size)))
+
+  // Spacing — margin gets the wider scale (0-5, auto, negative); padding
+  // doesn't support negative or auto values in Bootstrap.
+  for (const property of ['m', 'p']) {
+    const scales = property === 'm' ? SPACING_SCALES_MARGIN : SPACING_SCALES_PADDING
+    for (const { value: side } of SPACING_SIDES) {
+      for (const scale of scales) classes.add(spacingClass(property, side, scale))
+    }
+  }
+
+  // Display + visibility
+  DISPLAY_VALUES.forEach(({ value }) => classes.add(displayClass(value)))
+  VISIBILITY_VALUES.forEach(({ value }) => classes.add(value))
+
+  // Opacity
+  OPACITY.forEach(step => classes.add(`opacity-${step}`))
+
+  // Text
+  TEXT_ALIGN.forEach(({ value }) => classes.add(textAlignClass(value)))
+  TEXT_TRANSFORM.forEach(({ value }) => classes.add(`text-${value}`))
+  TEXT_WEIGHT.forEach(({ value }) => classes.add(`fw-${value}`))
+  TEXT_STYLE.forEach(({ value }) => classes.add(`fst-${value}`))
+  TEXT_DECORATION.forEach(({ value }) => classes.add(`text-decoration-${value}`))
+  TEXT_SIZE.forEach(size => classes.add(`fs-${size}`))
+  TEXT_COLOR.forEach(({ value }) => classes.add(`text-${value}`))
+
+  // Flex
+  FLEX_DIRECTION.forEach(({ value }) => classes.add(`flex-${value}`))
+  FLEX_WRAP.forEach(({ value }) => classes.add(`flex-${value}`))
+  FLEX_JUSTIFY.forEach(({ value }) => classes.add(`justify-content-${value}`))
+  FLEX_ALIGN_ITEMS.forEach(({ value }) => classes.add(`align-items-${value}`))
+  FLEX_ALIGN_CONTENT.forEach(({ value }) => classes.add(`align-content-${value}`))
+  FLEX_GAP.forEach(step => classes.add(`gap-${step}`))
+
+  // Background
+  BG_COLOR.forEach(({ value }) => classes.add(`bg-${value}`))
+  BG_SUBTLE.forEach(value => classes.add(`bg-${value}`))
+
+  // Border
+  BORDER_SIDES.forEach(({ value }) => classes.add(value ? `border-${value}` : 'border'))
+  BORDER_WIDTHS.forEach(width => classes.add(`border-${width}`))
+  BORDER_COLOR.forEach(({ value }) => classes.add(`border-${value}`))
+  BORDER_RADIUS.forEach(({ value }) => classes.add(value ? `rounded-${value}` : 'rounded'))
+  SHADOW.forEach(({ value }) => classes.add(value ? `shadow-${value}` : 'shadow'))
+
+  // Sizing
+  SIZING_W.forEach(size => classes.add(`w-${size}`))
+  SIZING_H.forEach(size => classes.add(`h-${size}`))
+  classes.add('mw-100')
+  classes.add('mh-100')
+  classes.add('vw-100')
+  classes.add('vh-100')
+
+  return classes
+}

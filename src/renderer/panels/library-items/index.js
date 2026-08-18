@@ -13,6 +13,12 @@
  *          of a locally-duplicated CONTAINER_TAGS/append-at-anchor copy.
  * UPDATED: 2026-08-17 — panel also paints BUNDLED sections (read-only groups
  *          below the project's own items) from pluginRegistry.sections.
+ * UPDATED: 2026-08-18 — cmdInsert (project's own items) now runs the same
+ *          Bootstrap-major compat gate insert-section.js uses, for items that
+ *          carry a `bootstrapVersion` stamp (skipped when absent — nothing
+ *          to compare). makeItem stamps new items with the open project's
+ *          own version, forward-compat for whenever items can travel between
+ *          projects.
  *
  * Two kinds of content share this panel, and they behave differently:
  *
@@ -56,6 +62,8 @@ import { getEditor } from '../../editor/grapesjs-init.js'
 import { resolvePlacement, insertAtPlacement, tagOf } from '../../editor/placement.js'
 import { insertBundledSection } from '../../editor/insert-section.js'
 import { showTextPrompt } from '../../dialogs/text-prompt.js'
+import { showConfirm } from '../../dialogs/confirm.js'
+import { isMajorMismatch } from '../../../shared/bs-version.js'
 import { wireLibraryLock } from './lock.js'
 import { propagateLibraryItem } from './propagate.js'
 import { t } from '../../i18n.js'
@@ -265,12 +273,13 @@ async function cmdFromSelection() {
   eventBus.emit('canvas:content-changed')
 }
 
-function cmdInsert(id) {
+async function cmdInsert(id) {
   if (!requireProject()) return
   const editor = getEditor()
   if (!editor) return
   const item = projectState.current.libraryItems.find(it => it.id === id)
   if (!item) return
+  if (!(await confirmItemVersionCompat(item))) return
   const html = makeWrapperHtml(item, item.html || '')
   const placement = resolvePlacement(editor, editor.getSelected?.())
   const { added } = insertAtPlacement(editor, placement, html)
@@ -280,11 +289,44 @@ function cmdInsert(id) {
 }
 
 /**
+ * Same Bootstrap-major compat gate insert-section.js runs for bundled
+ * sections, applied here to the user's OWN library items — most never carry
+ * a `bootstrapVersion` stamp today (see makeItem), so this is a no-op for
+ * the common case and only matters once an item travels between projects on
+ * different Bootstrap majors.
+ *
+ * A `manifest.framework` project skips the gate outright, same reasoning as
+ * insert-section.js's confirmVersionCompat: it has no app-managed Bootstrap
+ * to compare against, which is a different thing from an unknown version.
+ *
+ * @param {object} item - A project library item, possibly carrying
+ *        `bootstrapVersion`
+ * @returns {Promise<boolean>} true to proceed with the insert
+ */
+async function confirmItemVersionCompat(item) {
+  if (projectState.current?.manifest?.framework) return true
+
+  const projectVersion = projectState.current?.manifest?.bootstrapVersion
+  if (!isMajorMismatch(item.bootstrapVersion, projectVersion)) return true
+
+  return showConfirm({
+    title: t('bsgate.title'),
+    message: t('bsgate.message', {
+      itemVersion: item.bootstrapVersion,
+      projectVersion: projectVersion || t('bsgate.unknown')
+    }),
+    okLabel: t('bsgate.insert-anyway'),
+    cancelLabel: t('action.cancel')
+  })
+}
+
+/**
  * Insert a bundled section as a free editable copy.
  *
  * Gated on an open project like every other command here (the section's CSS
- * chunks and images have nowhere to land without one). Async unlike cmdInsert:
- * assets are copied over IPC before the markup goes in.
+ * chunks and images have nowhere to land without one). Assets are copied
+ * over IPC before the markup goes in; insertBundledSection also runs its own
+ * compat-gate confirm before any of that, mirroring cmdInsert's.
  *
  * @param {string} id - The registered section id from the row's data attribute
  * @returns {Promise<void>}
@@ -352,9 +394,28 @@ function cmdDelete(id) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/**
+ * Build a new library item, stamped with the open project's own
+ * `manifest.bootstrapVersion` when it has one.
+ *
+ * Cheap forward-compat (A-WP2): this project's items were built against
+ * whatever Bootstrap this project itself is on, so recording that now costs
+ * nothing and lets confirmItemVersionCompat above do something useful if the
+ * item is ever carried into a project on a different Bootstrap major. Left
+ * unset — not `undefined` written to disk, just absent — when the project
+ * has no version of its own (a `framework`-vendoring project); an unstamped
+ * item never triggers the gate anyway (shared/bs-version.js).
+ *
+ * @param {string} name
+ * @param {string} html
+ * @returns {object} A new library item, `libraryItems[]`-shaped
+ */
 function makeItem(name, html) {
   const id = generateId(name)
-  return { id, name, html, file: `library/${id}.html` }
+  const item = { id, name, html, file: `library/${id}.html` }
+  const bootstrapVersion = projectState.current?.manifest?.bootstrapVersion
+  if (bootstrapVersion) item.bootstrapVersion = bootstrapVersion
+  return item
 }
 
 function makeWrapperHtml(item, innerHtml) {

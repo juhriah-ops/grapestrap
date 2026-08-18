@@ -1,0 +1,243 @@
+/*! gstrap-behaviors v1 */
+/*
+	File: assets/css/gstrap-behaviors.css (shipped from assets/behaviors/ in the app bundle)
+	Purpose: Presentation half of the GrapeStrap behaviors runtime — the
+	         transition pairs its `gs-anim-pending` / `gs-anim-in` classes drive,
+	         the pure-CSS hover and loop presets (no JS involved at all), the
+	         navbar state skins, and nested-submenu flyout positioning.
+	Used by: every page of a project whose manifest carries `behaviors`, linked
+	         right after the project stylesheet (page-html.js BEHAVIORS_LINK) so
+	         a project rule can still win by specificity. Also injected into the
+	         editor canvas so hover/loop presets preview live; the runtime JS
+	         deliberately is not.
+	Version: the machine-readable tag on line 1 pairs with the runtime script's.
+	         Bump BOTH together — main's `behaviors:ensure` refreshes each file
+	         on its own tag, and a hand-edited project copy is overwritten at the
+	         next bump (delivery artifact, not a source file).
+	Contract: `data-gs-*` attributes are authored (by the user, via the editor's
+	         panels); `gs-anim-*` / `gs-nav-*` CLASSES are runtime-owned and are
+	         never written into saved markup.
+	Created: 2026-08-18
+*/
+
+/* ─── Reveal engine ───────────────────────────────────────────────────────
+   Start states. Directions read as "where it travels FROM": fade-up rises into
+   place, so it starts below. Only the runtime ever adds gs-anim-pending — with
+   JS off, or under reduced motion, none of these apply and content is visible. */
+[data-gs-anim="fade"].gs-anim-pending       { opacity: 0; }
+[data-gs-anim="fade-up"].gs-anim-pending    { opacity: 0; transform: translateY(var(--gs-anim-distance, 24px)); }
+[data-gs-anim="fade-down"].gs-anim-pending  { opacity: 0; transform: translateY(calc(var(--gs-anim-distance, 24px) * -1)); }
+[data-gs-anim="fade-left"].gs-anim-pending  { opacity: 0; transform: translateX(var(--gs-anim-distance, 24px)); }
+[data-gs-anim="fade-right"].gs-anim-pending { opacity: 0; transform: translateX(calc(var(--gs-anim-distance, 24px) * -1)); }
+[data-gs-anim="zoom-in"].gs-anim-pending    { opacity: 0; transform: scale(var(--gs-anim-zoom-from, 0.92)); }
+[data-gs-anim="zoom-out"].gs-anim-pending   { opacity: 0; transform: scale(var(--gs-anim-zoom-to, 1.08)); }
+
+/* Revealed state — one rule for all seven effects.
+
+   The transition lives HERE, not on the base selector, and that placement is
+   load-bearing: a transition is read from the style an element is moving TO, so
+   declaring it on the base would make the runtime's own gs-anim-pending fade
+   the element OUT over 600ms before it could ever fade in (measured: a page
+   opened with visible content that then dissolved). Declared on the revealed
+   state, the hidden start snaps in unseen and only the reveal animates.
+   Durations and delays come from the custom properties the runtime mirrors off
+   the element's data-attributes; the values here are the untimed default.
+
+   Consequence for `data-gs-anim-once="0"`: the exit is a snap, not a fade. It
+   happens off-screen by definition — the element has just left the viewport. */
+[data-gs-anim].gs-anim-in {
+	opacity: 1;
+	transform: none;
+	transition:
+		opacity var(--gs-anim-duration, 600ms) var(--gs-anim-easing, cubic-bezier(0.22, 0.61, 0.36, 1)) var(--gs-anim-delay, 0ms),
+		transform var(--gs-anim-duration, 600ms) var(--gs-anim-easing, cubic-bezier(0.22, 0.61, 0.36, 1)) var(--gs-anim-delay, 0ms);
+}
+
+/* ─── Hover presets ───────────────────────────────────────────────────────
+   Pure CSS: no runtime involvement, so they preview live in the editor canvas
+   (which loads this stylesheet but not the script). */
+
+[data-gs-anim-hover] {
+	transition:
+		transform var(--gs-anim-hover-duration, 200ms) ease,
+		box-shadow var(--gs-anim-hover-duration, 200ms) ease;
+}
+
+[data-gs-anim-hover="grow"]:hover   { transform: scale(1.05); }
+[data-gs-anim-hover="shrink"]:hover { transform: scale(0.95); }
+[data-gs-anim-hover="lift"]:hover   { transform: translateY(-4px); box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.15); }
+[data-gs-anim-hover="glow"]:hover   { box-shadow: 0 0 0 0.25rem var(--gs-anim-glow-color, rgba(13, 110, 253, 0.35)); }
+
+/* The underline sweep needs a positioning context and a pseudo-element rather
+   than a border, so it can grow from one edge instead of fading in whole. */
+[data-gs-anim-hover="underline"] {
+	position: relative;
+}
+[data-gs-anim-hover="underline"]::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 100%;
+	height: 2px;
+	background: currentColor;
+	transform: scaleX(0);
+	transform-origin: left center;
+	transition: transform var(--gs-anim-hover-duration, 200ms) ease;
+}
+[data-gs-anim-hover="underline"]:hover::after {
+	transform: scaleX(1);
+}
+
+/* ─── Loop presets ────────────────────────────────────────────────────────
+   Speed pills set one custom property; every loop reads it, so a preset change
+   never has to touch the per-effect rules. */
+
+[data-gs-anim-loop] {
+	animation-duration: var(--gs-anim-loop-duration, 2s);
+	animation-iteration-count: infinite;
+	animation-timing-function: ease-in-out;
+}
+
+[data-gs-anim-loop="pulse"]  { animation-name: gs-kf-pulse; }
+[data-gs-anim-loop="bounce"] { animation-name: gs-kf-bounce; }
+[data-gs-anim-loop="float"]  { animation-name: gs-kf-float; }
+[data-gs-anim-loop="spin"]   { animation-name: gs-kf-spin; animation-timing-function: linear; }
+
+/* Marquee: the element carrying the attribute is the TRACK — the runtime
+   duplicates its children once, and the -50% translate lands the copy exactly
+   where the original started, so the loop is seamless. Clipping is the
+   PARENT's job (`overflow: hidden`): the track itself is the moving box.
+   Marquee distances are an order of magnitude longer than a pulse, so it
+   carries its own duration default and its own speed presets below. */
+[data-gs-anim-loop="marquee"],
+[data-gs-anim-loop="marquee-reverse"] {
+	display: flex;
+	flex-wrap: nowrap;
+	white-space: nowrap;
+	will-change: transform;
+	animation-name: gs-kf-marquee;
+	animation-timing-function: linear;
+	--gs-anim-loop-duration: 24s;
+}
+[data-gs-anim-loop="marquee-reverse"] {
+	animation-direction: reverse;
+}
+
+[data-gs-anim-loop-speed="slow"]   { --gs-anim-loop-duration: 4s; }
+[data-gs-anim-loop-speed="normal"] { --gs-anim-loop-duration: 2s; }
+[data-gs-anim-loop-speed="fast"]   { --gs-anim-loop-duration: 1s; }
+
+/* Two attributes = higher specificity, so these win over the presets above
+   regardless of source order. */
+[data-gs-anim-loop="marquee"][data-gs-anim-loop-speed="slow"],
+[data-gs-anim-loop="marquee-reverse"][data-gs-anim-loop-speed="slow"]   { --gs-anim-loop-duration: 40s; }
+[data-gs-anim-loop="marquee"][data-gs-anim-loop-speed="normal"],
+[data-gs-anim-loop="marquee-reverse"][data-gs-anim-loop-speed="normal"] { --gs-anim-loop-duration: 24s; }
+[data-gs-anim-loop="marquee"][data-gs-anim-loop-speed="fast"],
+[data-gs-anim-loop="marquee-reverse"][data-gs-anim-loop-speed="fast"]   { --gs-anim-loop-duration: 12s; }
+
+@keyframes gs-kf-pulse {
+	0%, 100% { transform: scale(1); }
+	50%      { transform: scale(1.06); }
+}
+@keyframes gs-kf-bounce {
+	0%, 20%, 53%, 100% { transform: translateY(0); }
+	40%, 43%           { transform: translateY(-18px); }
+	70%                { transform: translateY(-9px); }
+	90%                { transform: translateY(-3px); }
+}
+@keyframes gs-kf-float {
+	0%, 100% { transform: translateY(0); }
+	50%      { transform: translateY(-10px); }
+}
+@keyframes gs-kf-spin {
+	from { transform: rotate(0deg); }
+	to   { transform: rotate(360deg); }
+}
+@keyframes gs-kf-marquee {
+	from { transform: translateX(0); }
+	to   { transform: translateX(-50%); }
+}
+
+/* ─── Navbar states ───────────────────────────────────────────────────────
+   Runtime-owned classes. The default scrolled skin is a light near-opaque bar;
+   the Navbar panel overrides it per project by writing --gs-nav-scrolled-bg (or
+   a plain rule on the nav's own selector), which is why the colour is a
+   custom-property lookup rather than a literal. */
+
+[data-gs-nav-scroll],
+[data-gs-nav-shrink],
+[data-gs-nav-hide] {
+	transition:
+		transform 300ms ease,
+		background-color 300ms ease,
+		box-shadow 300ms ease,
+		padding 250ms ease;
+}
+
+.gs-nav-scrolled {
+	background: var(--gs-nav-scrolled-bg, rgba(255, 255, 255, 0.97));
+	box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+}
+
+.gs-nav-shrunk {
+	padding-top: var(--gs-nav-shrunk-padding, 0.25rem);
+	padding-bottom: var(--gs-nav-shrunk-padding, 0.25rem);
+}
+
+.gs-nav-hidden {
+	transform: translateY(-100%);
+}
+
+/* ─── Nested submenu flyout ───────────────────────────────────────────────
+   Bootstrap's .dropdown-menu is already position:absolute; these rules only
+   move the second level beside its parent item instead of under it. */
+
+[data-gs-nav-submenu] {
+	position: relative;
+}
+
+[data-gs-nav-submenu] > .dropdown-menu {
+	top: 0;
+	left: 100%;
+	margin-top: -0.5rem;
+	margin-left: 0.125rem;
+}
+
+/* A flyout has nowhere to fly to on a phone: below the navbar breakpoint the
+   second level nests inline under its parent item, indented. */
+@media (max-width: 767.98px) {
+	[data-gs-nav-submenu] > .dropdown-menu {
+		position: static;
+		float: none;
+		margin-top: 0;
+		margin-left: 1rem;
+		border: 0;
+		box-shadow: none;
+	}
+}
+
+/* ─── Reduced motion ──────────────────────────────────────────────────────
+   The runtime already skips reveals, marquee cloning and nav hide-on-scroll
+   under this setting. This block covers what CSS owns alone (hover presets,
+   loops, nav state transitions) and, as a safety net, un-hides any element
+   still carrying a pending class from an earlier state. */
+
+@media (prefers-reduced-motion: reduce) {
+	[data-gs-anim],
+	[data-gs-anim-hover],
+	[data-gs-anim-hover]::after,
+	[data-gs-anim-loop],
+	[data-gs-nav-scroll],
+	[data-gs-nav-shrink],
+	[data-gs-nav-hide] {
+		transition: none !important;
+		animation: none !important;
+	}
+
+	[data-gs-anim].gs-anim-pending {
+		opacity: 1;
+		transform: none;
+	}
+}

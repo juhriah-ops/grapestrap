@@ -19,6 +19,26 @@
  *
  * Keyboard nav: ↑↓ moves focus between non-disabled items, Enter activates,
  * Esc dismisses. Arrow nav skips separators and disabled items.
+ *
+ * UPDATED: 2026-08-18 — two focus/teardown bugs that made a SECOND menu
+ * impossible to open (found by tests/e2e/cascade-jump.spec.js, which
+ * right-clicks a Cascade row, jumps into Monaco, then right-clicks another):
+ *
+ *   1. The window `blur` listener was registered in CAPTURE phase, so it also
+ *      heard the blur of every element inside the window — including the one
+ *      the menu's own `first.focus()` had just stolen focus from. Opening a
+ *      menu while Monaco (or a previous menu item) held focus dismissed it in
+ *      the same tick it appeared. It is now a non-capturing listener with an
+ *      explicit `target === window` check, which is the intent: dismiss when
+ *      the APPLICATION WINDOW loses focus.
+ *   2. dismiss() detached the overlay BEFORE unhooking its listeners, and
+ *      detaching a node that holds focus fires blur synchronously — so
+ *      dismiss() re-entered itself and the outer call then threw
+ *      NotFoundError from removeChild ("the node to be removed is no longer a
+ *      child of this node"), out through showContextMenu() before the
+ *      replacement menu was ever built. It now unhooks first, detaches with
+ *      Element.remove() (a no-op on an already-detached node), and guards
+ *      against re-entry.
  */
 
 let activeMenu = null
@@ -77,12 +97,20 @@ export function showContextMenu(x, y, items) {
     menu.style.left = `${left}px`
     menu.style.top  = `${top}px`
 
+    let dismissed = false
     function dismiss(value) {
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
+      // Re-entry guard: detaching the overlay blurs whichever item had focus,
+      // and any listener reacting to that blur can land back in here mid-call.
+      if (dismissed) return
+      dismissed = true
+      // Unhook BEFORE detaching, so the blur the detach fires reaches nothing.
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('mousedown', onOutside, true)
-      window.removeEventListener('blur', onBlur, true)
-      activeMenu = null
+      window.removeEventListener('blur', onBlur)
+      overlay.remove()
+      // Only clear the shared handle if it still points at THIS menu — a
+      // stale dismiss must never orphan the menu that replaced it.
+      if (activeMenu === handle) activeMenu = null
       resolve(value)
     }
     function activate(idx) {
@@ -121,17 +149,27 @@ export function showContextMenu(x, y, items) {
         dismiss(undefined)
       }
     }
-    function onBlur() { dismiss(undefined) }
+    // The APP WINDOW losing focus, not an element inside it losing focus:
+    // element blur events don't bubble, so a non-capturing window listener
+    // hears only the window's own — and the target check keeps that true if
+    // someone re-adds capture later.
+    function onBlur(evt) {
+      if (evt.target !== window) return
+      dismiss(undefined)
+    }
+
+    // Published before the listeners go on: dismiss() reads it, and any of
+    // them can fire the moment they are registered.
+    const handle = { dismiss }
+    activeMenu = handle
 
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('mousedown', onOutside, true)
-    window.addEventListener('blur', onBlur, true)
+    window.addEventListener('blur', onBlur)
 
     // Focus the first enabled item so keyboard nav works without a click.
     const first = menu.querySelector('.gstrap-ctxmenu-item:not(.is-disabled)')
     first?.focus()
-
-    activeMenu = { dismiss }
   })
 }
 

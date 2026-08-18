@@ -13,13 +13,17 @@
  *          dialogs/text-prompt.js, dialogs/workspace-manage.js, i18n.js,
  *          state/event-bus.js, preload bridge (grapestrap.workspaces/menu)
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-18 — ensureCorePanels injects the Bootstrap panel into
+ *          layouts saved before it existed
  *
- * Apply flow (PLAN.md §3.3): validate (fail open — F1/F2) → normalizeFloors
- * (floors are code-owned, re-derived ÷N per stack at apply time — §3.4) →
- * applyLayoutConfig → re-assert visibility through the existing view-toggles
- * surface (loadLayout orphans panel-visibility's WeakMap snapshots — F6) →
- * requestFullRelayout(). Boot behavior and the Reset Layout contract
- * (geometry only, visibility untouched) are unchanged; no boot auto-restore.
+ * Apply flow (PLAN.md §3.3): validate (fail open — F1/F2) → ensureCorePanels
+ * (a saved layout predating a panel gains it, fail-open — 2026-08-18) →
+ * normalizeFloors (floors are code-owned, re-derived ÷N per stack at apply
+ * time — §3.4) → applyLayoutConfig → re-assert visibility through the existing
+ * view-toggles surface (loadLayout orphans panel-visibility's WeakMap
+ * snapshots — F6) → requestFullRelayout(). Boot behavior and the Reset Layout
+ * contract (geometry only, visibility untouched) are unchanged; no boot
+ * auto-restore.
  *
  * Name validation is duplicated here for inline dialog UX only — the
  * authoritative copy guards main-side I/O in src/main/workspace-store.js.
@@ -29,7 +33,7 @@ import { eventBus } from '../state/event-bus.js'
 import {
   getDefaultConfig, captureLayoutConfig, applyLayoutConfig,
   getRegisteredComponentTypes, getLayout, requestFullRelayout,
-  resetLayout as glResetLayout, LAYOUT_FLOORS
+  resetLayout as glResetLayout, getPanelTitle, LAYOUT_FLOORS
 } from './golden-layout-config.js'
 import { getRightStackRestoreSizes } from './panel-visibility.js'
 import { getVisibilityMap, applyVisibilityMap } from '../panels/view-toggles.js'
@@ -46,8 +50,17 @@ const PRESET_SLUGS = new Set(PRESET_NAMES.map(n => n.toLowerCase()))
 const ALL_VISIBLE = {
   tabsVisible: true, insertPanelVisible: true, propertyStripVisible: true,
   statusBarVisible: true, fileManagerVisible: true, domTreeVisible: true,
-  propertiesPanelVisible: true, customCssVisible: true
+  propertiesPanelVisible: true, customCssVisible: true, bootstrapCssVisible: true
 }
+
+// Right-stack panels that must exist in EVERY applied layout, and the panels
+// whose stack they belong beside. Saved workspaces predate later panels, and
+// validateSpec only rejects UNKNOWN types — a config that simply lacks one is
+// valid, so without ensureCorePanels a user with a saved layout would never
+// see the new tab (and its View toggle would silently no-op). Order matters:
+// the first anchor found wins.
+const CORE_RIGHT_PANELS = ['bootstrap-css']
+const RIGHT_STACK_ANCHORS = ['custom-css', 'properties', 'dom-tree']
 
 // Saved-name cache: inline duplicate validation + native-menu pushes.
 let savedNames = []
@@ -130,6 +143,67 @@ function validateSpec(spec) {
   return walk(root)
 }
 
+/**
+ * Add any core right-stack panel a (possibly pre-feature) saved layout is
+ * missing, into the stack that already holds one of its siblings.
+ *
+ * Runs before normalizeFloors so the injected tab gets the same re-derived
+ * per-tab floor as the rest of its stack. FAIL-OPEN by contract: any anomaly
+ * (no anchor stack in this layout, a malformed node, a throw) leaves the
+ * config exactly as it came in — a workspace that renders without one panel is
+ * strictly better than one that refuses to apply.
+ *
+ * @param {object} config - A cloned GL LayoutConfig ({ root })
+ * @returns {object} The same object, mutated in place
+ */
+function ensureCorePanels(config) {
+  try {
+    for (const componentType of CORE_RIGHT_PANELS) {
+      if (findComponentNode(config.root, componentType)) continue
+      const stack = RIGHT_STACK_ANCHORS
+        .map(anchor => findStackContaining(config.root, anchor))
+        .find(Boolean)
+      if (!stack) continue   // this layout has no right stack — nothing to join
+      stack.content.push({
+        type: 'component',
+        componentType,
+        // Title must match the rendered i18n string: the tab-hide CSS in
+        // golden-layout-overrides.css selects on `.lm_tab[title="…"]`.
+        title: getPanelTitle(componentType),
+        isClosable: false
+      })
+    }
+  } catch (err) {
+    log.warn('workspaces: core-panel injection skipped:', err)
+  }
+  return config
+}
+
+/** First component node of `componentType` anywhere in the tree, else null. */
+function findComponentNode(item, componentType) {
+  if (!item || typeof item !== 'object') return null
+  if (item.type === 'component' && item.componentType === componentType) return item
+  for (const child of item.content || []) {
+    const found = findComponentNode(child, componentType)
+    if (found) return found
+  }
+  return null
+}
+
+/** The stack node whose direct content holds `componentType`, else null. */
+function findStackContaining(item, componentType) {
+  if (!item || typeof item !== 'object' || !Array.isArray(item.content)) return null
+  if (item.type === 'stack' &&
+      item.content.some(child => child?.componentType === componentType)) {
+    return item
+  }
+  for (const child of item.content) {
+    const found = findStackContaining(child, componentType)
+    if (found) return found
+  }
+  return null
+}
+
 /** Floors are code-owned (§3.4): per-tab minSize re-derived as stack floor ÷ N
  *  at apply time; persisted floors (possibly stale, possibly wrong-N after a
  *  tab drag — reorderEnabled defaults on in GL 2.6) are discarded. Width
@@ -166,7 +240,7 @@ export function applyWorkspace(spec, { withVisibility = true } = {}) {
     toast('error', t('workspace.toast.corrupt'))
     return { ok: false, error: 'corrupt' }
   }
-  const config = normalizeFloors(structuredClone(spec.gl))
+  const config = normalizeFloors(ensureCorePanels(structuredClone(spec.gl)))
   try {
     applyLayoutConfig(config)
   } catch (err) {

@@ -9,8 +9,14 @@
  * URL resolution. We provide MonacoEnvironment.getWorker that returns a Web
  * Worker constructed from a Blob URL pointing to the bundled worker scripts.
  *
- * Class-first autocomplete (Bootstrap class names) is registered as a custom
- * completion provider for HTML — but only in v0.0.2; v0.0.1 ships vanilla.
+ * Class-first autocomplete (Bootstrap class names) is NOT a Monaco completion
+ * provider — this module registers none for HTML. Class-name suggestions
+ * live one layer up, on the Properties panel's add-class input (F6):
+ * dialogs/typeahead.js is the generic popover widget, and
+ * panels/properties-side/class-suggestions.js supplies its candidates
+ * (static Bootstrap enumerations, the project's own stylesheets, in-use
+ * classes). Monaco's own completion providers stay narrowly scoped to what
+ * they already do — url() asset paths in CSS (css-asset-completion.js).
  */
 
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js'

@@ -32,6 +32,16 @@ const TEMPLATE_FAMILIES = [
   { group: 'Orbit',    sections: ORBIT_SECTIONS,    cssParts: ORBIT_CSS_PARTS }
 ]
 
+// The Bootstrap version every def in this plugin was authored against —
+// hardcoded, not read from node_modules: this plugin ships bundled with the
+// app, and a plugin has no access to the host's node_modules at all. It is
+// spread into every def handed to api.registerSection below (generic
+// SECTIONS and both TEMPLATE_FAMILIES), and read at insert time by the
+// compat gate (src/shared/bs-version.js) against the open project's own
+// `manifest.bootstrapVersion` (src/main/project-manager.js). Bump this the
+// day this plugin's markup/CSS is re-authored against a newer Bootstrap.
+const BOOTSTRAP_VERSION = '5.3.3'
+
 export default function register(api) {
   api.log.info('registering section blocks')
 
@@ -47,7 +57,8 @@ export default function register(api) {
       id: section.id,
       label: section.label,
       content: section.content,
-      dependencies: section.dependencies || []
+      dependencies: section.dependencies || [],
+      bootstrapVersion: BOOTSTRAP_VERSION
     })
   }
 
@@ -61,7 +72,14 @@ export default function register(api) {
         preview: section.preview,
         description: section.description,
         css: resolveCssParts(section, family.cssParts),
-        assets: section.assets || []
+        assets: section.assets || [],
+        // Only the Library insert path (renderer/editor/insert-section.js)
+        // enables the behaviors runtime, and only these grouped rows use it —
+        // the generic sections above go in as plain Insert-panel blocks, which
+        // never run that path, so a behaviors flag on one would be a promise
+        // nothing keeps.
+        behaviors: section.behaviors === true,
+        bootstrapVersion: BOOTSTRAP_VERSION
       })
     }
   }

@@ -511,3 +511,117 @@
   color: #f48771;
   border-color: #f48771;
 }
+
+/* ── Navbar sub-panel ─────────────────────────────────────────────────────
+   Rows compose the shared primitives (segs, pills, hints, the pseudo-input
+   field skin); only the label-over-field control, the narrow number box and
+   the two swap-colour chips are its own. The wrapper exists so one disabled
+   rule can grey every control on a locked navbar. */
+.gstrap-sm-nav-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gstrap-sm-nav-panel button:disabled,
+.gstrap-sm-nav-panel select:disabled,
+.gstrap-sm-nav-panel input:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gstrap-sm-nav-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gstrap-sm-nav-number {
+  width: 80px;
+}
+.gstrap-sm-nav-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gstrap-sm-nav-color {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gstrap-sm-nav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-1);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 11px;
+  padding: 2px 9px 2px 3px;
+  cursor: pointer;
+}
+.gstrap-sm-nav-chip:hover:enabled { background: var(--bg-3); color: var(--text-1); }
+.gstrap-sm-nav-chip.is-active {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+/* Fill comes from --swatch, set on the element from JS (navbar.js#paintChip),
+   so a chosen colour never becomes an inline style attribute. */
+.gstrap-sm-nav-chip-swatch {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--swatch, transparent);
+  flex: none;
+}
+
+/* ── Animation sub-panel ──────────────────────────────────────────────────
+   Three groups (reveal / hover / loop) plus an action row, all composed from
+   the shared primitives — segs, pills, sliders, hints, the pseudo-input field
+   skin. Only the group divider, its caption, the label-over-field control and
+   the action row are its own. The wrapper exists so one disabled rule can grey
+   every control on a locked element, exactly as the Navbar panel's does.
+
+   The reveal PREVIEW writes two custom properties straight onto the canvas
+   element (animation.js#playPreview) rather than through a class here: the
+   values come from the element's own data-attributes and are removed again
+   when the replay ends — the documented runtime-presentation exemption, and
+   the same thing the behaviors runtime does in a visitor's browser. */
+.gstrap-sm-anim-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gstrap-sm-anim-panel button:disabled,
+.gstrap-sm-anim-panel select:disabled,
+.gstrap-sm-anim-panel input:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gstrap-sm-anim-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.gstrap-sm-anim-group:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.gstrap-sm-anim-group-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+.gstrap-sm-anim-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gstrap-sm-anim-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}

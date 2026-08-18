@@ -18,6 +18,16 @@
  *          propagate (updateHtml), dialogs/recovery, log,
  *          window.grapestrap.project.{readRecovery,writeRecovery,clearRecovery,open,recent,addRecent}
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-18 — bootstrapCSS excluded from snapshots (see below)
+ *
+ * DOCUMENTED LIMITATION (2026-08-18): `projectState.current.bootstrapCSS` —
+ * the project's own ~280KB copy of Bootstrap, edited in the Bootstrap panel —
+ * is deliberately EXCLUDED from the snapshot envelope and ignored on restore.
+ * The loop runs every 30s while dirty and serialises the whole project object,
+ * so carrying the framework sheet would multiply every tick's JSON + IPC +
+ * disk cost for a file that changes rarely. Consequence: Bootstrap-panel edits
+ * made since the last save are NOT crash-recovered. Same coverage tier as
+ * file-tab buffers (already documented as uncovered in editor/file-tabs.js).
  */
 
 import { eventBus } from './event-bus.js'
@@ -215,6 +225,10 @@ function buildSnapshotEnvelope() {
     log.error('recovery: project state not cloneable — snapshot skipped:', err)
     return null
   }
+  // Excluded by design — see the DOCUMENTED LIMITATION in the file header.
+  // Deleted AFTER the clone so projectState keeps its buffer; the envelope is
+  // what must stay small.
+  delete project.bootstrapCSS
   overlayActiveTab(project)
   return {
     version: SNAPSHOT_SCHEMA_VERSION,
@@ -391,6 +405,10 @@ function overlaySnapshot(fresh, snapshot) {
     fresh.globalCSS = migration.css
     cssMigrated = migration.changed
   }
+  // snap.bootstrapCSS is intentionally NOT overlaid: the field is stripped
+  // before the snapshot is written (file header), and an envelope from an
+  // older build that still carries one must not push a stale framework sheet
+  // over the fresh-from-disk copy. `fresh.bootstrapCSS` stands as loaded.
   if (Array.isArray(snap.snippets)) fresh.snippets = snap.snippets
   // metadata only (name/favicon edits); structural manifest fields (pages[],
   // templates[]) are derived from the arrays above at save time.
@@ -462,6 +480,9 @@ function remarkDirty(snapshot, touchedPages, cssMigrated = false) {
   // carried — the buffer differs from disk even if the snapshot's own CSS
   // was clean, so the next save must persist it.
   if (dirty.globalCss || cssMigrated) projectState.markCssDirty()
+  // dirty.bootstrapCss is deliberately not replayed: the buffer it referred to
+  // was never snapshotted, so the restored project's Bootstrap sheet is the
+  // clean on-disk one. Marking it dirty would claim unsaved edits we don't have.
   if (dirty.manifest) projectState.markManifestDirty()
 }
 

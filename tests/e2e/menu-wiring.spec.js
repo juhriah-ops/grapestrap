@@ -5,12 +5,13 @@
  * ROLE: Every menu item this round wired for real gets driven through the
  *       REAL native application menu (MenuItem.click() → menu:action IPC →
  *       menu-router), same pattern as about.spec.js: the View toggles
- *       (Linked Files / Breakpoint Slider / Custom CSS), the Insert menu's
- *       insert:focus-tab routing, Edit → Find/Replace into Monaco's find
- *       widget, File → Project Settings rename, and Edit → Find in Project
- *       search + click-through to Code view.
+ *       (Linked Files / Breakpoint Slider / Custom CSS / Bootstrap CSS), the
+ *       Insert menu's insert:focus-tab routing, Edit → Find/Replace into
+ *       Monaco's find widget, File → Project Settings rename, and Edit → Find
+ *       in Project search + click-through to Code view.
  * DEPENDS: @playwright/test, ./helpers.js, src/renderer/shortcuts/menu-router.js
  * CREATED: 2026-08-06
+ * UPDATED: 2026-08-18 — View → Toggle Bootstrap CSS
  */
 import { test, expect } from '@playwright/test'
 import { promises as fsp } from 'node:fs'
@@ -27,6 +28,7 @@ const L = {
   toggleLinked: 'Toggle Linked Files',
   toggleBreakpoints: 'Toggle Breakpoint Slider',
   toggleCustomCss: 'Toggle Custom CSS',
+  toggleBootstrapCss: 'Toggle Bootstrap CSS',
   insertForms: 'Forms'
 }
 
@@ -51,7 +53,7 @@ async function seededLaunch() {
   return { app, appWindow, projectPath }
 }
 
-test('View toggles: Linked Files, Breakpoint Slider, Custom CSS route through the native menu', async () => {
+test('View toggles: Linked Files, Breakpoint Slider, Custom CSS, Bootstrap CSS route through the native menu', async () => {
   const { app, appWindow } = await seededLaunch()
 
   // Linked Files + Breakpoints bars are visible with a page tab open;
@@ -68,13 +70,20 @@ test('View toggles: Linked Files, Breakpoint Slider, Custom CSS route through th
     await appWindow.waitForFunction(i => !document.getElementById(i).hidden, id, { timeout: 3_000 })
   }
 
-  // Custom CSS is a right-stack tab — hidden via a body class.
-  await clickMenuItem(app, L.view, L.toggleCustomCss)
-  await appWindow.waitForFunction(
-    () => document.body.classList.contains('is-hide-custom-css'), null, { timeout: 3_000 })
-  await clickMenuItem(app, L.view, L.toggleCustomCss)
-  await appWindow.waitForFunction(
-    () => !document.body.classList.contains('is-hide-custom-css'), null, { timeout: 3_000 })
+  // Custom CSS and Bootstrap are right-stack tabs — hidden via a body class.
+  // The router is an explicit case whitelist, so a missing case here shows up
+  // as the menu item doing nothing at all.
+  for (const [label, bodyClass] of [
+    [L.toggleCustomCss, 'is-hide-custom-css'],
+    [L.toggleBootstrapCss, 'is-hide-bootstrap-css']
+  ]) {
+    await clickMenuItem(app, L.view, label)
+    await appWindow.waitForFunction(
+      cls => document.body.classList.contains(cls), bodyClass, { timeout: 3_000 })
+    await clickMenuItem(app, L.view, label)
+    await appWindow.waitForFunction(
+      cls => !document.body.classList.contains(cls), bodyClass, { timeout: 3_000 })
+  }
 
   await app.close()
 })

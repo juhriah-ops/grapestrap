@@ -15,12 +15,12 @@
  *     The stack itself stays for the remaining tabs. Same pattern that the
  *     right-stack tabs use, just on the left.
  *
- *   - **Right-stack tabs** (DOM Tree, Properties, Custom CSS) — driven
- *     through `panel-visibility.js`. Each toggle adds/removes a body class
- *     that hides its `.lm_tab` + `.lm_content` host (CSS in
- *     golden-layout-overrides.css). If ALL three tabs end up hidden, the
+ *   - **Right-stack tabs** (DOM Tree, Properties, Custom CSS, Bootstrap) —
+ *     driven through `panel-visibility.js`. Each toggle adds/removes a body
+ *     class that hides its `.lm_tab` + `.lm_content` host (CSS in
+ *     golden-layout-overrides.css). If EVERY tab ends up hidden, the
  *     entire right stack is collapsed via the size-redistribute trick so
- *     the canvas reclaims its 26%; restoring any of the three brings the
+ *     the canvas reclaims its 26%; restoring any one brings the
  *     stack back. Consolidated 2026-05-05 per nola1 user request — "all
  *     of these separate views should all be on the right as tabs in one
  *     panel like the library and assets."
@@ -52,9 +52,10 @@ const LEFT_STACK_TABS = {
 // auto-collapses when all three are hidden. `panelKey` matches the GL
 // componentType so panel-visibility.js can find the ContentItem.
 const RIGHT_STACK_TABS = {
-  'view:toggle-dom-tree':    { panelKey: 'dom-tree',   prefKey: 'domTreeVisible',         defaultVisible: true },
-  'view:toggle-properties':  { panelKey: 'properties', prefKey: 'propertiesPanelVisible', defaultVisible: true },
-  'view:toggle-custom-css':  { panelKey: 'custom-css', prefKey: 'customCssVisible',       defaultVisible: true }
+  'view:toggle-dom-tree':      { panelKey: 'dom-tree',      prefKey: 'domTreeVisible',         defaultVisible: true },
+  'view:toggle-properties':    { panelKey: 'properties',    prefKey: 'propertiesPanelVisible', defaultVisible: true },
+  'view:toggle-custom-css':    { panelKey: 'custom-css',    prefKey: 'customCssVisible',       defaultVisible: true },
+  'view:toggle-bootstrap-css': { panelKey: 'bootstrap-css', prefKey: 'bootstrapCssVisible',    defaultVisible: true }
 }
 
 export async function wireViewToggles() {

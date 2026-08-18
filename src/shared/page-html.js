@@ -33,6 +33,11 @@
  * conservative: only the </head>–<body> gap is relocated; content after
  * </html> is left alone (rarer, and not part of this fix). See
  * tests/unit/page-html-stray-content.test.js.
+ *
+ * UPDATED: 2026-08-18 — `manifest.behaviors` emits the behaviors runtime pair
+ * (BEHAVIORS_LINK / BEHAVIORS_SCRIPT). Both tags carry `data-grpstr-fw`, and
+ * extraction strips on the ATTRIBUTE's presence rather than its value, so the
+ * round trip needed no change. See tests/unit/page-html-behaviors.test.js.
  */
 
 // Framework links emitted into every page's head. Default to the un-minified
@@ -52,6 +57,21 @@ export const FRAMEWORK_SCRIPTS = [
   { src: 'assets/js/bootstrap.bundle.js', defer: true, gstrap: 'bsjs' }
 ]
 export const PROJECT_STYLESHEET = { rel: 'stylesheet', href: 'assets/css/style.css', gstrap: 'project-css' }
+
+// The behaviors runtime pair (scroll reveals, navbar states, submenus, marquee
+// — see assets/behaviors/). Emitted only for a project whose manifest carries
+// `behaviors`, and INDEPENDENTLY of manifest.framework: a project that vendors
+// its own framework suppresses the bundled framework set but still gets these,
+// because the behaviors runtime is GrapeStrap's own delivery, not part of any
+// framework. The files are copied into the project by the `behaviors:ensure`
+// IPC, so these paths resolve in canvas preview, on disk, and after export.
+//
+// Placement is load-bearing on both ends: the link goes AFTER the project
+// stylesheet in <head>, and the script goes AFTER the framework scripts (it
+// listens for Bootstrap's `hidden.bs.dropdown` and drives Collapse/Offcanvas
+// instances) but BEFORE the user's own customScripts.
+export const BEHAVIORS_LINK   = { rel: 'stylesheet', href: 'assets/css/gstrap-behaviors.css', gstrap: 'gsb-css' }
+export const BEHAVIORS_SCRIPT = { src: 'assets/js/gstrap-behaviors.js', defer: true, gstrap: 'gsb-js' }
 
 // project-manager.js#createProject seeds the manifest with the pre-alpha.2
 // root-level stylesheet pointer and only rewrites it to the real in-assets
@@ -150,6 +170,17 @@ export function composeFullPageHtml(bodyHtml, page = {}, manifest = {}) {
     .join('\n  ')
   const projCss = `<link rel="${PROJECT_STYLESHEET.rel}" href="${escapeHtml(projectStylesheetHref(manifest))}" data-grpstr-fw="${PROJECT_STYLESHEET.gstrap}">`
 
+  // Truthy `manifest.behaviors` (today `{ version: 1 }`) is the single switch
+  // for the runtime pair. Read independently of manifest.framework — see the
+  // BEHAVIORS_LINK/BEHAVIORS_SCRIPT declarations for why.
+  const behaviorsOn = !!manifest?.behaviors
+  const behaviorsLink = behaviorsOn
+    ? `<link rel="${BEHAVIORS_LINK.rel}" href="${BEHAVIORS_LINK.href}" data-grpstr-fw="${BEHAVIORS_LINK.gstrap}">`
+    : ''
+  const behaviorsScript = behaviorsOn
+    ? `<script src="${BEHAVIORS_SCRIPT.src}" defer data-grpstr-fw="${BEHAVIORS_SCRIPT.gstrap}"></script>`
+    : ''
+
   const headLines = [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -159,13 +190,14 @@ export function composeFullPageHtml(bodyHtml, page = {}, manifest = {}) {
     faviconLink,
     fwLinks,
     projCss,
+    behaviorsLink,
     customLinkTags
   ].filter(Boolean).join('\n  ')
 
-  // Either half can be empty — a project vendoring a CSS-only framework emits
+  // Any of these can be empty — a project vendoring a CSS-only framework emits
   // no framework scripts at all, and joining blindly would leave a stray blank
   // line before the user's own scripts.
-  const bodyEnd = [fwScripts, customScriptTags].filter(Boolean).join('\n  ')
+  const bodyEnd = [fwScripts, behaviorsScript, customScriptTags].filter(Boolean).join('\n  ')
 
   return `<!doctype html>
 <html lang="en">

@@ -1,0 +1,42 @@
+/* GrapeStrap — Bootstrap CSS panel
+   PATH: src/renderer/styles/bootstrap-css.css
+   ROLE: Host + unavailable-hint layout for panels/bootstrap-css
+   DEPENDS: theme-dark.css (tokens), panels.css (.gstrap-persistent-root,
+            .gstrap-monaco-host)
+   CREATED: 2026-08-18
+
+   Two stacked regions inside the panel's persistent root: the Monaco host and
+   the "this project vendors its own framework" hint. Exactly one is visible;
+   `.is-unavailable` on the root picks which. No inline styles — the panel only
+   ever toggles that class. */
+
+.gstrap-bscss-host {
+  height: 100%;
+  background: var(--bg-1);
+  position: relative;
+}
+
+/* Default state: editor visible, hint out of the way. */
+.gstrap-bscss-unavailable {
+  display: none;
+  position: absolute;
+  inset: 0;
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--bg-1);
+}
+
+.gstrap-bscss-root.is-unavailable .gstrap-monaco-host {
+  display: none;
+}
+.gstrap-bscss-root.is-unavailable .gstrap-bscss-unavailable {
+  display: block;
+}
+
+.gstrap-bscss-unavailable-text {
+  margin: 0;
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.5;
+}

@@ -134,6 +134,14 @@
   font-size: 12px;
   color: var(--text-2);
 }
+/* Confirm dialog body text (dialogs/confirm.js) — plain reading copy, as
+   opposed to .gstrap-prompt-label's small form-field caption. */
+.gstrap-prompt-message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
 .gstrap-prompt-input {
   font: inherit;
   font-size: 14px;

@@ -5,6 +5,9 @@
  * ROLE: Launch/seed/select/dismiss helpers + shared constants for the domain spec files (split out of smoke.spec.js in Wave 0 of the v0.1.0 campaign)
  * DEPENDS: @playwright/test (_electron)
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-18 — selectFirstByTag returns the tag it selected (or
+ *          null), so a spec can assert it actually hit something instead of
+ *          silently continuing with no selection.
  * UPDATED: 2026-08-17 — added fileExists + createBundledStarterProject,
  *          pulled out of graphite-starter.spec.js when the Orbit starter
  *          became the second bundled-asset starter (graphite/orbit both
@@ -75,8 +78,20 @@ export async function openSeedProject(appWindow, projectPath) {
   )
 }
 
+/**
+ * Select the first component with the given tag, in document order.
+ *
+ * @param {import('@playwright/test').Page} appWindow
+ * @param {string} tag - Lower-case tag name to look for
+ * @returns {Promise<string|null>} the tag that was selected, or null when the
+ *          page has no such element and the selection was left untouched.
+ *          Worth checking in any spec whose later steps need a selection: a
+ *          miss used to be silent, and the failure then surfaced far away as
+ *          an empty panel (cascade-jump.spec.js hunting an <h1> the Graphite
+ *          starter does not have).
+ */
 export async function selectFirstByTag(appWindow, tag) {
-  await appWindow.evaluate(t => {
+  return await appWindow.evaluate(t => {
     const ed = window.__gstrap.pluginRegistry.bound.editor
     const wrapper = ed.getWrapper()
     function find(c) {
@@ -85,7 +100,9 @@ export async function selectFirstByTag(appWindow, tag) {
       return null
     }
     const found = find(wrapper)
-    if (found) ed.select(found)
+    if (!found) return null
+    ed.select(found)
+    return t
   }, tag)
 }
 

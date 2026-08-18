@@ -5,6 +5,7 @@
  * ROLE: GoldenLayout panel geometry: resize drift, view toggles, right-stack tabs, and splitter drag specs
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-18 — right stack is 4 tabs (Bootstrap panel added)
  */
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
@@ -170,7 +171,8 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
 
   // Make every GL-managed panel visible so each host renders.
   await appWindow.evaluate(() => {
-    document.body.classList.remove('is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-file-manager')
+    document.body.classList.remove(
+      'is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-bootstrap-css','is-hide-file-manager')
   })
   await appWindow.waitForTimeout(100)
 
@@ -183,6 +185,7 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
         'gstrap-dom-host': 'DOM',
         'gstrap-props-host': 'Properties',
         'gstrap-cssp-host': 'Custom CSS',
+        'gstrap-bscss-host': 'Bootstrap',
         'gstrap-fm-host': 'Project'
       }
       const tab = document.querySelector(`.lm_tab[title="${titleMap[cls]}"]`)
@@ -205,7 +208,7 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
     }, hostClass)
   }
 
-  for (const cls of ['gstrap-fm-host', 'gstrap-dom-host', 'gstrap-props-host', 'gstrap-cssp-host']) {
+  for (const cls of ['gstrap-fm-host', 'gstrap-dom-host', 'gstrap-props-host', 'gstrap-cssp-host', 'gstrap-bscss-host']) {
     const p = await activateAndMeasure(cls)
     expect(p.found, `${cls} should exist`).toBe(true)
     expect(p.rendered, `${cls} should be rendered after activation`).toBe(true)
@@ -219,15 +222,16 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
 
 test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack', async () => {
   // Consolidation 2026-05-05 (alpha.12): DOM Tree, Properties, and Custom CSS
-  // are now three tabs in a single right-side stack (per nola1 user request:
-  // "all of these separate views should all be on the right as tabs in one
-  // panel like the library and assets"). Toggle behavior:
+  // are tabs in a single right-side stack (per nola1 user request: "all of
+  // these separate views should all be on the right as tabs in one panel like
+  // the library and assets"), joined by Bootstrap on 2026-08-18. Toggle
+  // behavior:
   //
   //   - Hide one tab → only its tab+content goes away; stack stays for the
-  //     other two; canvas does NOT grow.
-  //   - Hide ALL three → the whole right stack collapses; canvas reclaims
+  //     others; canvas does NOT grow.
+  //   - Hide EVERY tab → the whole right stack collapses; canvas reclaims
   //     the right column's 26%.
-  //   - Show any of the three → stack restored; that tab becomes active.
+  //   - Show any one of them → stack restored; that tab becomes active.
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-rs-'))
   const projectPath = join(projectDir, 'rs.gstrap')
 
@@ -237,7 +241,8 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
   // Reset to a known state: clear all three body classes; restore the stack
   // if a prior test collapsed it.
   await appWindow.evaluate(() => {
-    document.body.classList.remove('is-hide-dom-tree','is-hide-properties','is-hide-custom-css')
+    document.body.classList.remove(
+      'is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-bootstrap-css')
     // If the right stack is currently collapsed (no in-process state to
     // restore via panel-visibility from outside), trigger any one show toggle.
     window.__gstrap.eventBus.emit('view:toggle-dom-tree')
@@ -270,10 +275,11 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
     })
   }
 
-  // Baseline: all three visible, right stack visible
+  // Baseline: all four visible, right stack visible
   expect(await tabPresent('gstrap-dom-host')).toBe(true)
   expect(await tabPresent('gstrap-props-host')).toBe(true)
   expect(await tabPresent('gstrap-cssp-host')).toBe(true)
+  expect(await tabPresent('gstrap-bscss-host')).toBe(true)
   expect(await rightStackVisible()).toBe(true)
   const canvasBaseline = await canvasWidth()
   expect(canvasBaseline).toBeGreaterThan(0)
@@ -286,19 +292,25 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
   const canvasAfterDomHide = await canvasWidth()
   expect(Math.abs(canvasAfterDomHide - canvasBaseline)).toBeLessThan(5)
 
-  // Hide Properties — tab gone; stack still there for Custom CSS
+  // Hide Properties — tab gone; stack still there for Custom CSS + Bootstrap
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-properties'))
   await appWindow.waitForTimeout(150)
   expect(await tabPresent('gstrap-props-host')).toBe(false)
   expect(await rightStackVisible()).toBe(true)
 
-  // Hide Custom CSS — now ALL three are hidden, the stack must collapse and
-  // canvas must grow to reclaim the right column.
+  // Hide Custom CSS — Bootstrap still holds the stack open.
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-custom-css'))
+  await appWindow.waitForTimeout(150)
+  expect(await tabPresent('gstrap-cssp-host')).toBe(false)
+  expect(await rightStackVisible()).toBe(true)
+
+  // Hide Bootstrap — now EVERY tab is hidden, the stack must collapse and
+  // canvas must grow to reclaim the right column.
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-bootstrap-css'))
   await appWindow.waitForTimeout(200)
   expect(await rightStackVisible()).toBe(false)
   const canvasAllHidden = await canvasWidth()
-  expect(canvasAllHidden - canvasBaseline, `canvas should grow when all 3 right tabs hidden (was ${canvasBaseline}, now ${canvasAllHidden})`).toBeGreaterThan(100)
+  expect(canvasAllHidden - canvasBaseline, `canvas should grow when every right tab is hidden (was ${canvasBaseline}, now ${canvasAllHidden})`).toBeGreaterThan(100)
 
   // Show DOM again — stack restores; DOM becomes the active tab; canvas shrinks back
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-dom-tree'))

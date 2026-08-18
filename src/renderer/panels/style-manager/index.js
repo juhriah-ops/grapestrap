@@ -28,6 +28,13 @@
  *
  * Open/closed state for accordion sections is *per-app-session*, not
  * persisted. Default open set is `['spacing']` — the most-used surface.
+ *
+ * UPDATED: 2026-08-18 — Navbar sub-panel registered between sizing and pseudo
+ *          (behavior settings for a selected `nav.navbar`; renders a hint row
+ *          for every other selection, so its position in the list costs
+ *          nothing when it does not apply), and Animation right after it
+ *          (reveal / hover / loop `data-gs-anim-*` settings, which apply to
+ *          any selection at all).
  */
 
 import { eventBus } from '../../state/event-bus.js'
@@ -42,12 +49,14 @@ import * as text       from './text.js'
 import * as background from './background.js'
 import * as border     from './border.js'
 import * as sizing     from './sizing.js'
+import * as navbar     from './navbar.js'
+import * as animation  from './animation.js'
 import * as pseudo     from './pseudo-class.js'
 import * as cascade    from './cascade.js'
 
 import { pickSelector, isBsUtility } from './css-rule-utils.js'
 
-const SUBPANELS = [spacing, display, flex, columns, text, background, border, sizing, pseudo, cascade]
+const SUBPANELS = [spacing, display, flex, columns, text, background, border, sizing, navbar, animation, pseudo, cascade]
 const DEFAULT_OPEN = new Set(['spacing'])
 
 // 'Normal' is prose (labelKey); the ':hover'-style labels are CSS syntax and

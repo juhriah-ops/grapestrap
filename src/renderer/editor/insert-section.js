@@ -7,9 +7,17 @@
  *       fully editable copy — the three-part payload (images, CSS chunks,
  *       markup) landed in one call, from the Library panel's bundled rows.
  * DEPENDS: state/project-state.js, state/event-bus.js, editor/grapesjs-init.js,
- *          editor/placement.js, editor/css-chunks.js, i18n.js, log.js,
+ *          editor/placement.js, editor/css-chunks.js, editor/behaviors.js,
+ *          shared/bs-version.js, dialogs/confirm.js, i18n.js, log.js,
  *          window.grapestrap.sections.copyAssets (preload → main)
  * CREATED: 2026-08-17
+ * UPDATED: 2026-08-18 — a section def carrying `behaviors: true` enables the
+ *          behaviors runtime for the project before its CSS/markup land.
+ * UPDATED: 2026-08-18 — Bootstrap-major compat gate (A-WP2): a section whose
+ *          stamped `bootstrapVersion` differs in MAJOR from the project's own
+ *          shows a warn-only confirm dialog before anything else runs.
+ *          Cancel leaves zero residue — see the gate's placement at the very
+ *          top of insertBundledSection, ahead of assets/behaviors/CSS.
  *
  * Free copy, deliberately: unlike a Library ITEM insert (panels/library-items
  * cmdInsert), the markup goes in raw — no `data-grpstr-library` wrapper, so
@@ -47,6 +55,9 @@
  *     can delete the marker block in the Custom CSS panel whenever they want.
  *   - Copied images are ordinary project assets, visible and deletable in the
  *     Asset Manager.
+ *   - The behaviors runtime (manifest flag + two copied files) is project
+ *     configuration, not canvas content — and undoing it would break every
+ *     OTHER `data-gs-*` element already on the site. See editor/behaviors.js.
  *   - Re-inserting is idempotent on both: the marker check skips CSS that is
  *     already there (css-chunks.js) and the copy is skip-if-exists (main's
  *     sections:copy-assets), so undo-then-reinsert costs nothing and cannot
@@ -58,6 +69,9 @@ import { eventBus } from '../state/event-bus.js'
 import { getEditor } from './grapesjs-init.js'
 import { resolvePlacement, insertAtPlacement, tagOf } from './placement.js'
 import { appendCssChunks } from './css-chunks.js'
+import { ensureBehaviors } from './behaviors.js'
+import { isMajorMismatch } from '../../shared/bs-version.js'
+import { showConfirm } from '../dialogs/confirm.js'
 import { t } from '../i18n.js'
 import { log } from '../log.js'
 
@@ -81,7 +95,9 @@ const PAGE_BAND_TAGS = new Set(['section', 'header', 'footer'])
  *        of the page instead of the default append-after position.
  * @returns {Promise<{component: object|null, cssChanged: boolean}>} The
  *          inserted (and now selected) component, and whether the project
- *          stylesheet actually grew.
+ *          stylesheet actually grew. A user Cancel at the compat gate below
+ *          resolves the same shape with `component: null, cssChanged: false`
+ *          — not a rejection, since declining is a normal, expected choice.
  * @throws {Error} If the def carries no content, no project is open, or the
  *         GrapesJS editor isn't up. Callers surface these as a toast.
  */
@@ -94,7 +110,17 @@ export async function insertBundledSection(sectionDef, { anchor = null, before =
   const editor = getEditor()
   if (!editor) throw new Error('insertBundledSection: editor not ready')
 
+  // Bootstrap-major compat gate — FIRST, ahead of assets/behaviors/CSS.
+  // Order matters here for the same reason the module header calls out for
+  // the rest of the function: a Cancel must leave zero residue, so nothing
+  // that touches disk or project state may run before the user has had the
+  // chance to back out.
+  if (!(await confirmVersionCompat(sectionDef))) {
+    return { component: null, cssChanged: false }
+  }
+
   await copySectionAssets(sectionDef)
+  await enableSectionBehaviors(sectionDef)
   const cssChanged = applyCssChunks(sectionDef)
 
   const target = resolveBandSiblingAnchor(editor, anchor || editor.getSelected?.(), before)
@@ -105,6 +131,43 @@ export async function insertBundledSection(sectionDef, { anchor = null, before =
   eventBus.emit('canvas:content-changed')
 
   return { component: component || null, cssChanged }
+}
+
+/**
+ * Warn — never block — when a section's authored Bootstrap major differs
+ * from the open project's own. See shared/bs-version.js for the exact match
+ * rule (unstamped sections and matching/minor-only drift never prompt).
+ *
+ * A `manifest.framework` project (Graphite/Orbit) is a hard skip, not just
+ * "unknown version": `isMajorMismatch` alone can't tell that case apart from
+ * a 'legacy' project, because both read as "project major unknown" — but a
+ * framework project has NO app-managed Bootstrap at all (never gets
+ * `bootstrapVersion` stamped, see createProject), so there is nothing to
+ * compare a section's version against, not just an unrecorded one. Skipping
+ * here — before isMajorMismatch ever runs — is what keeps that distinction
+ * real instead of collapsing to the same "warn to be safe" as 'legacy'.
+ *
+ * @param {object} sectionDef - The section definition
+ * @returns {Promise<boolean>} true to proceed with the insert (vendored
+ *          project, no mismatch, or the user chose "Insert Anyway"); false
+ *          to abort (Cancel/Esc)
+ */
+async function confirmVersionCompat(sectionDef) {
+  if (projectState.current?.manifest?.framework) return true
+
+  const itemVersion = sectionDef.bootstrapVersion
+  const projectVersion = projectState.current?.manifest?.bootstrapVersion
+  if (!isMajorMismatch(itemVersion, projectVersion)) return true
+
+  return showConfirm({
+    title: t('bsgate.title'),
+    message: t('bsgate.message', {
+      itemVersion,
+      projectVersion: projectVersion || t('bsgate.unknown')
+    }),
+    okLabel: t('bsgate.insert-anyway'),
+    cancelLabel: t('action.cancel')
+  })
 }
 
 /**
@@ -205,6 +268,31 @@ async function copySectionAssets(sectionDef) {
       type: 'warning',
       message: t('lib.toast.section-assets-failed', { count: assets.length })
     })
+  }
+}
+
+/**
+ * Turn on the behaviors runtime for sections whose markup needs it.
+ *
+ * Same posture as the image copy above: a failure is reported and the insert
+ * continues. The section's `data-gs-*` attributes are inert without the
+ * runtime — a navbar that doesn't go solid on scroll — but the markup and its
+ * styling are still worth having, and the next insert (or the Navbar/Animation
+ * panel) retries the copy.
+ *
+ * No toast here on purpose: this work package ships no user-visible surface, so
+ * there is no string in the message catalogue for it yet. The panels that make
+ * behaviors visible (F7/F8) are where a user-facing failure message belongs.
+ *
+ * @param {object} sectionDef - The section definition
+ * @returns {Promise<void>}
+ */
+async function enableSectionBehaviors(sectionDef) {
+  if (!sectionDef.behaviors) return
+  try {
+    await ensureBehaviors()
+  } catch (err) {
+    log.warn(`section "${sectionDef.id}" behaviors runtime:`, err?.message || err)
   }
 }
 

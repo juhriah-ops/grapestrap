@@ -5,6 +5,10 @@
  *   - Bootstrap 5 (CSS + JS) + Font Awesome Free reconciled into the iframe
  *     head by syncFrameworksIntoCanvas — the project's own vendored framework
  *     (manifest.framework) when it declares one, else GrapeStrap's bundled set
+ *   - Live preview of unsaved Bootstrap-panel edits: while that buffer is
+ *     dirty the bundled `assets/css/bootstrap.css` href is substituted with a
+ *     blob URL built from it (refreshBootstrapPreview), so framework edits show
+ *     in the canvas without writing to disk
  *   - Inter font for canvas UI elements (the user's content can override)
  *   - Three responsive devices (Desktop/Tablet/Mobile)
  *   - Storage manager DISABLED — we manage state on disk via .gstrap, not localStorage
@@ -14,6 +18,10 @@
  *
  * Plugins (loaded via the plugin host) register blocks/sections via the API.
  * This module just stands up the canvas; it's the plugins that fill it.
+ *
+ * UPDATED: 2026-08-18 — a project with `manifest.behaviors` also gets the
+ * behaviors runtime STYLESHEET in the canvas (never its script — see
+ * getActiveFrameworkUrls), refreshed on the `behaviors:changed` event.
  */
 
 import grapesjs from 'grapesjs'
@@ -23,7 +31,7 @@ import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
 import { initDragResize } from './drag-resize.js'
 import { rewriteCssUrls, stylesheetDirOf } from '../../shared/css-urls.js'
-import { stripBodyWrapper } from '../../shared/page-html.js'
+import { BEHAVIORS_LINK, stripBodyWrapper } from '../../shared/page-html.js'
 import { log } from '../log.js'
 
 // Framework assets (Bootstrap, Bootstrap Icons, Font Awesome) are NOT loaded
@@ -47,6 +55,8 @@ const DEFAULT_FRAMEWORK_CSS = [
   'assets/css/bootstrap-icons.css',
   'assets/css/all.css'
 ]
+// Keep BOOTSTRAP_CSS_URL below and this list's first entry in step — the live
+// preview substitutes by exact URL match.
 const DEFAULT_FRAMEWORK_JS = [
   'assets/js/bootstrap.bundle.js'
 ]
@@ -71,7 +81,27 @@ const CANVAS_FRAMEWORK_SELECTOR = [CANVAS_FRAMEWORK_MARKER, ...LEGACY_CANVAS_FRA
   .map(attr => `[${attr}]`)
   .join(',')
 
+// The bundled Bootstrap sheet's project-relative href — the one entry of
+// DEFAULT_FRAMEWORK_CSS the Bootstrap panel edits, and the one the live
+// preview substitutes a blob URL for.
+const BOOTSTRAP_CSS_URL = 'assets/css/bootstrap.css'
+
+// Marks whichever framework <link> is currently carrying the Bootstrap sheet,
+// file or blob. Cascade bucketing and jump-to-rule key on this attribute
+// rather than on the href, so a blob swap never changes what they see.
+const CANVAS_BOOTSTRAP_MARKER = 'data-grapestrap-bootstrap'
+
+// Revoking a blob URL the moment its replacement is inserted can beat the
+// iframe's fetch of the NEW sheet in slow frames, blanking canvas styling for
+// a paint. We revoke on the new link's load event, with this as the backstop
+// for the cases where load never fires (link adopted, error, doc torn down).
+const BLOB_REVOKE_FALLBACK_MS = 2000
+
 let editor = null
+
+// Object URL for the unsaved Bootstrap buffer, or null when the canvas should
+// load the on-disk file (no project, no editable sheet, or no edits yet).
+let bootstrapPreviewUrl = null
 
 export function initGrapesJS(container) {
   // Hard double-init guard (Wave 3). The canvas panel's persistent subtree
@@ -265,9 +295,20 @@ export function initGrapesJS(container) {
   // as a <style> tag so live preview reflects pseudo-class rules typed in the
   // Style Manager AND so the Cascade view can read them via document.styleSheets.
   // canvas:frame:load sets the initial sync; project lifecycle keeps it fresh.
-  eventBus.on('project:opened',     () => { syncBaseHrefIntoCanvas(); syncFrameworksIntoCanvas(); syncGlobalCssIntoCanvas() })
-  eventBus.on('project:closed',     () => { syncBaseHrefIntoCanvas(); syncFrameworksIntoCanvas(); syncGlobalCssIntoCanvas() })
+  //
+  // The Bootstrap preview URL is released on both lifecycle events BEFORE the
+  // syncs run: it belongs to the outgoing project's buffer, and leaving it set
+  // would hand the next project the previous one's framework sheet.
+  eventBus.on('project:opened',     () => { releaseBootstrapPreview(); syncBaseHrefIntoCanvas(); syncFrameworksIntoCanvas(); syncGlobalCssIntoCanvas() })
+  eventBus.on('project:closed',     () => { releaseBootstrapPreview(); syncBaseHrefIntoCanvas(); syncFrameworksIntoCanvas(); syncGlobalCssIntoCanvas() })
   eventBus.on('project:css-changed',() => syncGlobalCssIntoCanvas())
+  // Bootstrap panel edits: swap the canvas's framework <link> for a blob URL
+  // built from the unsaved buffer, so framework edits preview live without
+  // touching disk (the dirty-until-Ctrl+S contract).
+  eventBus.on('project:bootstrap-css-changed', () => refreshBootstrapPreview())
+  // Behaviors enabled for this project: reconcile the canvas so the runtime
+  // stylesheet appears without waiting for the next content change.
+  eventBus.on('behaviors:changed', () => syncFrameworksIntoCanvas())
 
   // Defensive resync: GrapesJS sometimes rebuilds the iframe document on
   // content reload (page swap, layout refresh). The injected <base> +
@@ -413,18 +454,160 @@ function syncFrameworksIntoCanvas(docArg) {
   if (!isFrameworkOrderCorrect(doc, orderedTags, globalCssTag)) {
     for (const tag of orderedTags) doc.head.insertBefore(tag, globalCssTag)
   }
+  stampBootstrapTag(doc)
 }
 
 /**
- * The framework URLs the open project should have loaded, in emit order.
- * A `manifest.framework` of any shape means the project vendors its own, so
- * the bundled set is suppressed entirely rather than merged with.
+ * True when the open project has an editable Bootstrap sheet — i.e. the panel
+ * owns a buffer for it. False for vendored-framework projects and for projects
+ * whose file was missing at load.
+ * @returns {boolean}
+ */
+function isBootstrapEditable() {
+  return typeof projectState.current?.bootstrapCSS === 'string'
+}
+
+/**
+ * Mark whichever framework <link> currently carries the Bootstrap sheet, and
+ * un-mark any other. Downstream consumers (Cascade bucketing, jump-to-rule)
+ * read this attribute instead of the href, so the blob swap is invisible to
+ * them. Vendored-framework projects get nothing marked — their sheets are not
+ * this app's Bootstrap and are not editable here.
+ * @param {Document} doc - Canvas document
+ * @returns {Element|null} The marked tag, if any
+ */
+function stampBootstrapTag(doc) {
+  const wanted = bootstrapPreviewUrl && isBootstrapEditable()
+    ? bootstrapPreviewUrl
+    : BOOTSTRAP_CSS_URL
+  const usesBundledFramework = !projectState.current?.manifest?.framework
+  let marked = null
+  for (const tag of doc.head.querySelectorAll(CANVAS_FRAMEWORK_SELECTOR)) {
+    if (tag.tagName !== 'LINK') continue
+    const isBootstrapSheet = usesBundledFramework &&
+      tag.getAttribute(CANVAS_FRAMEWORK_MARKER) === wanted
+    if (isBootstrapSheet) {
+      tag.setAttribute(CANVAS_BOOTSTRAP_MARKER, '')
+      marked = tag
+    } else {
+      tag.removeAttribute(CANVAS_BOOTSTRAP_MARKER)
+    }
+  }
+  return marked
+}
+
+/**
+ * Rebuild the canvas's Bootstrap preview from the current panel buffer.
+ *
+ * Called on every (debounced) Bootstrap-panel edit. Builds a fresh object URL,
+ * re-runs the framework reconciler — which retires the previous URL's <link>
+ * because that URL is no longer in the active set — then revokes the old URL
+ * once the replacement has actually loaded.
+ */
+function refreshBootstrapPreview() {
+  if (!isBootstrapEditable()) {
+    // Nothing to preview (project closed, or a vendored-framework project):
+    // drop any leftover URL and let the reconciler put the file href back.
+    releaseBootstrapPreview()
+    syncFrameworksIntoCanvas()
+    return
+  }
+  const previousUrl = bootstrapPreviewUrl
+  try {
+    bootstrapPreviewUrl = URL.createObjectURL(
+      new Blob([projectState.current.bootstrapCSS], { type: 'text/css' }))
+  } catch (err) {
+    // Blob/URL creation can only realistically fail on memory pressure. Keep
+    // the previous preview (or the file) rather than leaving the canvas with
+    // no Bootstrap at all.
+    log.warn('bootstrap preview: could not build blob URL:', err)
+    return
+  }
+  syncFrameworksIntoCanvas()
+  revokeAfterLoad(previousUrl)
+}
+
+/**
+ * Revoke a superseded preview URL once its replacement has loaded.
+ * @param {string|null} previousUrl - URL to revoke, or null for the first swap
+ */
+function revokeAfterLoad(previousUrl) {
+  if (!previousUrl) return
+  const doc = editor?.Canvas?.getFrameEl()?.contentDocument
+  const tag = doc?.head?.querySelector(`link[${CANVAS_BOOTSTRAP_MARKER}]`)
+  if (!tag) {
+    // No canvas link is waiting on the new sheet — nothing can race the revoke.
+    URL.revokeObjectURL(previousUrl)
+    return
+  }
+  let revoked = false
+  const revoke = () => {
+    if (revoked) return
+    revoked = true
+    clearTimeout(fallbackTimer)
+    URL.revokeObjectURL(previousUrl)
+  }
+  const fallbackTimer = setTimeout(revoke, BLOB_REVOKE_FALLBACK_MS)
+  tag.addEventListener('load', revoke, { once: true })
+  tag.addEventListener('error', revoke, { once: true })
+}
+
+/**
+ * Drop the preview URL (project switch / close). The canvas falls back to the
+ * on-disk file at the next framework sync. Not revoking here would leak one
+ * blob per project switch and, worse, leave the outgoing project's stylesheet
+ * addressable by the incoming one.
+ */
+function releaseBootstrapPreview() {
+  if (!bootstrapPreviewUrl) return
+  URL.revokeObjectURL(bootstrapPreviewUrl)
+  bootstrapPreviewUrl = null
+}
+
+/**
+ * Every app-managed URL the canvas should have loaded, in emit order: the
+ * project's framework set, plus the behaviors runtime stylesheet when the
+ * project has behaviors enabled.
  * @returns {{css: string[], js: string[]}}
  */
 function getActiveFrameworkUrls() {
+  const active = getFrameworkSetUrls()
+
+  // The behaviors runtime's STYLESHEET rides along whenever the project has
+  // behaviors enabled — independently of manifest.framework, since a vendored
+  // framework suppresses the bundled set but not GrapeStrap's own delivery.
+  // Appended last, so it still lands before the globalCSS anchor (project CSS
+  // keeps winning the cascade) but after the framework it decorates.
+  //
+  // CSS ONLY, deliberately: the runtime JS is never injected into the canvas.
+  // Reveals would hide components mid-edit, marquees would clone content into
+  // the document GrapesJS is serializing, and scroll listeners would fight the
+  // canvas. Hover/loop presets are pure CSS, so they still preview live.
+  if (projectState.current?.manifest?.behaviors) active.css.push(BEHAVIORS_LINK.href)
+
+  return active
+}
+
+/**
+ * The framework half of the active URL set, with the Bootstrap live-preview
+ * substitution applied. A `manifest.framework` of any shape means the project
+ * vendors its own, so the bundled set is suppressed entirely rather than
+ * merged with.
+ * @returns {{css: string[], js: string[]}}
+ */
+function getFrameworkSetUrls() {
   const vendored = projectState.current?.manifest?.framework
   if (!vendored || typeof vendored !== 'object') {
-    return { css: [...DEFAULT_FRAMEWORK_CSS], js: [...DEFAULT_FRAMEWORK_JS] }
+    // Live preview: while the Bootstrap panel holds unsaved edits, the canvas
+    // loads them from a blob URL instead of the (stale) file. Substituting
+    // inside this list — rather than injecting a competing <style> — keeps the
+    // ordering contract for free: the blob href flows through the same
+    // insertBefore(globalCssTag) path, so frameworks still precede globalCSS.
+    const css = DEFAULT_FRAMEWORK_CSS.map(url =>
+      (url === BOOTSTRAP_CSS_URL && bootstrapPreviewUrl && isBootstrapEditable())
+        ? bootstrapPreviewUrl
+        : url)
+    return { css, js: [...DEFAULT_FRAMEWORK_JS] }
   }
   const isUsableUrl = value => typeof value === 'string' && value.trim() !== ''
   return {

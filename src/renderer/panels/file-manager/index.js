@@ -20,6 +20,10 @@
  * host, so after a reset the re-created panel never repainted again
  * (stale-host closure). DOM listeners stay in the render fn: the host is a
  * fresh element each apply, old listeners die with the old host.
+ *
+ * UPDATED: 2026-08-18 — the Site Files double-click body became the exported
+ * openSiteFile(), so jump-to-rule can route an external Cascade rule into the
+ * same code lane instead of duplicating the tab-options shape.
  */
 
 import { projectState } from '../../state/project-state.js'
@@ -59,6 +63,13 @@ const SITE_SCAN_EXTENSIONS = /\.(php|js|css)$/i
 // assets/ still scans normally. Minified/.map variants of ANY file are
 // already dropped by isScannableSiteFile's general rules below, so only the
 // unminified basenames need listing here.
+//
+// `assets/css/bootstrap.css` is additionally LOAD-BEARING as a dual-writer
+// guard (2026-08-18): it is the buffer the Bootstrap panel edits and
+// saveProject writes, exactly like globalCSS in rescanSiteFiles below. If it
+// also opened in the generic Monaco file-tab lane the two would hold
+// independent buffers for one disk file and the last save would silently
+// discard the other's edits. Do not remove that entry when pruning this list.
 const SITE_SCAN_FRAMEWORK_FILES = {
   'assets/css': new Set(['bootstrap.css', 'bootstrap-icons.css', 'all.css']),
   'assets/js': new Set(['bootstrap.bundle.js'])
@@ -86,6 +97,30 @@ function isScannableSiteFile(dirRel, name) {
   return !SITE_SCAN_FRAMEWORK_FILES[dirRel]?.has(name)
 }
 
+/**
+ * Open a site-relative code file in the Monaco file-tab lane.
+ *
+ * The Site Files double-click path, lifted out so other surfaces can send a
+ * file to the same lane instead of re-deriving the tab options — jump-to-rule
+ * uses it for a Cascade rule whose stylesheet resolves under `site/` (a
+ * starter's theme.css). Code-only tab; the label is the basename, the tab key
+ * the full site-relative path (unique across nested dirs, and it can't collide
+ * with extensionless page/template names).
+ *
+ * No existence check: pageState.open is what every other opener does, and
+ * file-tabs.js already reports an unreadable file. The two dual-writer files
+ * (the project's globalCSS and its bootstrap.css) must never be passed here —
+ * they have dedicated panels; see rescanSiteFiles and SITE_SCAN_FRAMEWORK_FILES.
+ *
+ * @param {string} relPath - Site-relative path, e.g. 'assets/css/theme.css'
+ * @returns {boolean} false when relPath is empty/not a string
+ */
+export function openSiteFile(relPath) {
+  if (typeof relPath !== 'string' || !relPath) return false
+  pageState.open(relPath, { kind: 'file', label: relPath.split('/').pop(), viewMode: 'code' })
+  return true
+}
+
 export function renderFileManager(host) {
   hostEl = host
   host.classList.add('gstrap-fm-host')
@@ -103,13 +138,7 @@ export function renderFileManager(host) {
       pageState.open(name, { kind: 'template', label: name })
     }
     const fileEl = evt.target.closest('[data-fm-file]')
-    if (fileEl) {
-      const relPath = fileEl.dataset.fmFile
-      // Code-only tab; the label is the basename, the tab key the full
-      // site-relative path (unique across nested dirs, can't collide with
-      // extensionless page/template names).
-      pageState.open(relPath, { kind: 'file', label: relPath.split('/').pop(), viewMode: 'code' })
-    }
+    if (fileEl) openSiteFile(fileEl.dataset.fmFile)
   })
 
   host.addEventListener('click', async evt => {
@@ -176,6 +205,9 @@ async function rescanSiteFiles() {
   // hold independent buffers for the same disk file — whichever saves last
   // wins and silently discards the other's edits. So it never enters the
   // Site Files list at all; it's only ever edited through Custom CSS.
+  //
+  // The same guard covers `assets/css/bootstrap.css` (Bootstrap panel) — it is
+  // excluded one level up, by SITE_SCAN_FRAMEWORK_FILES in isScannableSiteFile.
   const globalCssPath = project.manifest?.globalCSS || 'assets/css/style.css'
   const found = []
   async function walk(rel, depth) {

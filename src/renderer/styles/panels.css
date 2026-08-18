@@ -134,6 +134,64 @@
   outline: none;
 }
 
+/* ── Attributes section (properties side panel) ───────────────────────────── */
+/* Scoped to .gstrap-props-attributes rather than .gstrap-prop-row so the
+   Element section's tag/ID rows keep the appearance they shipped with. */
+.gstrap-props-attributes .gstrap-prop-row > label {
+  flex: 0 0 88px;
+  color: var(--text-2);
+}
+.gstrap-props-attributes input[type="text"],
+.gstrap-props-attributes select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  outline: none;
+}
+.gstrap-props-attributes input[type="text"]:focus,
+.gstrap-props-attributes select:focus {
+  border-color: var(--accent);
+}
+.gstrap-props-attributes input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.gstrap-props-attributes input:disabled,
+.gstrap-props-attributes select:disabled {
+  opacity: 0.5;
+}
+
+.gstrap-prop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+.gstrap-prop-action {
+  font: inherit;
+  font-size: 11px;
+  background: var(--bg-3);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.gstrap-prop-action:hover:enabled {
+  background: var(--bg-4);
+  border-color: var(--accent);
+}
+.gstrap-prop-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ── Status bar cells ─────────────────────────────────────────────────────── */
 .gstrap-sb-cell {
   display: inline-flex;

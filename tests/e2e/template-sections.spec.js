@@ -12,6 +12,10 @@
 //          plugins/blocks-sections/{graphite,orbit}-sections.js (the data),
 //          src/renderer/editor/{insert-section,css-chunks}.js (the path)
 // CREATED: 2026-08-17
+// UPDATED: 2026-08-18 — GRAPHITE_ROWS/ORBIT_ROWS bumped for the two harvested
+//          navbar defs (graphite-navbar, orbit-navbar); their own coverage
+//          (markup/CSS markers/behaviors delivery) lives in
+//          navbar-behaviors.spec.js, not here.
 //
 // Section DATA correctness (namespacing, declared assets, marker hygiene) is
 // linted in tests/unit/template-sections-data.test.js — cheap and exhaustive
@@ -25,8 +29,8 @@ import { launch, openSeedProject, dismissWelcome, createBundledStarterProject, f
 
 // Row counts per Library group. Bumped deliberately when a section is added —
 // a silent change here means a section stopped registering.
-const GRAPHITE_ROWS = 7
-const ORBIT_ROWS = 8
+const GRAPHITE_ROWS = 8
+const ORBIT_ROWS = 9
 const BUNDLED_ROWS = GRAPHITE_ROWS + ORBIT_ROWS
 
 // The section every insert assertion below drives: it is the one bundled

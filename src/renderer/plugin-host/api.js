@@ -59,6 +59,25 @@ export function buildApi(manifest) {
      *                          Copy is skip-if-exists (IPC sections:copy-assets).
      *   - `description` {string} Row title-attribute text (defaults to label).
      *   - `dependencies` {string[]} Third-party JS the section needs.
+     *   - `behaviors` {boolean} True when the markup carries `data-gs-*`
+     *                          attributes that need the behaviors runtime
+     *                          (scroll reveals, navbar scroll states, nested
+     *                          submenus, marquee). Inserting such a section
+     *                          enables the runtime for the project first
+     *                          (editor/insert-section.js → ensureBehaviors).
+     *                          Normalised to a real boolean on the way in, so
+     *                          consumers can test it without guarding on shape.
+     *   - `bootstrapVersion` {string} The Bootstrap version this section's
+     *                          markup/CSS was authored against, e.g. '5.3.3'
+     *                          (plugins/blocks-sections/index.js's
+     *                          BOOTSTRAP_VERSION const). Read by the
+     *                          insert-time compat gate (shared/bs-version.js,
+     *                          editor/insert-section.js,
+     *                          panels/library-items/index.js) against the
+     *                          open project's own `manifest.bootstrapVersion`
+     *                          — a MAJOR mismatch shows a warn-only confirm
+     *                          dialog, never blocks. Absent = the gate never
+     *                          fires for this section (nothing to compare).
      *
      * @param {object} def - The section definition described above
      * @returns {void}
@@ -66,7 +85,17 @@ export function buildApi(manifest) {
      */
     registerSection(def) {
       validateSection(def)
-      pluginRegistry.sections.push({ ...def, _plugin: manifest.name })
+      pluginRegistry.sections.push({
+        ...def,
+        behaviors: def.behaviors === true,
+        // Explicit passthrough (the `...def` spread above already carries it
+        // when present) — kept alongside `behaviors` so the compat-gate field
+        // reads as a first-class part of the contract here, not an
+        // incidental extra field a future validateSection tightening could
+        // drop by accident.
+        bootstrapVersion: def.bootstrapVersion,
+        _plugin: manifest.name
+      })
       eventBus.emit('plugin:section-registered', { plugin: manifest.name, section: def })
     },
     registerPanel(def) {

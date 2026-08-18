@@ -20,6 +20,13 @@
  *     a bundled starter points it at that starter's stylesheet instead
  *     (Graphite → 'assets/css/theme.css'). Save, load, and export all resolve
  *     it from the manifest — never assume style.css.
+ *   - `bootstrapCSS` (2026-08-18): NOT a manifest field — a runtime buffer on
+ *     the loaded project object holding `site/assets/css/bootstrap.css`, the
+ *     project's own copy of Bootstrap. It is user-editable (the Bootstrap
+ *     panel) and follows globalCSS's contract exactly: read at load, written
+ *     by saveProject, in-memory-wins at export. `undefined` means the project
+ *     has no editable Bootstrap sheet — a vendored-framework project, or one
+ *     whose file is unreadable — and nothing downstream may create one.
  *   - `framework` (OPTIONAL, additive, 2026-08-02): `{ css: [], js: [] }` of
  *     site-relative paths. Its presence means the project VENDORS ITS OWN
  *     framework inside site/assets/vendor/, so grapestrap must not copy or
@@ -28,6 +35,15 @@
  *     these paths in place of the built-in set. Absent = legacy behaviour,
  *     the app's own framework bundle — every project made before this field
  *     existed, plus every blank project, reads that way.
+ *   - `bootstrapVersion` (OPTIONAL, additive, 2026-08-18): the app's bundled
+ *     Bootstrap version (e.g. '5.3.3') at the moment the project was
+ *     created or imported, via getBundledBootstrapVersion(). Absent for
+ *     `framework` projects (nothing of the app's own to compare). Backfilled
+ *     in-memory as `'legacy'` on load for pre-feature projects that have
+ *     neither `framework` nor `bootstrapVersion` — persists on the next
+ *     save. Read by the insert-time compat gate (shared/bs-version.js,
+ *     editor/insert-section.js) against a bundled section's own stamped
+ *     version; warning-only, never blocks.
  */
 
 import { promises as fsp } from 'node:fs'
@@ -58,6 +74,46 @@ const FORMAT_TAG = 'grapestrap-project'
 const SITE_SUBDIR = 'site'
 function siteDir(projectDir) {
   return join(projectDir, SITE_SUBDIR)
+}
+
+// The one Bootstrap stylesheet the app actually references (pages link it via
+// shared/page-html.js FRAMEWORK_LINKS, the canvas via grapesjs-init.js
+// DEFAULT_FRAMEWORK_CSS) and therefore the one the Bootstrap panel edits.
+// Site-relative, resolved through siteDir() like every other manifest path.
+const BOOTSTRAP_CSS_REL = 'assets/css/bootstrap.css'
+
+// Cache for getBundledBootstrapVersion() below — the version never changes
+// within a running process (it's read off the app's own node_modules), so
+// re-reading package.json on every project create/import is pointless I/O.
+let cachedBundledBootstrapVersion = null
+
+/**
+ * Read the REAL installed Bootstrap version off node_modules/bootstrap's own
+ * package.json, resolved through the same appRoot base copyFrameworkAssets
+ * uses. This is the version stamped onto a new/imported project's manifest
+ * (manifest.bootstrapVersion) and is what the compat gate (shared/bs-version.js)
+ * compares a bundled section's authored version against.
+ *
+ * Never throws: a read failure (corrupt install, package.json missing a
+ * `version` field, or the app running from an unexpected layout) falls back
+ * to 'unknown' rather than blocking project creation — the gate treats
+ * 'unknown' as "can't tell, warn to be safe" (see isMajorMismatch), which is
+ * a much smaller cost than a broken New Project dialog.
+ *
+ * @returns {Promise<string>} e.g. '5.3.3', or 'unknown' on failure
+ */
+async function getBundledBootstrapVersion() {
+  if (cachedBundledBootstrapVersion) return cachedBundledBootstrapVersion
+  try {
+    const appRoot = app.getAppPath()
+    const pkgPath = resolve(appRoot, 'node_modules/bootstrap/package.json')
+    const pkg = JSON.parse(await fsp.readFile(pkgPath, 'utf8'))
+    cachedBundledBootstrapVersion = typeof pkg.version === 'string' ? pkg.version : 'unknown'
+  } catch (err) {
+    console.warn('[grapestrap] could not read bundled bootstrap version:', err?.message || err)
+    cachedBundledBootstrapVersion = 'unknown'
+  }
+  return cachedBundledBootstrapVersion
 }
 
 /**
@@ -103,6 +159,14 @@ async function copyFrameworkAssets(siteRoot) {
   await fsp.mkdir(webfontsDir, { recursive: true })
 
   // Files: [src absolute, dst absolute, fatal-if-missing?]
+  //
+  // NOTE (2026-08-18): only the UN-MINIFIED bootstrap.css is referenced at
+  // runtime (page-html.js FRAMEWORK_LINKS, grapesjs-init.js
+  // DEFAULT_FRAMEWORK_CSS) and it is the sheet the Bootstrap panel edits. The
+  // .min.css copies are dead weight that will diverge from an edited sheet;
+  // they're still copied for parity with the JS bundle and because dropping
+  // them would change backfill behavior on every project open for no
+  // user-visible gain. Pruning them is a follow-up, not this round.
   const tasks = [
     // Bootstrap CSS — un-min + min + maps. Source maps are optional.
     [join(bsRoot, 'css', 'bootstrap.css'),         join(cssDir, 'bootstrap.css'),         true],
@@ -320,6 +384,11 @@ export async function importDirectory({ sourceDir, targetPath, name }) {
     libraryItems: [],
     snippets: [],
     globalCSS: 'assets/css/style.css',
+    // Imported projects always get the app's bundled Bootstrap copied in
+    // (copyFrameworkAssets above, unconditional here — importDirectory has
+    // no `framework`-vendoring concept), so they always have a real version
+    // to stamp. See createProject for the starter-vendored counterexample.
+    bootstrapVersion: await getBundledBootstrapVersion(),
     palette: [],
     assets: [],
     vendorDeps: [],
@@ -445,6 +514,12 @@ export async function createProject({ targetPath, name, templateId = 'blank', se
     // bring their own theme; composeFullPageHtml reads it when writing pages
     // below, so it must already hold the final in-assets path here.
     globalCSS: 'assets/css/style.css',
+    // The compat-gate baseline (shared/bs-version.js) — omitted for starters
+    // that vendor their own framework (manifest.framework, set below by
+    // applyStarter): they never get the app's Bootstrap copied in (line
+    // ~486 above), so there is nothing of the app's own to compare a bundled
+    // section's version against, and the gate never fires for them either way.
+    ...(!starter?.framework ? { bootstrapVersion: await getBundledBootstrapVersion() } : {}),
     palette: [],
     assets: [],
     vendorDeps: [],
@@ -496,6 +571,19 @@ export async function loadProject(manifestPath) {
   if (manifest.version !== MANIFEST_VERSION) {
     // v0.x is forward-strict; refuse unknown manifest versions cleanly.
     throw new Error(`Unsupported project version: ${manifest.version} (expected ${MANIFEST_VERSION})`)
+  }
+
+  // Compat-gate backfill (in-memory only here — persists on the next
+  // saveProject, which rewrites the whole manifest): a project made before
+  // this field existed has neither `framework` nor `bootstrapVersion`. It
+  // still has SOME Bootstrap on disk (the backfill a few lines down covers
+  // that), but we have no record of which version it started from, so we
+  // can't claim a real one — 'legacy' tells shared/bs-version.js "unknown
+  // project", which the compat gate treats as "could be a mismatch, warn".
+  // `framework` projects are left alone: they never had an app-managed
+  // Bootstrap to version in the first place.
+  if (!manifest.framework && !manifest.bootstrapVersion) {
+    manifest.bootstrapVersion = 'legacy'
   }
 
   const projectDir = dirname(manifestPath)
@@ -634,6 +722,23 @@ export async function loadProject(manifestPath) {
     }
   }
 
+  // The project's own Bootstrap copy, read into a buffer the same way
+  // globalCSS is: the Bootstrap panel edits it, saveProject writes it back,
+  // export ships the buffer. Left `undefined` (never '') when there is no
+  // editable sheet, which is what the panel keys its unavailable hint on:
+  //   - manifest.framework projects vendor their own CSS and deliberately
+  //     never get the app's Bootstrap copied in (see the backfill guard above)
+  //   - a hand-pruned project whose file is gone reads as unavailable rather
+  //     than as an empty stylesheet that a later save would write over the
+  //     framework with.
+  let bootstrapCSS
+  if (!manifest.framework) {
+    try { bootstrapCSS = await fsp.readFile(join(site, BOOTSTRAP_CSS_REL), 'utf8') }
+    catch (err) {
+      console.warn('[grapestrap] no editable bootstrap.css in project:', err?.code || err?.message)
+    }
+  }
+
   return {
     manifestPath,
     projectDir,
@@ -643,7 +748,8 @@ export async function loadProject(manifestPath) {
     libraryItems,
     snippets: manifest.snippets || [],
     globalCSS,
-    globalCssMigrated
+    globalCssMigrated,
+    bootstrapCSS
   }
 }
 
@@ -652,7 +758,7 @@ export async function loadProject(manifestPath) {
  * but with possibly-modified pages / templates / libraryItems / globalCSS / manifest.
  */
 export async function saveProject(project) {
-  const { manifestPath, projectDir, manifest, pages, templates = [], libraryItems = [], snippets = [], globalCSS } = project
+  const { manifestPath, projectDir, manifest, pages, templates = [], libraryItems = [], snippets = [], globalCSS, bootstrapCSS } = project
   const site = siteDir(projectDir)
   const now = new Date().toISOString()
 
@@ -682,6 +788,13 @@ export async function saveProject(project) {
   if (manifest.globalCSS && globalCSS !== undefined) {
     await fsp.mkdir(dirname(join(site, manifest.globalCSS)), { recursive: true })
     await writeAtomic(join(site, manifest.globalCSS), globalCSS)
+  }
+  // The project's Bootstrap sheet — same buffer contract as globalCSS above.
+  // `undefined` means the project has no editable sheet (vendored framework,
+  // or the file was already missing at load), so a save must never conjure
+  // one: writing '' here would blank the framework for every page.
+  if (bootstrapCSS !== undefined) {
+    await writeAtomic(join(site, BOOTSTRAP_CSS_REL), bootstrapCSS)
   }
 
   // Strip per-page html from manifest before writing. Snippets are inline in
@@ -800,6 +913,17 @@ export async function exportProject(project, outputDir) {
     const cssRel = project.manifest?.globalCSS || 'assets/css/style.css'
     await fsp.mkdir(dirname(join(outputDir, cssRel)), { recursive: true })
     await fsp.writeFile(join(outputDir, cssRel), project.globalCSS, 'utf8')
+  }
+
+  // Same in-memory-wins rule for the Bootstrap sheet. The site copy above
+  // carried the on-disk version across; overwriting it from the buffer is what
+  // makes "export from a dirty Bootstrap panel" ship the user's edits, and
+  // guarantees an export can never contain a pristine vendor file the user
+  // thought they had customised. Guarded on undefined so a vendored-framework
+  // project never gains an unreferenced assets/css/bootstrap.css.
+  if (project.bootstrapCSS !== undefined) {
+    await fsp.mkdir(dirname(join(outputDir, BOOTSTRAP_CSS_REL)), { recursive: true })
+    await fsp.writeFile(join(outputDir, BOOTSTRAP_CSS_REL), project.bootstrapCSS, 'utf8')
   }
 
   // Render each page as a full HTML document. Same composer the save loop

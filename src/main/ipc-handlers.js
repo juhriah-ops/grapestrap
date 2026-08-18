@@ -6,11 +6,14 @@
  *
  * Convention: handlers return plain serializable objects. Errors propagate as
  * thrown values; the renderer's preload converts them into rejected promises.
+ *
+ * UPDATED: 2026-08-18 — `behaviors:ensure` (version-checked copy of the
+ * app-bundled behaviors runtime pair into the open project's site/assets/).
  */
 
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { promises as fsp } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 
 import { log } from './logger.js'
 import { getPref, setPref } from './prefs.js'
@@ -286,6 +289,13 @@ export function registerIpcHandlers({ pluginRegistry }) {
   // section data — see copySectionAssets for both containment guards.
   ipcMain.handle('sections:copy-assets', (_e, assets) => copySectionAssets(assets))
 
+  // ─── Behaviors runtime ─────────────────────────────────────────────────────
+  // Puts the app-bundled behaviors runtime pair into the open project (once,
+  // then refreshed only when the app ships a newer version). Deliberately NOT
+  // routed through sections:copy-assets: that handler is hard-pinned to the
+  // starters/ bundle and to skip-if-exists, and this one needs neither.
+  ipcMain.handle('behaviors:ensure', () => ensureBehaviorAssets())
+
   // ─── Workspace layouts (Wave 3) ────────────────────────────────────────────
   // All validation (name charset, preset shadowing, slug collisions, shape)
   // lives in workspace-store.js — main never trusts renderer input.
@@ -388,6 +398,95 @@ async function copySectionAssets(assets) {
   if (failures.length > 0) log.warn('sections:copy-assets failed:', failures.join('; '))
 
   return { attempted: tasks.length, rejected, failures }
+}
+
+// ─── Behaviors runtime ───────────────────────────────────────────────────────
+
+// The runtime pair, and where each half lands inside the project's site/. Both
+// files are app-bundled (assets/behaviors/, shipped by the electron-builder
+// `assets/**/*` rule and by Vite's publicDir), so there is nothing to generate
+// per project — every project gets a byte-identical copy.
+const BEHAVIOR_ASSETS = [
+  { file: 'gstrap-behaviors.js',  siteDir: join('assets', 'js') },
+  { file: 'gstrap-behaviors.css', siteDir: join('assets', 'css') }
+]
+
+// Both files open with `/*! gstrap-behaviors v<N> */` on line 1 — 26 bytes.
+// Reading the first 40 covers that plus any future whitespace drift, and keeps
+// the freshness check to one tiny read per file instead of a full compare.
+const VERSION_TAG_PROBE_BYTES = 40
+const VERSION_TAG_PATTERN = /gstrap-behaviors\s+(v\d+)/
+
+/**
+ * Ensure the open project carries the current behaviors runtime pair.
+ *
+ * Refresh rule is the version tag, not mtime or content: a project keeps the
+ * copy it has until the app ships a new version, at which point the copy is
+ * OVERWRITTEN. That is the documented contract for these two files (they are a
+ * delivery artifact, not project source — see the header of
+ * assets/behaviors/gstrap-behaviors.js) and it is what lets a bug fix in the
+ * runtime reach every project that opens in the new build.
+ *
+ * A destination whose tag is unreadable (missing file, truncated, hand-replaced
+ * with something else) is treated as stale and rewritten — "can't prove it's
+ * current" resolves toward a working page.
+ *
+ * @returns {Promise<{copied: string[], skipped: string[]}>} File names written
+ *          vs. left alone. Both empty is impossible; both lists together always
+ *          name the full pair.
+ * @throws {Error} When no project is open, or a copy fails (the renderer's
+ *         ensureBehaviors warns and continues — the next call retries, since a
+ *         missing destination always reads as stale).
+ */
+async function ensureBehaviorAssets() {
+  const projectRoot = getProjectRoot()
+  if (!projectRoot) throw new Error('behaviors:ensure: no project open')
+
+  const bundleRoot = join(app.getAppPath(), 'assets', 'behaviors')
+  const copied = []
+  const skipped = []
+
+  for (const asset of BEHAVIOR_ASSETS) {
+    const src = join(bundleRoot, asset.file)
+    const dst = join(projectRoot, 'site', asset.siteDir, asset.file)
+
+    const bundledTag = await readVersionTag(src)
+    const projectTag = await readVersionTag(dst)
+    if (bundledTag && projectTag === bundledTag) {
+      skipped.push(asset.file)
+      continue
+    }
+
+    await fsp.mkdir(dirname(dst), { recursive: true })
+    await fsp.copyFile(src, dst)
+    copied.push(asset.file)
+  }
+
+  if (copied.length > 0) log.info(`behaviors:ensure copied: ${copied.join(', ')}`)
+  return { copied, skipped }
+}
+
+/**
+ * Read a behaviors file's version tag from its first bytes.
+ * @param {string} path - Absolute file path (may not exist)
+ * @returns {Promise<string|null>} e.g. 'v1', or null when the file is missing
+ *          or carries no recognisable tag
+ */
+async function readVersionTag(path) {
+  let handle = null
+  try {
+    handle = await fsp.open(path, 'r')
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(VERSION_TAG_PROBE_BYTES), 0, VERSION_TAG_PROBE_BYTES, 0)
+    const match = VERSION_TAG_PATTERN.exec(buffer.toString('utf8', 0, bytesRead))
+    return match ? match[1] : null
+  } catch (err) {
+    // ENOENT is the normal first-enable case; anything else (permissions, EIO)
+    // still means "we cannot prove this copy is current", so it reads the same.
+    if (err?.code !== 'ENOENT') log.warn(`behaviors:ensure could not read tag from ${path}:`, err?.message || err)
+    return null
+  } finally {
+    if (handle) await handle.close().catch(() => {})
+  }
 }
 
 /**

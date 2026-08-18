@@ -5,11 +5,12 @@
  * come later via separate windows; not via tabs).
  *
  * Holds the project as returned by main process loadProject() — manifest +
- * pages[] + templates[] + libraryItems[] + globalCSS — all in memory. Edits
- * mutate this in place; saveProject() pushes back to disk via IPC.
+ * pages[] + templates[] + libraryItems[] + globalCSS + bootstrapCSS — all in
+ * memory. Edits mutate this in place; saveProject() pushes back to disk via IPC.
  *
- * The dirty flag is per-page and per-template (and one for globalCSS) since the
- * UI shows dot indicators per file. A project is "dirty" if any sub-item is.
+ * The dirty flag is per-page and per-template (and one each for globalCSS and
+ * the project's Bootstrap sheet) since the UI shows dot indicators per file. A
+ * project is "dirty" if any sub-item is.
  */
 
 import { eventBus } from './event-bus.js'
@@ -23,6 +24,10 @@ class ProjectState {
     this.dirtyLibrary = new Set()
     this.dirtySnippets = new Set()
     this.globalCssDirty = false
+    // The project's own site/assets/css/bootstrap.css buffer (Bootstrap panel).
+    // Separate from globalCssDirty because they are different files with
+    // different writers, even though both save on the same Ctrl+S.
+    this.bootstrapCssDirty = false
     this.manifestDirty = false  // metadata changes (favicon, etc.)
   }
 
@@ -42,6 +47,7 @@ class ProjectState {
     this.dirtyLibrary.clear()
     this.dirtySnippets.clear()
     this.globalCssDirty = false
+    this.bootstrapCssDirty = false
     this.manifestDirty = false
     eventBus.emit('project:opened', project)
   }
@@ -61,6 +67,7 @@ class ProjectState {
     this.dirtyLibrary.clear()
     this.dirtySnippets.clear()
     this.globalCssDirty = false
+    this.bootstrapCssDirty = false
     this.manifestDirty = false
     if (had) eventBus.emit('project:closed')
   }
@@ -81,6 +88,8 @@ class ProjectState {
   markSnippetsClean()     { this.dirtySnippets.clear();        eventBus.emit('project:dirty-changed', this.snapshot()) }
   markCssDirty()          { this.globalCssDirty = true;    eventBus.emit('project:dirty-changed', this.snapshot()) }
   markCssClean()          { this.globalCssDirty = false;   eventBus.emit('project:dirty-changed', this.snapshot()) }
+  markBootstrapCssDirty() { this.bootstrapCssDirty = true;  eventBus.emit('project:dirty-changed', this.snapshot()) }
+  markBootstrapCssClean() { this.bootstrapCssDirty = false; eventBus.emit('project:dirty-changed', this.snapshot()) }
   markManifestDirty()     { this.manifestDirty = true;     eventBus.emit('project:dirty-changed', this.snapshot()) }
   markManifestClean()     { this.manifestDirty = false;    eventBus.emit('project:dirty-changed', this.snapshot()) }
 
@@ -95,6 +104,7 @@ class ProjectState {
     this.dirtyLibrary.clear()
     this.dirtySnippets.clear()
     this.globalCssDirty = false
+    this.bootstrapCssDirty = false
     this.manifestDirty = false
     eventBus.emit('project:dirty-changed', this.snapshot())
   }
@@ -105,6 +115,7 @@ class ProjectState {
            this.dirtyLibrary.size > 0 ||
            this.dirtySnippets.size > 0 ||
            this.globalCssDirty ||
+           this.bootstrapCssDirty ||
            this.manifestDirty
   }
 
@@ -115,6 +126,10 @@ class ProjectState {
       library: [...this.dirtyLibrary],
       snippets: [...this.dirtySnippets],
       globalCss: this.globalCssDirty,
+      // Reported for the status bar / file-manager dots. Crash recovery
+      // deliberately does NOT restore from this flag — the Bootstrap buffer
+      // is excluded from snapshots (see state/recovery.js).
+      bootstrapCss: this.bootstrapCssDirty,
       manifest: this.manifestDirty,
       any: this.isDirty()
     }
