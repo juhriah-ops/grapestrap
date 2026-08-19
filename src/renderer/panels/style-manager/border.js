@@ -12,6 +12,10 @@
  * The Custom colour row (custom-color.js) handles anything outside the BS
  * theme palette by writing `border-color` onto the component's rule in
  * project style.css — mutually exclusive with the `border-*` swatches.
+ *
+ * UPDATED: 2026-08-18 — the rule's selector comes from selector-target.js
+ * (shown and editable in the Custom row) rather than being the element's first
+ * non-utility class by default.
  */
 
 import {
@@ -20,8 +24,8 @@ import {
   borderRadiusPattern, shadowPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup, readGroupAll, toggleClass } from './class-utils.js'
-import { pickSelector, isBsUtility } from './css-rule-utils.js'
 import { readProjectRule } from './bare-rule-store.js'
+import { resolveTargetSelector } from './selector-target.js'
 import { customColorRowMarkup, wireCustomColorRow, clearCustomColor } from './custom-color.js'
 import { t } from '../../i18n.js'
 
@@ -38,7 +42,7 @@ export function render(host, ctx) {
   const curShadow = readGroup(component, shadowPattern())
 
   // Free-colour value lives on the component's own rule in project style.css.
-  const selector = pickSelector(component, isBsUtility)
+  const selector = resolveTargetSelector(component, 'border-color')
   const customColor = readProjectRule(selector)['border-color'] || ''
 
   host.innerHTML = `
@@ -76,7 +80,7 @@ export function render(host, ctx) {
         <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="${escHtml(t('action.clear'))}">×</button>
       </div>
     </div>
-    ${customColorRowMarkup({ selector, value: customColor })}
+    ${customColorRowMarkup({ component, selector, prop: 'border-color', value: customColor })}
     <div class="gstrap-sm-row">
       <label class="gstrap-sm-label">${escHtml(t('sm.label.radius'))}</label>
       <div class="gstrap-sm-segs">

@@ -302,3 +302,18 @@ test('data-lint: section ids are unique across the generic and template families
   const duplicates = all.filter((id, i) => all.indexOf(id) !== i)
   assert.deepEqual(duplicates, [], `duplicate section ids: ${duplicates.join(', ')}`)
 })
+
+test('data-lint: no chunk carries a blank line inside its rules', () => {
+  // The Style Manager writers use a blank line as the end of a chunk's
+  // territory (isInsideSectionChunk in css-rule-utils.js): css-chunks.js
+  // appends `\n<marker>\n<text>\n`, so a blank line after the marker can only
+  // mean "past this chunk" — which is where a user's own override rule lands.
+  // A blank line INSIDE a chunk would make the writers treat its later rules
+  // as the user's and edit them in place.
+  for (const module of MODULES) {
+    for (const [marker, text] of Object.entries(module.CSS_PARTS)) {
+      assert.ok(!/\n[ \t]*\n/.test(text),
+        `${module.name}: chunk "${marker}" contains a blank line`)
+    }
+  }
+})

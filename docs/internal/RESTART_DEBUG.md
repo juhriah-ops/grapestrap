@@ -95,7 +95,7 @@ Electron + GTK CSD on Linux can drop the application menu bar during rapid resiz
 ```bash
 cd /home/numb1/projects/grapestrap
 npm run build 2>&1 | tail -3
-xvfb-run -a npx playwright test > /tmp/gstrap-suite.log 2>&1; tail -5 /tmp/gstrap-suite.log   # expect 266 (or more) passed — 2026-08-18
+xvfb-run -a npx playwright test > /tmp/gstrap-suite.log 2>&1; tail -5 /tmp/gstrap-suite.log   # expect 277 (or more) passed — 2026-08-18
 npm run lint
 # ...update CHANGELOG.md [Unreleased] section
 git add -A && git commit -m "Wave N: <message>"

@@ -8,8 +8,13 @@
  *       eyedropper) and stores the chosen value as a real declaration on the
  *       component's rule in project `style.css`.
  * DEPENDS: ../color-picker/index.js, ./bare-rule-store.js, ./class-utils.js,
- *          ../../i18n.js
+ *          ./selector-target.js, ../../i18n.js
  * CREATED: 2026-08-17
+ * UPDATED: 2026-08-18 — the row now names the selector it writes to and lets
+ *          the user retarget it (selector-target.js). The old behaviour picked
+ *          the element's first non-utility class silently, which on a bundled
+ *          section is the shared `gs-sec` — one slide's colour repainted the
+ *          whole page and nothing said which class was being edited.
  *
  * Predetermined and custom are mutually exclusive by construction: choosing a
  * free colour drops whatever `bg-*` / `text-*` / `border-*` class was set, and
@@ -26,19 +31,24 @@
 import { openColorPicker } from '../color-picker/index.js'
 import { writeProjectRuleProps } from './bare-rule-store.js'
 import { applyGroup, readGroup } from './class-utils.js'
+import { selectorTargetMarkup, wireSelectorTarget } from './selector-target.js'
 import { t } from '../../i18n.js'
 
 /**
- * Markup for the Custom colour row. Renders the "needs a selector" hint
- * instead of the chip when the component has no class or id we can scope a
+ * Markup for the Custom colour row: the chip, its Clear, and the "Applies to"
+ * picker naming the selector the value is written to. Renders the "needs a
+ * selector" hint instead when the component has no class or id we can scope a
  * rule to — the same fallback the Background image row uses.
  *
  * @param {object} options
+ * @param {object} options.component - Selected GrapesJS component (for the
+ *        picker's candidate list).
  * @param {string|null} options.selector - Whole selector, or null if none.
+ * @param {string} options.prop - CSS property this row owns, e.g. 'color'.
  * @param {string} options.value - Current custom colour ('' when unset).
  * @returns {string} HTML for one `.gstrap-sm-row`.
  */
-export function customColorRowMarkup({ selector, value = '' } = {}) {
+export function customColorRowMarkup({ component, selector, prop, value = '' } = {}) {
   const label = escHtml(t('sm.label.custom'))
   if (!selector) {
     return `
@@ -61,6 +71,7 @@ export function customColorRowMarkup({ selector, value = '' } = {}) {
         </button>
         <button class="gstrap-sm-pill gstrap-sm-clear" data-custom-color-clear>${escHtml(t('action.clear'))}</button>
       </div>
+      ${selectorTargetMarkup({ component, prop, selected: selector })}
     </div>
   `
 }
@@ -78,6 +89,10 @@ export function customColorRowMarkup({ selector, value = '' } = {}) {
  * @param {Function} [options.requestRender] - Sub-panel re-render callback.
  */
 export function wireCustomColorRow(host, { component, selector, prop, classPattern, requestRender } = {}) {
+  // Wired before the early return: an element with candidates always has a
+  // picker, and the chip is only absent when there are none.
+  wireSelectorTarget(host, { component, prop, requestRender })
+
   const chip = host?.querySelector('[data-custom-color-chip]')
   if (!chip) return
   paintChip(chip, chip.dataset.customColorValue || '')

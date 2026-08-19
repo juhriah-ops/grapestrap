@@ -99,3 +99,33 @@ test('opacity round-trip: every slider step lands as a 0–1 number and reads ba
     assert.equal(Math.round(Number.parseFloat(value) * 100), percent)
   }
 })
+
+// ─── Winning the cascade, not just landing in the sheet (2026-08-18) ─────────
+
+test('mergeBareRuleProps: a later same-selector rule does not swallow the write', () => {
+  // The masking shape the acceptance report hit: the property was merged into
+  // the FIRST rule, and the second one — same selector, `background` shorthand,
+  // further down the sheet — overrode it. The write has to end up in the rule
+  // that actually wins.
+  const css = `.hero {\n  padding: 2em;\n}\n.hero {\n  background: #1b1b1b;\n}\n`
+  const out = mergeBareRuleProps(css, '.hero', { 'background-color': '#101820' })
+  assert.equal(out, `.hero {\n  padding: 2em;\n}\n.hero {\n  background: #1b1b1b;\n  background-color: #101820;\n}\n`)
+  assert.equal(readBareRule(out, '.hero')['background-color'], '#101820')
+})
+
+test('mergeBareRuleProps: a section chunk is overridden, never edited', () => {
+  const chunked = `\n/* gs-sec:orbit-hero */\n.gs-orbit-hero {\n  background: #1b1b1b;\n}\n`
+  const out = mergeBareRuleProps(chunked, '.gs-orbit-hero', { 'background-color': '#101820' })
+  assert.ok(out.startsWith(chunked), 'the chunk must stay byte-identical')
+  assert.match(out, /\n\.gs-orbit-hero \{\n {2}background-color: #101820;\n\}\n$/)
+
+  // A second property joins the SAME override rule rather than starting
+  // another one, and re-writing a value already there changes nothing.
+  const both = mergeBareRuleProps(out, '.gs-orbit-hero', { opacity: '0.9' })
+  assert.match(both, /\n\.gs-orbit-hero \{\n {2}background-color: #101820;\n {2}opacity: 0\.9;\n\}\n$/)
+  assert.equal(mergeBareRuleProps(both, '.gs-orbit-hero', { opacity: '0.9' }), both)
+
+  // Clearing hands the element back to the chunk's own value.
+  const cleared = mergeBareRuleProps(both, '.gs-orbit-hero', { 'background-color': '', opacity: '' })
+  assert.equal(cleared, chunked)
+})

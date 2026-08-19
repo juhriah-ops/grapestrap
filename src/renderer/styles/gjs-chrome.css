@@ -27,6 +27,14 @@
   right: 44px !important;
 }
 
+/* Device select ("Device: Desktop", canvas top-left): the vendor absolutely
+   positions its caret (.gjs-d-s-arrow) over the select's right edge and pads
+   the select for the vendor font — under GrapeStrap's font "Desktop" runs
+   beneath the caret. Clear it with real right padding on the select. */
+.gstrap-canvas-design .gjs-devices-c .gjs-devices {
+  padding-right: 22px !important;
+}
+
 /* Closed = gone entirely; the canvas owns the full pane width. */
 .gstrap-canvas-design:not(.is-gjs-views-open) .gjs-pn-views-container {
   display: none !important;

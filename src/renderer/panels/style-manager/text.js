@@ -8,6 +8,10 @@
  * The Custom colour row (custom-color.js) handles anything outside the BS
  * theme palette by writing `color` onto the component's rule in project
  * style.css — mutually exclusive with the `text-*` swatches above it.
+ *
+ * UPDATED: 2026-08-18 — the rule's selector comes from selector-target.js
+ * (shown and editable in the Custom row) rather than being the element's first
+ * non-utility class by default.
  */
 
 import {
@@ -18,8 +22,8 @@ import {
   textSizePattern, textColorPattern
 } from './bs-classes.js'
 import { applyGroup, readGroup } from './class-utils.js'
-import { pickSelector, isBsUtility } from './css-rule-utils.js'
 import { readProjectRule } from './bare-rule-store.js'
+import { resolveTargetSelector } from './selector-target.js'
 import { customColorRowMarkup, wireCustomColorRow, clearCustomColor } from './custom-color.js'
 import { t } from '../../i18n.js'
 
@@ -38,7 +42,9 @@ export function render(host, ctx) {
   const curColor  = readGroup(component, textColorPattern())
 
   // Free-colour value lives on the component's own rule in project style.css.
-  const selector = pickSelector(component, isBsUtility)
+  // Which of the element's classes that rule is scoped to is the user's call
+  // (selector-target.js) — the Custom row shows and edits it.
+  const selector = resolveTargetSelector(component, 'color')
   const customColor = readProjectRule(selector).color || ''
 
   host.innerHTML = `
@@ -106,7 +112,7 @@ export function render(host, ctx) {
         <button class="gstrap-sm-swatch gstrap-sm-clear" data-color-clear title="${escHtml(t('action.clear'))}">×</button>
       </div>
     </div>
-    ${customColorRowMarkup({ selector, value: customColor })}
+    ${customColorRowMarkup({ component, selector, prop: 'color', value: customColor })}
   `
 
   // Align (responsive variant deferred — chunk A keeps Display as the single

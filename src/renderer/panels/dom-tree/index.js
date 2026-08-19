@@ -13,11 +13,25 @@
  * Why we walk GrapesJS components and not the iframe DOM directly: the
  * iframe DOM contains GrapesJS's own marker elements and ghosts that we
  * don't want to expose. The component tree is the user's mental model.
+ *
+ * UPDATED: 2026-08-18 — row indent no longer templates an inline
+ *          `style="padding-left:…"` string into the row's HTML (house rule:
+ *          no inline styles). Depth ships as a `data-depth` attribute and
+ *          applyIndent() sets `--gstrap-dom-indent` via `.style.setProperty()`
+ *          on the real DOM nodes after each repaint — the same idiom
+ *          panels/style-manager/custom-color.js uses for its swatch chip —
+ *          consumed by a `padding-left: var(--gstrap-dom-indent)` rule in
+ *          styles/dom-tree.css. Rendering is pixel-identical.
  */
 
 import { eventBus } from '../../state/event-bus.js'
 import { getEditor } from '../../editor/grapesjs-init.js'
 import { t } from '../../i18n.js'
+
+// Row indent geometry: DOM_TREE_INDENT_BASE_PX is depth-0's left padding;
+// each deeper level adds DOM_TREE_INDENT_STEP_PX on top of that.
+const DOM_TREE_INDENT_BASE_PX = 8
+const DOM_TREE_INDENT_STEP_PX = 14
 
 let hostEl = null
 let selectedId = null
@@ -99,6 +113,7 @@ function paint() {
   const rows = []
   for (const child of children) walk(child, 0, rows)
   hostEl.innerHTML = `<ul class="gstrap-dom-tree">${rows.join('')}</ul>`
+  applyIndent()
   applyHighlight()
 }
 
@@ -108,19 +123,45 @@ function walk(component, depth, out) {
   if (component.get('type') === 'textnode') return
 
   const cid = component.getId()
-  const indent = depth * 14 + 8
   const label = formatLabel(component, tag)
   const children = component.components() || []
   const hasChildren = children.length > 0
 
+  // Depth is carried as a plain data-* attribute here, not baked into a
+  // `style="padding-left:…"` string — that would be the same inline-style
+  // violation applyIndent() below exists to avoid. applyIndent() reads this
+  // once the row is a real DOM node and sets the indent as a CSS custom
+  // property instead.
   out.push(
     `<li class="gstrap-dom-row${hasChildren ? '' : ' is-leaf'}"`
-    + ` data-cid="${esc(cid)}" style="padding-left:${indent}px">`
+    + ` data-cid="${esc(cid)}" data-depth="${depth}">`
     + `<span class="gstrap-dom-twist">${hasChildren ? '▾' : '·'}</span>`
     + label
     + `</li>`
   )
   for (const c of children) walk(c, depth + 1, out)
+}
+
+// Row indent is a runtime value (tree depth × step) with no fixed set of
+// classes to enumerate, so it can't be a `:class`-style toggle — it has to be
+// a computed value. The house rule for that case (see project CLAUDE.md: "a
+// runtime-computed value → set a CSS custom property on a parent class, not
+// inline on the element") is exactly what style-manager/custom-color.js does
+// for its swatch chip (`swatch.style.setProperty('--swatch', …)`): call
+// `.style.setProperty()` on the live element, and let a stylesheet rule
+// (`.gstrap-dom-row { padding-left: var(--gstrap-dom-indent) }` in
+// styles/dom-tree.css) consume it. That is NOT the same as templating a
+// `style="…"` string into the row's HTML — this runs once per repaint,
+// after paint() has already replaced hostEl.innerHTML wholesale, so every
+// row it touches is a freshly-inserted node with nothing to clean up.
+function applyIndent() {
+  if (!hostEl) return
+  const rows = hostEl.querySelectorAll('.gstrap-dom-row[data-depth]')
+  for (const row of rows) {
+    const depth = Number(row.dataset.depth) || 0
+    const indentPx = depth * DOM_TREE_INDENT_STEP_PX + DOM_TREE_INDENT_BASE_PX
+    row.style.setProperty('--gstrap-dom-indent', `${indentPx}px`)
+  }
 }
 
 function formatLabel(component, tag) {

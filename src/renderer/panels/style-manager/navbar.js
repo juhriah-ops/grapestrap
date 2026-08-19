@@ -10,10 +10,14 @@
  *       swap colours — real declarations in the project stylesheet. No inline
  *       styles, no per-project generated script.
  * DEPENDS: ./class-utils.js, ./css-rule-utils.js, ./bare-rule-store.js,
- *          ../color-picker/index.js, ../../editor/behaviors.js,
- *          ../../editor/component-lock.js, ../../editor/placement.js,
- *          ../../state/event-bus.js, ../../i18n.js, ../../log.js
+ *          ./selector-target.js, ../color-picker/index.js,
+ *          ../../editor/behaviors.js, ../../editor/component-lock.js,
+ *          ../../editor/placement.js, ../../state/event-bus.js,
+ *          ../../i18n.js, ../../log.js
  * CREATED: 2026-08-18
+ * UPDATED: 2026-08-18 — the Top colour writes `<selector>:not(.gs-nav-scrolled)`
+ *          instead of the bare selector, and the row names the selector both
+ *          rules are scoped to (and lets the user change it).
  *
  * ── Where each control stores its state ─────────────────────────────────────
  *   Position            classes `sticky-top` / `fixed-top` (class-first, so a
@@ -22,8 +26,8 @@
  *   Threshold           `data-gs-nav-scroll-offset` (omitted at the runtime
  *                       default of 40px — an attribute that says what the
  *                       runtime already does is noise in the saved page)
- *   Swap colours        `background-color` on the navbar's own rule, and on
- *                       `<selector>.gs-nav-scrolled`, in project style.css
+ *   Swap colours        `background-color` on `<selector>:not(.gs-nav-scrolled)`
+ *                       and on `<selector>.gs-nav-scrolled`, in project style.css
  *   Shrink              `data-gs-nav-shrink="1"`
  *   Hide on scroll down `data-gs-nav-hide="1"`
  *   Auto-close menu     `data-gs-nav-autoclose` = collapse | offcanvas
@@ -34,15 +38,27 @@
  *
  * ── Runtime-owned classes ───────────────────────────────────────────────────
  * `gs-nav-scrolled`, `gs-nav-shrunk` and `gs-nav-hidden` are added and removed
- * by the runtime in the visitor's browser and are never authored here. The
- * Scrolled colour rule uses `.gs-nav-scrolled` as a selector SUFFIX, which
- * READS that contract rather than authoring the class onto the component. It
- * writes `background-color` rather than the runtime's `--gs-nav-scrolled-bg`
- * custom property so the rule also wins against a `bg-*` utility on the navbar
+ * by the runtime in the visitor's browser and are never authored here. Both
+ * swap-colour rules use that class as a selector SUFFIX — `.gs-nav-scrolled`
+ * for the scrolled colour, `:not(.gs-nav-scrolled)` for the resting one —
+ * which READS the contract rather than authoring the class onto the component.
+ * They write `background-color` rather than the runtime's `--gs-nav-scrolled-bg`
+ * custom property so the rules also win against a `bg-*` utility on the navbar
  * (the runtime's own `.gs-nav-scrolled` rule is one class weaker). Both colour
  * rules scope to a class the NAVBAR owns: `navbar`, `navbar-expand-*` and the
  * position utilities are ruled out as shared vocabulary, since a `.navbar { … }`
- * rule would repaint every navbar in the project.
+ * rule would repaint every navbar in the project; which of the remaining
+ * classes is used is shown — and can be changed — in the row itself
+ * (selector-target.js).
+ *
+ * ── Why the resting colour is a `:not()` and not the bare selector ──────────
+ * It was the bare selector until 2026-08-18, and on any navbar whose theme
+ * carries a two-class state rule the Top colour was simply invisible: the
+ * Graphite starter's `.site-navbar.is-overlay { background: transparent }`
+ * outranks `.site-navbar { background-color: … }`, so the resting bar never
+ * changed while the Scrolled colour — a two-class rule itself — worked. Pairing
+ * the two states at the same weight is also just the CSS a swap wants: the
+ * navbar is one colour while it is not scrolled and another while it is.
  *
  * ── Undo ────────────────────────────────────────────────────────────────────
  * One gesture writes attributes exactly once (a single `addAttributes` or a
@@ -54,8 +70,9 @@
  */
 
 import { applyGroup, readGroup } from './class-utils.js'
-import { pickSelector, isBsUtility } from './css-rule-utils.js'
+import { isBsUtility } from './css-rule-utils.js'
 import { readProjectRule, writeProjectRuleProps } from './bare-rule-store.js'
+import { resolveTargetSelector, selectorTargetMarkup, wireSelectorTarget } from './selector-target.js'
 import { openColorPicker } from '../color-picker/index.js'
 import { ensureBehaviors } from '../../editor/behaviors.js'
 import { isComponentLocked } from '../../editor/component-lock.js'
@@ -101,6 +118,7 @@ const ATTR = {
 const DEFAULT_SCROLL_OFFSET = 40   // DEFAULT_NAV_OFFSET in the runtime
 const MAX_SCROLL_OFFSET = 2000     // a threshold past a long page is a typo, not a setting
 const SCROLLED_SUFFIX = '.gs-nav-scrolled'
+const RESTING_SUFFIX = ':not(.gs-nav-scrolled)'
 const SWAP_COLOR_PROP = 'background-color'
 
 // Ancestor walks are bounded so a malformed tree (or a hand-built stub in a
@@ -208,9 +226,13 @@ function findDirectChild(component, predicate) {
  */
 function readNavbarState(navbar) {
   const attributes = navbar.getAttributes?.() || {}
-  const selector = pickSelector(navbar, isSharedNavbarClass)
+  const selector = resolveTargetSelector(navbar, SWAP_COLOR_PROP, isSharedNavbarClass)
+  const topSelector = selector ? selector + RESTING_SUFFIX : null
   const scrolledSelector = selector ? selector + SCROLLED_SUFFIX : null
   return {
+    // The component travels with the state so the colour row can offer the
+    // navbar's other classes as targets without a second lookup.
+    navbar,
     position: readGroup(navbar, POSITION_PATTERN),
     scrollMode: readScrollMode(attributes),
     offset: clampScrollOffset(attributes[ATTR.offset]),
@@ -219,8 +241,9 @@ function readNavbarState(navbar) {
     autoclose: readAutoclose(attributes[ATTR.autoclose]),
     detectedAutoclose: detectTogglerMechanism(navbar),
     selector,
+    topSelector,
     scrolledSelector,
-    topColor: readProjectRule(selector)[SWAP_COLOR_PROP] || '',
+    topColor: readProjectRule(topSelector)[SWAP_COLOR_PROP] || '',
     scrolledColor: readProjectRule(scrolledSelector)[SWAP_COLOR_PROP] || ''
   }
 }
@@ -413,6 +436,13 @@ function swapColorsRow(state, disabled) {
         ${colorChip('top', 'sm.nav.color-top', state.topColor, disabled)}
         ${colorChip('scrolled', 'sm.nav.color-scrolled', state.scrolledColor, disabled)}
       </div>
+      ${selectorTargetMarkup({
+        component: state.navbar,
+        prop: SWAP_COLOR_PROP,
+        selected: state.selector,
+        isExcluded: isSharedNavbarClass,
+        disabled
+      })}
     </div>
   `
 }
@@ -555,17 +585,22 @@ function wirePanel(host, navbar, state, requestRender) {
 }
 
 /**
- * Wire both swap-colour chips. Each owns `background-color` on one rule: the
- * navbar's own selector for the top-of-page colour, and that selector plus the
- * runtime's `.gs-nav-scrolled` class for the scrolled one.
+ * Wire both swap-colour chips and the target picker they share. Each chip owns
+ * `background-color` on one rule: the navbar's selector plus `:not(.gs-nav-scrolled)`
+ * for the top-of-page colour, and that selector plus the runtime's
+ * `.gs-nav-scrolled` class for the scrolled one.
  *
  * @param {HTMLElement} host - Sub-panel body
- * @param {object} state - Panel state (carries both selectors)
+ * @param {object} state - Panel state (carries the navbar and both selectors)
  * @param {Function} [requestRender] - Style Manager re-render callback
  * @returns {void}
  */
 function wireColorChips(host, state, requestRender) {
-  const selectorFor = key => (key === 'scrolled' ? state.scrolledSelector : state.selector)
+  const selectorFor = key => (key === 'scrolled' ? state.scrolledSelector : state.topSelector)
+
+  // Retargeting rewires both chips: the pair always describes ONE navbar's two
+  // states, so they share a base selector by construction.
+  wireSelectorTarget(host, { component: state.navbar, prop: SWAP_COLOR_PROP, requestRender })
 
   host.querySelectorAll('[data-nav-color]').forEach(chip => {
     chip.addEventListener('click', () => {

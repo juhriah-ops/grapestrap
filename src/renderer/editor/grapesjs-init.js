@@ -22,6 +22,19 @@
  * UPDATED: 2026-08-18 — a project with `manifest.behaviors` also gets the
  * behaviors runtime STYLESHEET in the canvas (never its script — see
  * getActiveFrameworkUrls), refreshed on the `behaviors:changed` event.
+ * UPDATED: 2026-08-18 — canvas right-click fixed twice over, both proven live:
+ *   1. the canvas:frame:load handler read the frame off Canvas.getFrameEl(),
+ *      which is still null when that event fires, so it bailed on its own
+ *      `if (!doc) return` EVERY boot and never wired anything. It now takes
+ *      the frame element from the event payload.
+ *   2. the target component was resolved by synthesising a mousedown and
+ *      re-reading editor.getSelected() a microtask later. grapesjs 0.21.13
+ *      binds selection to `click`, so that synthetic event selected nothing
+ *      and the menu was built against the PREVIOUS selection — null on a fresh
+ *      page, which is what dropped Select Parent / Select Child from the real
+ *      menu. Resolution now goes through editor/canvas-context-target.js.
+ * The targeting contract is unchanged: right-click SELECTS the element under
+ * the cursor, then menus it.
  */
 
 import grapesjs from 'grapesjs'
@@ -30,6 +43,7 @@ import { eventBus } from '../state/event-bus.js'
 import { projectState } from '../state/project-state.js'
 import { formatHtml } from './format-html.js'
 import { initDragResize } from './drag-resize.js'
+import { selectContextTarget } from './canvas-context-target.js'
 import { rewriteCssUrls, stylesheetDirOf } from '../../shared/css-urls.js'
 import { BEHAVIORS_LINK, stripBodyWrapper } from '../../shared/page-html.js'
 import { log } from '../log.js'
@@ -219,20 +233,24 @@ export function initGrapesJS(container) {
     eventBus.emit('canvas:deselected')
   })
 
-  // Right-click on the canvas iframe → emit `canvas:context-menu` with the
-  // viewport-relative coords + the component the user clicked. Listening on
-  // the iframe contentDocument (rather than the frame element) is the only
-  // way to catch events inside the canvas — clicks inside an iframe are
-  // scoped to its own document.
+  // First sight of a canvas document: inject the project's <base>, framework
+  // links and globalCSS into it, and wire right-click (wireCanvasContextMenu,
+  // below).
   //
-  // To resolve which component was clicked: dispatch a synthetic mousedown so
-  // GrapesJS's own handlers run their selection logic (which knows GrapesJS-
-  // internal targeting rules better than we do — e.g. clicking a child text
-  // node should select its parent block, not the text). After the synthetic
-  // event runs we read editor.getSelected().
-  editor.on('canvas:frame:load', () => {
-    const frameEl = editor.Canvas.getFrameEl()
-    const doc = frameEl?.contentDocument
+  // The frame comes from the EVENT PAYLOAD, not from Canvas.getFrameEl():
+  // grapesjs 0.21.13 triggers this event from the iframe's own onload handler,
+  // at which point the Canvas module has not published the frame element yet.
+  // Measured on 2026-08-18 — every boot logged `hasFrameEl: false` here, so the
+  // old `editor.Canvas.getFrameEl()` read returned null, the `if (!doc) return`
+  // guard fired, and this handler did NOTHING for the whole session. The three
+  // syncs below were covered by the project:opened re-run further down, which
+  // is what hid the failure; the contextmenu listener had no such second
+  // chance, so canvas right-click was dead. Same house lesson as the one in
+  // drag-resize.js's header (Canvas.getDocument() is null this early), one
+  // rung further up: at frame:load, trust the payload.
+  editor.on('canvas:frame:load', ({ el, window: frameWindow } = {}) => {
+    const frameEl = el || editor.Canvas?.getFrameEl?.()
+    const doc = frameEl?.contentDocument || frameWindow?.document
     if (!doc) return
     // Order matters: <base> first so subsequent relative links resolve
     // against the project; framework links second so their fetch races
@@ -240,26 +258,7 @@ export function initGrapesJS(container) {
     syncBaseHrefIntoCanvas(doc)
     syncFrameworksIntoCanvas(doc)
     syncGlobalCssIntoCanvas(doc)
-    doc.addEventListener('contextmenu', evt => {
-      evt.preventDefault()
-      // Synthesise a click on the same target so GrapesJS selects what the
-      // user pointed at. Using mousedown (which is what GrapesJS listens on
-      // for selection) at the same coords + target.
-      const target = evt.target
-      target?.dispatchEvent?.(new MouseEvent('mousedown', {
-        bubbles: true, cancelable: true, view: doc.defaultView,
-        clientX: evt.clientX, clientY: evt.clientY, button: 0
-      }))
-      // Wait one tick for GrapesJS to commit the selection, then emit.
-      const rect = frameEl.getBoundingClientRect()
-      const x = evt.clientX + rect.left
-      const y = evt.clientY + rect.top
-      queueMicrotask(() => {
-        eventBus.emit('canvas:context-menu', {
-          x, y, component: editor.getSelected()
-        })
-      })
-    })
+    wireCanvasContextMenu(doc)
   })
 
   // Watch for component add/remove for lazy-dependency injection (plugin sections
@@ -338,6 +337,46 @@ export function initGrapesJS(container) {
   log.info('GrapesJS initialized')
 
   return editor
+}
+
+// Canvas documents already carrying the right-click listener. Keyed on the
+// document (not a boolean) so a genuine iframe rebuild — GL re-parent, device
+// cycle — wires the NEW document while a repeated canvas:frame:load on the
+// same one cannot stack a second listener and open two menus per click.
+const contextMenuWiredDocs = new WeakSet()
+
+/**
+ * Wire right-click inside the canvas document to the app's single
+ * context-menu open path (the `canvas:context-menu` listener in main.js).
+ *
+ * Listening on the iframe's contentDocument rather than on the frame element
+ * is the only way to catch events inside the canvas — events inside an iframe
+ * are scoped to its own document and never reach the host.
+ *
+ * @param {Document} doc - The canvas iframe's live document
+ * @returns {void} — a second call for the same document is a no-op
+ */
+function wireCanvasContextMenu(doc) {
+  if (!doc || contextMenuWiredDocs.has(doc)) return
+  contextMenuWiredDocs.add(doc)
+  doc.addEventListener('contextmenu', evt => {
+    evt.preventDefault()
+    // Select the element under the cursor, then menu it. selectContextTarget
+    // resolves the component from the event target and commits the selection
+    // SYNCHRONOUSLY, so the component handed to the menu is the one GrapesJS
+    // actually settled on — never a stale read (see the canvas-context-target
+    // header for the mousedown-synthesis bug this replaced).
+    const component = selectContextTarget(editor, evt.target)
+    // Frame rect is read at click time, not closed over: by now the Canvas
+    // module has published the frame, and re-reading also survives a frame
+    // element swap under a document that outlived it.
+    const frameRect = editor?.Canvas?.getFrameEl?.()?.getBoundingClientRect?.()
+    eventBus.emit('canvas:context-menu', {
+      x: evt.clientX + (frameRect?.left || 0),
+      y: evt.clientY + (frameRect?.top || 0),
+      component
+    })
+  })
 }
 
 // Inject (or update) the project's globalCSS as a <style> tag inside the

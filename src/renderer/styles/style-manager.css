@@ -229,6 +229,40 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* "Applies to" line — the selector a free value is written to, as a picker
+   over the element's other classes (selector-target.js). Monospaced because
+   the option text IS CSS: the row's job is to make the write target readable
+   at a glance, so it reads like the selector it will produce. */
+.gstrap-sm-target {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  min-width: 0;
+}
+.gstrap-sm-target-caption {
+  color: var(--text-3);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: none;
+}
+.gstrap-sm-target-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+.gstrap-sm-target-select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Slider row — arbitrary numeric values (opacity) beside their BS step pills. */
 .gstrap-sm-slider-row {
   display: flex;

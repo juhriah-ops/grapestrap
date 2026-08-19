@@ -386,3 +386,189 @@ test('Colour picker: spectrum, hue strip and R/G/B fields drive the hex box and 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+// ─── Which selector the value is written to ──────────────────────────────────
+
+// Read the "Applies to" picker out of one sub-panel: what it is aimed at, and
+// what else it offers.
+const readTargetPicker = (appWindow, section, prop) => appWindow.evaluate(({ sp, property }) => {
+  const picker = document.querySelector(
+    `.gstrap-sm-section[data-sp="${sp}"] [data-selector-target="${property}"]`)
+  if (!picker) return null
+  return { value: picker.value, options: [...picker.options].map(option => option.value) }
+}, { sp: section, property: prop })
+
+// Aim the picker somewhere else, the way a user does.
+const setTargetPicker = (appWindow, section, prop, value) => appWindow.evaluate(({ sp, property, next }) => {
+  const picker = document.querySelector(
+    `.gstrap-sm-section[data-sp="${sp}"] [data-selector-target="${property}"]`)
+  picker.value = next
+  picker.dispatchEvent(new Event('change', { bubbles: true }))
+}, { sp: section, property: prop, next: value })
+
+// Pick a free colour through the popover's text field, then close it.
+async function pickCustomColor(appWindow, section, value) {
+  await clickInSection(appWindow, section, '[data-custom-color-chip]')
+  await appWindow.waitForSelector('.gstrap-cp-popover', { timeout: 2_000 })
+  await appWindow.evaluate(v => {
+    const input = document.querySelector('.gstrap-cp-popover [data-cp-input]')
+    input.value = v
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }, value)
+  await appWindow.keyboard.press('Escape')
+  await appWindow.waitForFunction(
+    () => !document.querySelector('.gstrap-cp-popover'), null, { timeout: 2_000 })
+}
+
+// One rule's body, read out of globalCSS by its exact whole selector.
+const readRuleBody = (appWindow, selector) => appWindow.evaluate(sel => {
+  const css = window.__gstrap.projectState.current.globalCSS || ''
+  const escaped = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return css.match(new RegExp(`(?:^|[};]|\\*/)\\s*${escaped}\\s*\\{([^}]*)\\}`))?.[1] || ''
+}, selector)
+
+test('Style Manager: the Custom row names its write target and lets the user aim it', async () => {
+  // The reported problem: on an element wearing several classes the row picked
+  // the first one silently, which on a bundled section is the page-wide
+  // `gs-sec` — one element's colour repainted every section and nothing said
+  // which class was being written. Verifies:
+  //   1. The target is on screen, defaulted to the old first-class pick.
+  //   2. The other candidate classes are offered; BS utilities are not.
+  //   3. Retargeting writes to the CHOSEN class and leaves the previous rule
+  //      alone — two selectors, two values, no crosstalk.
+  //   4. The choice survives a re-render and a trip through another element.
+  //   5. It is per property: Text's colour row still starts from the default.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-smtarget-'))
+  const projectPath = join(projectDir, 'target.gstrap')
+
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, projectPath)
+  await selectFirstByTag(appWindow, 'h1')
+
+  // A section-shaped element: a shared band class, then two of its own.
+  await appWindow.evaluate(() => {
+    const selected = window.__gstrap.pluginRegistry.bound.editor.getSelected()
+    selected.setClass(['gs-sec', 'site-band', 'feature-band', 'mt-3'])
+  })
+
+  await openSection(appWindow, 'background')
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="background"] [data-custom-color-chip]', { timeout: 5_000 })
+
+  // ── 1 + 2. The target is visible, defaulted, and offers the alternatives ──
+  const picker = await readTargetPicker(appWindow, 'background', 'background-color')
+  expect(picker.value).toBe('.gs-sec')
+  // `mt-3` is Bootstrap spacing, not this element's identity — never a target.
+  expect(picker.options).toEqual(['.gs-sec', '.site-band', '.feature-band'])
+
+  await pickCustomColor(appWindow, 'background', '#ff0066')
+  expect(await readRuleBody(appWindow, '.gs-sec')).toMatch(/background-color:\s*#ff0066/)
+
+  // ── 3. Retarget, and the next write lands on the chosen class ────────────
+  await setTargetPicker(appWindow, 'background', 'background-color', '.feature-band')
+  await appWindow.waitForFunction(() => {
+    const picker = document.querySelector(
+      '.gstrap-sm-section[data-sp="background"] [data-selector-target="background-color"]')
+    return picker?.value === '.feature-band'
+  }, null, { timeout: 5_000 })
+
+  // The chip re-reads from the new target, which has nothing on it yet.
+  const chipAfterRetarget = await appWindow.evaluate(() => document.querySelector(
+    '.gstrap-sm-section[data-sp="background"] [data-custom-color-chip]').dataset.customColorValue)
+  expect(chipAfterRetarget).toBe('')
+
+  await pickCustomColor(appWindow, 'background', '#3fb950')
+  expect(await readRuleBody(appWindow, '.feature-band')).toMatch(/background-color:\s*#3fb950/)
+  // The first rule is untouched — retargeting moves the aim, not the value.
+  expect(await readRuleBody(appWindow, '.gs-sec')).toMatch(/background-color:\s*#ff0066/)
+
+  // ── 4. The choice belongs to the element and survives leaving it ─────────
+  await selectFirstByTag(appWindow, 'main')
+  await appWindow.evaluate(() => {
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const find = component => {
+      if ((component.getClasses?.() || []).includes('feature-band')) return component
+      for (const child of component.components()) {
+        const hit = find(child)
+        if (hit) return hit
+      }
+      return null
+    }
+    editor.select(find(editor.getWrapper()))
+  })
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="background"] [data-custom-color-chip]', { timeout: 5_000 })
+  const remembered = await readTargetPicker(appWindow, 'background', 'background-color')
+  expect(remembered.value).toBe('.feature-band')
+
+  // ── 5. Per property: the Text row starts from its own default ────────────
+  await openSection(appWindow, 'text')
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="text"] [data-selector-target="color"]', { timeout: 5_000 })
+  const textPicker = await readTargetPicker(appWindow, 'text', 'color')
+  expect(textPicker.value).toBe('.gs-sec')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Style Manager: a custom colour overrides a section chunk instead of rewriting it', async () => {
+  // A bundled section's rules are fenced by a `gs-sec` marker and are the
+  // section's to own: the writers must never edit inside that fence, or a
+  // re-insert and a style edit end up fighting over the same lines. The
+  // override goes after the chunk, where source order makes it win.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-smchunk-'))
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, join(projectDir, 'chunk.gstrap'))
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-lib-bundled-insert="orbit-hero-banner"]').click()
+  })
+  await appWindow.waitForFunction(() => {
+    const doc = window.__gstrap.pluginRegistry.bound.editor.Canvas.getFrameEl()?.contentDocument
+    return !!doc?.querySelector('.gs-orbit-hero')
+  }, null, { timeout: 20_000 })
+
+  await appWindow.evaluate(() => {
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const find = component => {
+      if ((component.getClasses?.() || []).includes('gs-orbit-hero')) return component
+      for (const child of component.components()) {
+        const hit = find(child)
+        if (hit) return hit
+      }
+      return null
+    }
+    editor.select(find(editor.getWrapper()))
+  })
+
+  await openSection(appWindow, 'background')
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="background"] [data-custom-color-chip]', { timeout: 5_000 })
+  // The hero's own class, not the section-wide `gs-sec` the row would default
+  // to — this is the retarget a user makes to stop repainting the whole page.
+  await setTargetPicker(appWindow, 'background', 'background-color', '.gs-orbit-hero')
+  await appWindow.waitForFunction(() => {
+    const picker = document.querySelector(
+      '.gstrap-sm-section[data-sp="background"] [data-selector-target="background-color"]')
+    return picker?.value === '.gs-orbit-hero'
+  }, null, { timeout: 5_000 })
+
+  await pickCustomColor(appWindow, 'background', '#101820')
+  await appWindow.waitForFunction(() => {
+    const doc = window.__gstrap.pluginRegistry.bound.editor.Canvas.getFrameEl().contentDocument
+    const hero = doc.querySelector('.gs-orbit-hero')
+    return doc.defaultView.getComputedStyle(hero).backgroundColor === 'rgb(16, 24, 32)'
+  }, null, { timeout: 10_000 })
+
+  const css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+  const markerAt = css.indexOf('/* gs-sec:orbit-hero */')
+  const overrideAt = css.lastIndexOf('.gs-orbit-hero {')
+  expect(markerAt).toBeGreaterThan(-1)
+  // Two rules for the selector now: the chunk's, and the user's after it.
+  expect(overrideAt).toBeGreaterThan(markerAt)
+  expect(css.slice(overrideAt)).toMatch(/^\.gs-orbit-hero \{\n {2}background-color: #101820;\n\}/)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})

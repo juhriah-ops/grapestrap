@@ -33,6 +33,10 @@
   padding-top: 2px;
   padding-bottom: 2px;
   padding-right: 8px;
+  /* Set per-row by dom-tree/index.js's applyIndent() via .style.setProperty()
+     on the live element (not a templated inline `style="…"` attribute) —
+     the fallback covers the brief window before the first applyIndent() pass. */
+  padding-left: var(--gstrap-dom-indent, 8px);
   cursor: default;
   white-space: nowrap;
   overflow: hidden;

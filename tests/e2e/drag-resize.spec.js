@@ -16,6 +16,14 @@
 // DEPENDS: ./helpers.js (launch, openSeedProject, selectFirstByTag,
 //          dismissWelcome), @playwright/test
 // CREATED: 2026-07-12
+// UPDATED: 2026-08-18 — added the two attach-gate specs at the bottom: a
+//          CONTAINER (a div with element children) must get handles, and a
+//          locked component must not. The gate used to read
+//          `editable === false`, which GrapesJS reports on every structural
+//          component, so containers — sections, rows, cards, plain divs —
+//          silently never got a resize surface and only text-ish leaves did.
+//          Every drag spec above this line drags a text-only element, which is
+//          exactly why none of them caught it.
 // =============================================================
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
@@ -285,6 +293,110 @@ test('drag-resize: ghost outline and class badge visible mid-drag, gone after re
   })
   expect(after.ghost).toBe(false)
   expect(after.badge).toBe(false)
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+// ── Attach gate: which components get a resize surface at all ────────────────
+
+/** Whether the resize overlay is up, and which handles are currently shown. */
+function overlayState(appWindow) {
+  return appWindow.evaluate(() => {
+    const doc = window.__gstrap?.pluginRegistry?.bound?.editor
+      ?.Canvas?.getFrameEl?.()?.contentDocument
+    const overlay = doc?.querySelector('[data-gstrap-drag-overlay]')
+    if (!overlay) return { present: false, kinds: [], visibleKinds: [] }
+    const handles = [...overlay.querySelectorAll('[data-dragr-kind]')]
+    return {
+      present: true,
+      kinds: handles.map(handle => handle.getAttribute('data-dragr-kind')),
+      visibleKinds: handles
+        .filter(handle => !handle.hidden)
+        .map(handle => handle.getAttribute('data-dragr-kind'))
+    }
+  })
+}
+
+/** Wait for the overlay to be present (or gone, with present=false). */
+function waitForOverlay(appWindow, present) {
+  return appWindow.waitForFunction(want => {
+    const doc = window.__gstrap?.pluginRegistry?.bound?.editor
+      ?.Canvas?.getFrameEl?.()?.contentDocument
+    return !!doc?.querySelector('[data-gstrap-drag-overlay]') === want
+  }, present, { timeout: 5_000 })
+}
+
+test('drag-resize: a container div with element children gets resize handles', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-dragr-'))
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, join(projectDir, 'dragr-container.gstrap'))
+  await dismissWelcome(appWindow)
+
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const added = ed.getWrapper().append(
+      '<div class="feature-band"><div class="feature-inner"><p>Container copy</p></div></div>')
+    ed.select(Array.isArray(added) ? added[0] : added)
+  })
+  await waitForOverlay(appWindow, true)
+
+  const state = await overlayState(appWindow)
+  expect(state.present).toBe(true)
+  // All eight edge strips are built for the container…
+  expect(state.kinds).toEqual(expect.arrayContaining([
+    'margin-t', 'margin-e', 'margin-b', 'margin-s',
+    'pad-t', 'pad-e', 'pad-b', 'pad-s'
+  ]))
+  // …and the horizontal pair is live: a full-width band clears MIN_EDGE_LEN
+  // along the top and bottom. The left/right strips stay hidden here because a
+  // one-line band is shorter than MIN_EDGE_LEN — that's layoutHandles() doing
+  // its job, not the attach gate, which is what this spec is about.
+  expect(state.visibleKinds).toEqual(expect.arrayContaining([
+    'margin-t', 'margin-b', 'pad-t', 'pad-b'
+  ]))
+
+  // The misread this spec pins: the selected container reports editable:false
+  // straight out of GrapesJS, with nothing locked. Reading that flag as a lock
+  // is what kept the overlay above off every container in the app.
+  const editableFlag = await appWindow.evaluate(
+    () => window.__gstrap.pluginRegistry.bound.editor.getSelected().get('editable'))
+  expect(editableFlag).toBe(false)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('drag-resize: a template-locked component gets no resize handles', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-dragr-'))
+  const { app, appWindow } = await launch()
+  await openSeedProject(appWindow, join(projectDir, 'dragr-locked.gstrap'))
+  await dismissWelcome(appWindow)
+
+  // Two identical bands, one locked the way panels/templates/lock.js locks
+  // chrome (removable:false is the flag both lock modules set — see
+  // editor/component-lock.js). Selecting the unlocked one first proves the
+  // overlay CAN mount here, so the locked assertion below can't pass by
+  // asserting too early.
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const added = ed.getWrapper().append(
+      '<div class="open-band"><p>Editable band</p></div>'
+      + '<div class="locked-band"><p>Locked band</p></div>')
+    added[1].set('removable', false)
+    ed.select(added[0])
+  })
+  await waitForOverlay(appWindow, true)
+
+  await appWindow.evaluate(() => {
+    const ed = window.__gstrap.pluginRegistry.bound.editor
+    const locked = ed.getWrapper().components().models.find(
+      component => (component.getClasses?.() || []).includes('locked-band'))
+    ed.select(locked)
+  })
+  await waitForOverlay(appWindow, false)
+
+  expect((await overlayState(appWindow)).present).toBe(false)
+
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })

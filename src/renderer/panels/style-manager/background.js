@@ -13,6 +13,13 @@
  * url() values are written FILE-RELATIVE to the stylesheet
  * (`../images/foo.png` from assets/css/style.css) — the canonical convention
  * shared with export and the canvas rewrite (src/shared/css-urls.js).
+ *
+ * UPDATED: 2026-08-18 — one selector serves the whole panel and the user picks
+ * it (selector-target.js, surfaced in the Custom row): colour and image are
+ * both "this element's background", so splitting them across two targets would
+ * be a trap. The image row also writes through mergeBareRuleProps now instead
+ * of rewriting the whole rule, so it can override a bundled section's chunk
+ * without copying that chunk's other declarations into the user's rule.
  */
 
 import {
@@ -22,7 +29,8 @@ import {
 import { applyGroup, readGroup, toggleClass } from './class-utils.js'
 import { projectState } from '../../state/project-state.js'
 import { eventBus } from '../../state/event-bus.js'
-import { pickSelector, isBsUtility, readBareRule, writeBareRule } from './css-rule-utils.js'
+import { readBareRule, mergeBareRuleProps } from './css-rule-utils.js'
+import { resolveTargetSelector } from './selector-target.js'
 import { customColorRowMarkup, wireCustomColorRow, clearCustomColor } from './custom-color.js'
 import { toDocumentRelativeUrl, stylesheetDirOf } from '../../../shared/css-urls.js'
 import { t } from '../../i18n.js'
@@ -40,8 +48,10 @@ export function render(host, ctx) {
   const cur = readGroup(component, bgColorPattern())
   const hasGradient = (component.getClasses() || []).includes('bg-gradient')
 
-  // Background-image rule for this component (read from globalCSS).
-  const selector = pickSelector(component, isBsUtility)
+  // Background rule for this component (read from globalCSS). The selector is
+  // the user's choice for `background-color` — the Custom row's picker — and
+  // the image row rides along on it so the panel only ever has one target.
+  const selector = resolveTargetSelector(component, 'background-color')
   const css = projectState.current?.globalCSS || ''
   const bgRule = selector ? readBareRule(css, selector) : {}
   const currentBgImage = (bgRule['background-image'] || '').match(/url\(['"]?([^'")]+)['"]?\)/)?.[1] || ''
@@ -76,7 +86,7 @@ export function render(host, ctx) {
         <button class="gstrap-sm-pill gstrap-sm-clear" data-clear>${escHtml(t('action.clear'))}</button>
       </div>
     </div>
-    ${customColorRowMarkup({ selector, value: currentBgColor })}
+    ${customColorRowMarkup({ component, selector, prop: 'background-color', value: currentBgColor })}
     <div class="gstrap-sm-row">
       <label class="gstrap-sm-label">${escHtml(t('sm.label.effect'))}</label>
       <div class="gstrap-sm-grid">
@@ -167,54 +177,60 @@ export function render(host, ctx) {
   })
   host.querySelectorAll('[data-bg-pick]').forEach(btn => {
     btn.addEventListener('click', () => {
-      writeBgRule(selector, {
+      writeBgProps(selector, {
         'background-image':    `url("${btn.dataset.bgPick}")`,
         'background-size':     currentBgSize     || 'cover',
         'background-position': currentBgPosition || 'center',
         'background-repeat':   currentBgRepeat   || 'no-repeat',
-        // Re-picking an image shouldn't drop a chosen attachment, since it's
-        // now one of the five declarations this row strips-then-rewrites.
-        ...(currentBgAttachment ? { 'background-attachment': currentBgAttachment } : {})
+        // Re-picking an image shouldn't drop a chosen attachment — passing ''
+        // for an unset one leaves the rule without it rather than writing
+        // `background-attachment: ;`.
+        'background-attachment': currentBgAttachment
       })
       requestRender()
     })
   })
   host.querySelector('[data-bg-clear]')?.addEventListener('click', () => {
-    writeBgRule(selector, {})
+    // Clear every declaration this row owns and nothing else: the Custom
+    // colour row's `background-color` shares the rule.
+    writeBgProps(selector, Object.fromEntries(BG_IMAGE_PROPS.map(prop => [prop, ''])))
     requestRender()
   })
   host.querySelectorAll('[data-bg-prop]').forEach(sel => {
     sel.addEventListener('change', () => {
-      const prop = sel.dataset.bgProp
-      const val  = sel.value
-      const next = { ...bgRule }
-      if (val) next[prop] = val
-      else delete next[prop]
-      writeBgRule(selector, next)
+      writeBgProps(selector, { [sel.dataset.bgProp]: sel.value })
       requestRender()
     })
   })
 }
 
-// The five declarations the background-image row owns. Stripping exactly
-// these (rather than every `background-*` key, as this did before 2026-08-17)
-// keeps a Clear honest without eating `background-color`, which the Custom
-// colour row owns in the same rule.
+// The five declarations the background-image row owns. Naming exactly these
+// (rather than every `background-*` key, as this did before 2026-08-17) keeps a
+// Clear honest without eating `background-color`, which the Custom colour row
+// owns in the same rule.
 const BG_IMAGE_PROPS = [
   'background-image', 'background-size', 'background-position', 'background-repeat',
   'background-attachment'
 ]
 
-function writeBgRule(selector, props) {
+/**
+ * Merge the image row's declarations into the component's rule.
+ *
+ * An empty value removes just that declaration (mergeBareRuleProps' contract),
+ * which is what makes Clear surgical — and what keeps the write off any other
+ * property in a rule this row shares with the Custom colour chip, the opacity
+ * slider, and whatever the user hand-wrote.
+ *
+ * @param {string|null} selector - Whole selector for the rule
+ * @param {object} props - Subset of BG_IMAGE_PROPS to set ('' to remove)
+ * @returns {void}
+ */
+function writeBgProps(selector, props) {
   if (!selector || !projectState.current) return
-  // Reading the existing rule preserves any non-background properties the
-  // user might have written from elsewhere (pseudo editor doesn't touch
-  // the bare-state rule, but a hand-edited globalCSS could).
   const css = projectState.current.globalCSS || ''
-  const existing = readBareRule(css, selector) || {}
-  for (const k of BG_IMAGE_PROPS) delete existing[k]
-  const merged = { ...existing, ...props }
-  projectState.current.globalCSS = writeBareRule(css, selector, merged)
+  const next = mergeBareRuleProps(css, selector, props)
+  if (next === css) return
+  projectState.current.globalCSS = next
   projectState.markCssDirty()
   eventBus.emit('project:css-changed')
 }

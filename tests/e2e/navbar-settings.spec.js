@@ -20,7 +20,10 @@ import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject, selectFirstByTag, fileExists } from './helpers.js'
+import {
+  launch, openSeedProject, selectFirstByTag, fileExists, dismissWelcome,
+  createBundledStarterProject
+} from './helpers.js'
 
 // A navbar with everything the panel reads: the `navbar` class it resolves on,
 // and a toggler whose data-bs-toggle tells it which auto-close mode fits.
@@ -311,11 +314,153 @@ test('Navbar panel: swap colours need a class of the navbar\'s own, then write b
   }
 
   const css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
-  // Top colour on the navbar's own rule; scrolled colour on the same selector
-  // plus the class the RUNTIME adds while the page is scrolled. The `\s*\{`
-  // anchor is what keeps the first pattern from matching the second rule.
-  expect(css).toMatch(/\.site-header-nav\s*\{[^}]*background-color:\s*#101820/)
+  // Both colours are written against the class the RUNTIME toggles while the
+  // page is scrolled: the resting colour on `:not(.gs-nav-scrolled)`, the
+  // scrolled one on `.gs-nav-scrolled`. Same weight, so neither state can
+  // outrank the other, and both outrank a one-class theme rule.
+  expect(css).toMatch(/\.site-header-nav:not\(\.gs-nav-scrolled\)\s*\{[^}]*background-color:\s*#101820/)
   expect(css).toMatch(/\.site-header-nav\.gs-nav-scrolled\s*\{[^}]*background-color:\s*#f5f7fa/)
+  // The bare selector is NOT where the resting colour goes — a rule there is
+  // what the Graphite starter's `.site-navbar.is-overlay` used to swallow.
+  expect(css).not.toMatch(/\.site-header-nav\s*\{/)
+
+  // The picker names the target both rules share, and offers the navbar's own
+  // classes only — Bootstrap's shared navbar vocabulary is not a target.
+  const targetOptions = await appWindow.evaluate(() => {
+    const picker = document.querySelector(
+      '.gstrap-sm-section[data-sp="navbar"] [data-selector-target="background-color"]')
+    return { value: picker.value, options: [...picker.options].map(o => o.value) }
+  })
+  expect(targetOptions.value).toBe('.site-header-nav')
+  expect(targetOptions.options).toEqual(['.site-header-nav'])
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+/**
+ * Drive one swap chip through the colour picker, exactly as the swap-colours
+ * test above does. Shared by the two cascade specs that follow.
+ *
+ * @param {import('@playwright/test').Page} appWindow
+ * @param {string} chip - 'top' or 'scrolled'
+ * @param {string} value - Colour to type into the picker's text field
+ */
+async function pickSwapColor(appWindow, chip, value) {
+  await clickInPanel(appWindow, `[data-nav-color="${chip}"]`)
+  await appWindow.waitForSelector('.gstrap-cp-popover', { timeout: 3_000 })
+  await appWindow.evaluate(v => {
+    const input = document.querySelector('.gstrap-cp-popover [data-cp-input]')
+    input.value = v
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }, value)
+  await appWindow.keyboard.press('Escape')
+  await appWindow.waitForFunction(
+    () => !document.querySelector('.gstrap-cp-popover'), null, { timeout: 3_000 })
+}
+
+/**
+ * The canvas element's settled background colour. Both swap rules transition
+ * `background-color` over 300ms, so a read taken straight after the write
+ * returns the colour the bar is transitioning FROM — the assertion has to wait
+ * for the value, not sample it once.
+ *
+ * @param {import('@playwright/test').Page} appWindow
+ * @param {string} selector - CSS selector inside the canvas document
+ * @param {string} expected - Computed colour to wait for, e.g. 'rgb(16, 24, 32)'
+ */
+const waitForCanvasBackground = (appWindow, selector, expected) =>
+  appWindow.waitForFunction(({ sel, want }) => {
+    const doc = window.__gstrap.pluginRegistry.bound.editor.Canvas.getFrameEl().contentDocument
+    const el = doc.querySelector(sel)
+    return !!el && doc.defaultView.getComputedStyle(el).backgroundColor === want
+  }, { sel: selector, want: expected }, { timeout: 10_000 })
+
+test('Navbar panel: the Top colour repaints a harvested navbar without editing its section chunk', async () => {
+  // The harvested graphite-navbar ships `.gs-graphite-nav { background: … }`
+  // inside its `gs-sec` chunk. The resting colour has to beat that shorthand
+  // (a `background-color` merged INTO the chunk did, but only by rewriting
+  // rules the section owns — re-inserting the section then fought the edit).
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-navswap-chunk-'))
+  const { app, appWindow } = await launch()
+  await dismissWelcome(appWindow)
+  await openSeedProject(appWindow, join(projectDir, 'navchunk.gstrap'))
+
+  await appWindow.evaluate(() => {
+    document.querySelector('[data-lib-bundled-insert="graphite-navbar"]').click()
+  })
+  await appWindow.waitForFunction(() => {
+    const doc = window.__gstrap.pluginRegistry.bound.editor.Canvas.getFrameEl()?.contentDocument
+    return !!doc?.querySelector('nav.gs-graphite-nav')
+  }, null, { timeout: 20_000 })
+
+  // Select the nav itself — the same click a user makes on the bar.
+  await appWindow.evaluate(() => {
+    const editor = window.__gstrap.pluginRegistry.bound.editor
+    const find = component => {
+      if ((component.getClasses?.() || []).includes('gs-graphite-nav')) return component
+      for (const child of component.components()) {
+        const hit = find(child)
+        if (hit) return hit
+      }
+      return null
+    }
+    editor.select(find(editor.getWrapper()))
+  })
+  await openNavbarSection(appWindow)
+  await setFieldInPanel(appWindow, '[data-nav-scroll-mode]', 'swap')
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="navbar"] [data-nav-color="top"]', { timeout: 5_000 })
+
+  await pickSwapColor(appWindow, 'top', '#101820')
+
+  // The point of the whole fix: the bar the user is looking at changes colour.
+  await waitForCanvasBackground(appWindow, 'nav.gs-graphite-nav', 'rgb(16, 24, 32)')
+
+  const css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+  // The section's own rule is byte-untouched — its shorthand is still there,
+  // and the override is a rule of the user's own after the chunk.
+  expect(css).toMatch(/\.gs-graphite-nav \{[^}]*background: rgba\(255, 255, 255, 0\.97\);/)
+  expect(css).toMatch(/\.gs-graphite-nav:not\(\.gs-nav-scrolled\) \{\n {2}background-color: #101820;\n\}/)
+  // The user's rule sits AFTER the chunk it overrides, which is the only
+  // reason it wins — same specificity would lose the other way round.
+  expect(css.indexOf('.gs-graphite-nav:not(.gs-nav-scrolled)'))
+    .toBeGreaterThan(css.indexOf('/* gs-sec:graphite-navbar */'))
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('Navbar panel: the Top colour outranks a two-class theme state rule', async () => {
+  // The reported bug, end to end. The Graphite starter's index navbar wears
+  // `is-overlay`, and the theme paints that state with
+  // `.site-navbar.is-overlay { background: transparent }`. A resting colour on
+  // the bare `.site-navbar` lost to it every time — the Scrolled colour worked,
+  // because it is a two-class rule itself, which is exactly the asymmetry the
+  // user saw.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-navswap-overlay-'))
+  const { app, appWindow } = await launch()
+  await dismissWelcome(appWindow)
+  await createBundledStarterProject(appWindow, join(projectDir, 'overlay.gstrap'), { starterId: 'graphite' })
+  await appWindow.waitForFunction(() => {
+    const doc = window.__gstrap.pluginRegistry.bound.editor?.Canvas?.getFrameEl?.()?.contentDocument
+    return !!doc?.querySelector('nav.site-navbar.is-overlay')
+  }, null, { timeout: 20_000 })
+
+  expect(await selectFirstByTag(appWindow, 'nav')).toBe('nav')
+  await openNavbarSection(appWindow)
+  await setFieldInPanel(appWindow, '[data-nav-scroll-mode]', 'swap')
+  await appWindow.waitForSelector(
+    '.gstrap-sm-section[data-sp="navbar"] [data-nav-color="top"]', { timeout: 5_000 })
+
+  await pickSwapColor(appWindow, 'top', '#101820')
+  await waitForCanvasBackground(appWindow, 'nav.site-navbar', 'rgb(16, 24, 32)')
+
+  const css = await appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+  // The theme's own rule keeps its shipped declarations: the override is
+  // additive, not a rewrite of somebody else's stylesheet.
+  expect(css).toMatch(/\.site-navbar \{\n\t\tmin-height: var\(--navbar-height-solid\);/)
+  expect(css).toMatch(/\.site-navbar:not\(\.gs-nav-scrolled\) \{\n {2}background-color: #101820;\n\}/)
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })

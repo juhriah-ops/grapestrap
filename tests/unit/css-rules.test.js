@@ -15,7 +15,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  readRule, writeRule, readBareRule, writeBareRule
+  readRule, writeRule, readBareRule, writeBareRule, isInsideSectionChunk
 } from '../../src/renderer/panels/style-manager/css-rule-utils.js'
 
 // Tab-indented like starter theme stylesheets — byte-identity assertions
@@ -99,4 +99,83 @@ test('writeRule: exact pseudo rule replaces in place and empty props removes it'
   assert.equal(replaced, `.a { x: 1; }\n.cta-link:hover {\n  color: blue;\n}\n.b { y: 2; }\n`)
   const removed = writeRule(css, '.cta-link', 'hover', {})
   assert.equal(removed, `.a { x: 1; }\n.b { y: 2; }\n`)
+})
+
+// ─── Where a write LANDS (2026-08-18) ────────────────────────────────────────
+// Anchoring says which rules are the selector's own; these say which of them a
+// write may touch. A declaration written into a rule the cascade then overrules
+// is invisible, which is what the acceptance report described as "the panel
+// does nothing".
+
+// A section chunk exactly as editor/css-chunks.js appends it: blank line,
+// marker line, the section's rules, trailing newline.
+const CHUNKED_SHEET = `.theme-band {\n  padding: 2em;\n}\n
+/* gs-sec:orbit-hero */
+.gs-orbit-hero {
+  padding: 6em 0;
+  background: #1b1b1b;
+}
+.gs-orbit-hero .gs-orbit-hero-title {
+  font-size: 3em;
+}
+`
+
+test('bare rule: the LAST rule for a selector is the one read and written', () => {
+  // Same selector twice — the second wins in the browser, so the panel must
+  // read it and the writer must edit it. Editing the first one is how a value
+  // ended up in the sheet with nothing to show for it on screen.
+  const css = `.item {\n  color: red;\n}\n.other { x: 1; }\n.item {\n  color: blue;\n}\n`
+  assert.deepEqual(readBareRule(css, '.item'), { color: 'blue' })
+  const out = writeBareRule(css, '.item', { color: 'green' })
+  assert.equal(out, `.item {\n  color: red;\n}\n.other { x: 1; }\n.item {\n  color: green;\n}\n`)
+})
+
+test('bare rule: reads merge every occurrence in source order', () => {
+  const css = `.item {\n  color: red;\n  padding: 1em;\n}\n.item {\n  color: blue;\n}\n`
+  assert.deepEqual(readBareRule(css, '.item'), { color: 'blue', padding: '1em' })
+})
+
+test('bare rule: adjacent same-selector rules are both seen', () => {
+  // The scanner has to rewind onto each closing brace — that brace is the
+  // boundary the next rule's match needs, and matching consumed it.
+  const css = `.item { color: red; }.item { color: blue; }`
+  assert.deepEqual(readBareRule(css, '.item'), { color: 'blue' })
+})
+
+test('bare rule: a rule inside a gs-sec chunk is never rewritten', () => {
+  const out = writeBareRule(CHUNKED_SHEET, '.gs-orbit-hero', { 'background-color': '#101820' })
+  assert.ok(out.startsWith(CHUNKED_SHEET), 'the section chunk must stay byte-identical')
+  // The override lands after the chunk, where source order makes it win.
+  assert.match(out, /\n\.gs-orbit-hero \{\n {2}background-color: #101820;\n\}\n$/)
+  // And only the user's declaration is in it — the chunk's own rules are not
+  // copied forward, or a later section edit would be shadowed by the copy.
+  assert.deepEqual(readBareRule(out, '.gs-orbit-hero'), {
+    padding: '6em 0',
+    background: '#1b1b1b',
+    'background-color': '#101820'
+  })
+})
+
+test('bare rule: the override rule after a chunk is rewritten in place, not duplicated', () => {
+  const first = writeBareRule(CHUNKED_SHEET, '.gs-orbit-hero', { 'background-color': '#101820' })
+  const second = writeBareRule(first, '.gs-orbit-hero', { 'background-color': '#3fb950' })
+  assert.equal(second.match(/background-color: /g).length, 1)
+  assert.match(second, /\n\.gs-orbit-hero \{\n {2}background-color: #3fb950;\n\}\n$/)
+  // Byte-identical when nothing changes: the no-op guard in bare-rule-store.js
+  // is what keeps a repeated write from flagging the project dirty.
+  assert.equal(writeBareRule(first, '.gs-orbit-hero', { 'background-color': '#101820' }), first)
+})
+
+test('bare rule: clearing an override drops it and leaves the chunk alone', () => {
+  const written = writeBareRule(CHUNKED_SHEET, '.gs-orbit-hero', { 'background-color': '#101820' })
+  const cleared = writeBareRule(written, '.gs-orbit-hero', {})
+  assert.equal(cleared, CHUNKED_SHEET)
+})
+
+test('isInsideSectionChunk: a blank line ends the chunk territory', () => {
+  const marker = CHUNKED_SHEET.indexOf('/* gs-sec:orbit-hero */')
+  assert.equal(isInsideSectionChunk(CHUNKED_SHEET, CHUNKED_SHEET.indexOf('.gs-orbit-hero {')), true)
+  assert.equal(isInsideSectionChunk(CHUNKED_SHEET, marker - 1), false, 'above the marker')
+  const withOverride = `${CHUNKED_SHEET}\n.gs-orbit-hero {\n  background-color: #101820;\n}\n`
+  assert.equal(isInsideSectionChunk(withOverride, withOverride.lastIndexOf('.gs-orbit-hero {')), false)
 })

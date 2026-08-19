@@ -11,9 +11,17 @@
  *       undo entry (contract pinned by tests/e2e/undo-redo.spec.js).
  * DEPENDS: panels/style-manager/bs-classes.js (class vocab — single source
  *          of truth), panels/style-manager/class-utils.js (applyGroup),
- *          panels/breakpoints/index.js (activeBreakpointId), state/event-bus,
- *          log, ./drag-resize-canvas.css (?raw, injected into the iframe)
+ *          panels/breakpoints/index.js (activeBreakpointId), ./component-lock.js
+ *          (isComponentLocked), state/event-bus, log,
+ *          ./drag-resize-canvas.css (?raw, injected into the iframe)
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-18 — the lock gate in attach() now calls isComponentLocked()
+ *          instead of reading `editable === false` directly. That read declared
+ *          every STRUCTURAL component locked (GrapesJS defaults editable:false
+ *          on div/section/table/…), so containers never got resize handles at
+ *          all — only text-ish leaves did. Same swap already made at four other
+ *          call sites this round; see editor/component-lock.js for the full
+ *          "why editable is not the lock flag" writeup.
  *
  * Coordinate space (RISK #2, resolved): the breakpoint slider narrows the
  * canvas via frame.style.width (panels/breakpoints/index.js applyCanvasWidth)
@@ -39,6 +47,7 @@ import {
 } from '../panels/style-manager/bs-classes.js'
 import { applyGroup, readGroup } from '../panels/style-manager/class-utils.js'
 import { activeBreakpointId } from '../panels/breakpoints/index.js'
+import { isComponentLocked } from './component-lock.js'
 import canvasCss from './drag-resize-canvas.css?raw'
 import { t } from '../i18n.js'
 
@@ -142,9 +151,12 @@ function attach(comp) {
   const editor = wired.editor
   if (!editor || !comp) return
   if (comp === editor.getWrapper?.()) return
-  // Master Templates (integrates before this feature) locks region chrome via
-  // editable:false — locked components get no resize surface either.
-  if (comp.get?.('editable') === false) return
+  // Locked chrome (master-template regions, library items) gets no resize
+  // surface. The predicate lives in editor/component-lock.js — reading
+  // `editable === false` here instead was the bug: GrapesJS ships that flag
+  // false on every structural component, so sections/rows/cards/divs were all
+  // treated as locked and never got handles.
+  if (isComponentLocked(comp)) return
   const doc = canvasDoc()
   const el = comp.getEl?.()
   if (!doc || !el || !el.isConnected) return

@@ -32,6 +32,13 @@
  *          panels/style-manager/css-jump.js — a sibling workstream's module —
  *          behind try/catch so a not-yet-landed or export-mismatched module
  *          degrades to the shared miss toast instead of throwing.
+ * UPDATED: 2026-08-18 — swapped 5 `editable === false` reads (editComponentTag,
+ *          wrapComponentInTag, the lockedEdit const in buildComponentMenuItems,
+ *          editComponentLink, linkMenuItems) for editor/component-lock.js's
+ *          isComponentLocked() — same misread component-lock.js documents:
+ *          `editable` defaults false on every structural component (div,
+ *          table, …), so it was disabling Edit Tag / Wrap with Tag on every
+ *          container and Edit Link on any <a> that doesn't default editable.
  */
 
 import { eventBus } from '../state/event-bus.js'
@@ -43,6 +50,7 @@ import { showEditLinkDialog } from '../dialogs/edit-link.js'
 import { setAttr } from '../panels/element-fields.js'
 import { buildTableMenuItems } from './table-actions.js'
 import { bsDocsForClasses } from '../../shared/bs-docs.js'
+import { isComponentLocked } from '../editor/component-lock.js'
 import { t } from '../i18n.js'
 
 /**
@@ -290,7 +298,7 @@ export function copyComponentHtml(component) {
 
 export async function editComponentTag(component) {
   if (!component) return null
-  if (component.get?.('editable') === false) return null    // locked
+  if (isComponentLocked(component)) return null    // template chrome / library lock
   const initialText = formatComponentAsQuickTag(component)
   const parsed = await showQuickTagDialog({ initialText, mode: 'edit' })
   if (!parsed) return null
@@ -305,7 +313,7 @@ export async function editComponentTag(component) {
 
 export async function wrapComponentInTag(component) {
   if (!component) return null
-  if (component.get?.('editable') === false) return null    // locked
+  if (isComponentLocked(component)) return null    // template chrome / library lock
   const parsed = await showQuickTagDialog({ initialText: '<div>', mode: 'wrap' })
   if (!parsed) return null
   const outerHTML = component.toHTML?.() || ''
@@ -325,7 +333,7 @@ export async function wrapComponentInTag(component) {
  */
 export function buildComponentMenuItems(component) {
   const isRoot = !component?.parent?.()
-  const lockedEdit   = component?.get?.('editable')  === false
+  const lockedEdit   = isComponentLocked(component)
   const lockedCopy   = component?.get?.('copyable')  === false
   const lockedRemove = component?.get?.('removable') === false
   // Move-to-top has one extra guard: a master-template PAGE's wrapper is
@@ -421,7 +429,7 @@ async function gotoClassRule(cls) {
  */
 export async function editComponentLink(component) {
   if (!component) return false
-  if (component.get?.('editable') === false) return false    // locked
+  if (isComponentLocked(component)) return false    // template chrome / library lock
   if (tagOf(component) !== 'a') return false
 
   const attrs = component.getAttributes?.() || {}
@@ -455,7 +463,7 @@ export function linkMenuItems(component) {
     {
       label: t('ctx.edit-link'),
       action: () => editComponentLink(component),
-      disabled: component.get?.('editable') === false
+      disabled: isComponentLocked(component)
     }
   ]
 }
