@@ -18,15 +18,6 @@
 		--paper-alt: #f2f1f1;
 	}
 
-	/* In-page theme preview: the navbar swatches set data-theme on <html> so
-	   all four palette variants can be compared without opening another build.
-	   Blue is the default (:root above); the other builds ship these values. */
-	:root[data-theme="cyan"] { --accent: #56C9D6; }
-	:root[data-theme="green"] { --accent: #87BD94; }
-	:root[data-theme="red"] { --accent: #DA7E79; }
-	:root[data-theme="violet"] { --accent: #A388D0; }
-	:root[data-theme="amber"] { --accent: #D6A971; }
-	:root[data-theme="rose"] { --accent: #D687B0; }
 
 /* Base typography */
 
@@ -123,44 +114,6 @@
 				color: #fff;
 			}
 
-	/* Theme picker — four accent swatches in the navbar; the active one gets a
-	   white ring. Swatch colors mirror the :root[data-theme] overrides above. */
-	.theme-picker {
-		display: flex;
-		align-items: center;
-		gap: 0.6em;
-		margin: 0;
-		padding: 0.6em 0 0.6em 1em;
-		list-style: none;
-	}
-
-		.theme-picker .theme-swatch {
-			width: 1.05em;
-			height: 1.05em;
-			padding: 0;
-			border: solid 2px rgba(255, 255, 255, 0.25);
-			border-radius: 50%;
-			cursor: pointer;
-			transition: border-color 0.25s ease-in-out, transform 0.25s ease-in-out;
-		}
-
-			.theme-picker .theme-swatch:hover,
-			.theme-picker .theme-swatch:focus {
-				border-color: rgba(255, 255, 255, 0.7);
-			}
-
-			.theme-picker .theme-swatch.is-active {
-				border-color: #fff;
-				transform: scale(1.15);
-			}
-
-			.theme-swatch[data-theme-choice="blue"] { background-color: #7C9CD0; }
-			.theme-swatch[data-theme-choice="cyan"] { background-color: #56C9D6; }
-			.theme-swatch[data-theme-choice="green"] { background-color: #87BD94; }
-			.theme-swatch[data-theme-choice="red"] { background-color: #DA7E79; }
-			.theme-swatch[data-theme-choice="violet"] { background-color: #A388D0; }
-			.theme-swatch[data-theme-choice="amber"] { background-color: #D6A971; }
-			.theme-swatch[data-theme-choice="rose"] { background-color: #D687B0; }
 
 	.site-navbar .dropdown-menu {
 		min-width: 13em;

@@ -2,8 +2,8 @@
  * GrapeStrap — Unit: template-section data lint (plugins/blocks-sections)
  *
  * PATH: tests/unit/template-sections-data.test.js
- * ROLE: Lints the two hand-authored template-section data modules
- *       (graphite-sections.js, orbit-sections.js) against the authoring rules
+ * ROLE: Lints the hand-authored template-section data modules
+ *       (graphite-, orbit-, vista-sections.js) against the authoring rules
  *       they were written to. These are pure data — no runtime, nothing to
  *       exercise — so the thing worth testing is that a later edit cannot
  *       quietly break the contract the insert path assumes: no inline styles,
@@ -16,6 +16,13 @@
  * UPDATED: 2026-08-18 — BOOTSTRAP_EXACT/BOOTSTRAP_PATTERNS extended for the
  *          two harvested navbar defs (collapse/dropdown/offcanvas classes,
  *          navbar-expand-*).
+ * UPDATED: 2026-08-19 — vista-sections.js added to MODULES; 'min-vh-100'
+ *          allowlisted for its full-height photo bands; the declared-image
+ *          check now compares the whole path under assets/images/ rather than
+ *          just the filename, because Vista is the first module to ship
+ *          images in a SUBDIRECTORY (assets/images/thumbs/). Filename-only
+ *          matching would have called a thumbs/ declaration a match for a
+ *          top-level reference and vice versa.
  *
  * The data modules import nothing, so `node --test` loads them directly with
  * no bundler in front (same reasoning as css-chunks.test.js). index.js is read
@@ -31,12 +38,14 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import * as graphite from '../../plugins/blocks-sections/graphite-sections.js'
 import * as orbit from '../../plugins/blocks-sections/orbit-sections.js'
+import * as vista from '../../plugins/blocks-sections/vista-sections.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 const MODULES = [
   { name: 'graphite-sections.js', prefix: 'gs-graphite', ...graphite },
-  { name: 'orbit-sections.js',    prefix: 'gs-orbit',    ...orbit }
+  { name: 'orbit-sections.js',    prefix: 'gs-orbit',    ...orbit },
+  { name: 'vista-sections.js',    prefix: 'gs-vista',    ...vista }
 ]
 const ALL_SECTIONS = MODULES.flatMap(m => m.SECTIONS.map(s => ({ ...s, _module: m.name })))
 
@@ -62,7 +71,9 @@ const BOOTSTRAP_EXACT = new Set([
   'navbar-toggler', 'navbar-toggler-icon', 'navbar-collapse', 'collapse',
   'dropdown', 'dropdown-toggle', 'dropdown-menu', 'dropdown-item',
   'sticky-top', 'fixed-top',
-  'offcanvas', 'offcanvas-end', 'offcanvas-header', 'offcanvas-title', 'offcanvas-body'
+  'offcanvas', 'offcanvas-end', 'offcanvas-header', 'offcanvas-title', 'offcanvas-body',
+  // Vista's full-height photo bands (2026-08-19)
+  'min-vh-100'
 ])
 
 const BREAKPOINT = '(sm|md|lg|xl|xxl)'
@@ -117,14 +128,35 @@ function classesIn(html) {
   return classes
 }
 
-/** Image filenames a section's markup asks for via src="assets/images/…". */
+/**
+ * Image paths a section's markup asks for, relative to assets/images/.
+ * A subdirectory is part of the path ('thumbs/tile.jpg'), not stripped —
+ * see declaredImages().
+ */
 function imagesInMarkup(html) {
   return [...html.matchAll(/src="assets\/images\/([^"]+)"/g)].map(m => m[1])
 }
 
-/** Image filenames a chunk asks for via url("../images/…"). */
+/** Image paths a chunk asks for via url("../images/…"), same convention. */
 function imagesInCss(css) {
   return [...css.matchAll(/url\(["']?\.\.\/images\/([^"')]+)["']?\)/g)].map(m => m[1])
+}
+
+/**
+ * What a section declares, expressed the same way imagesInMarkup/imagesInCss
+ * express what it asks for: the path under assets/images/.
+ *
+ * Not the bare filename — Vista ships gallery photos in assets/images/thumbs/,
+ * and a filename-only comparison would happily match a `thumbs/tile.jpg`
+ * declaration against a top-level `tile.jpg` reference (and the reverse),
+ * which is precisely the broken-image case this lint exists to catch.
+ *
+ * @param {object} section - A def from a template's SECTIONS array
+ * @returns {Set<string>} Declared paths relative to assets/images/
+ */
+function declaredImages(section) {
+  return new Set((section.assets || [])
+    .map(asset => asset.to.replace(/^assets\/images\//, '')))
 }
 
 // ─── Markup ────────────────────────────────────────────────────────────────
@@ -262,7 +294,7 @@ test('data-lint: every declared asset resolves on disk and lands under assets/',
 test('data-lint: every image a section renders is declared in its assets', () => {
   for (const module of MODULES) {
     for (const section of module.SECTIONS) {
-      const declared = new Set((section.assets || []).map(a => a.to.split('/').pop()))
+      const declared = declaredImages(section)
       const referenced = [
         ...imagesInMarkup(section.content),
         ...section.cssParts.flatMap(marker => imagesInCss(module.CSS_PARTS[marker]))

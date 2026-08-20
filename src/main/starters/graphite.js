@@ -2,20 +2,21 @@
 // PATH: src/main/starters/graphite.js
 // ROLE: "Graphite" starter — pure data (5 full pages ported verbatim from the
 //       standalone bs5-import/graphite-light static site: index, elements,
-//       left-sidebar, right-sidebar, no-sidebar). Unlike landing/portfolio
-//       this starter has no master template — each page already carries its
-//       own full navbar/off-canvas/footer chrome from the source site, and
-//       cross-page nav links (href="left-sidebar.html" etc.) are kept
-//       verbatim because the flat pages/ export layout makes them resolve
-//       correctly as-is. Framework CSS/JS is the bundle's own vendored
-//       Bootstrap 5 + Font Awesome 7 (solid + brands) + graphite-fonts,
-//       loaded from bundleDir (site/assets/vendor/**) rather than the
-//       landing/portfolio node_modules vendorDeps path. globalCSS points at
-//       the bundle's theme.css (its own url("../images/...) refs already
-//       rewritten to match the bundleDir layout — see starters/graphite/).
+//       left-sidebar, right-sidebar, no-sidebar). This starter has no master
+//       template — each page already carries its own full navbar/off-canvas/
+//       footer chrome from the source site, and cross-page nav links
+//       (href="left-sidebar.html" etc.) are kept verbatim because the flat
+//       pages/ export layout makes them resolve correctly as-is. Framework
+//       CSS/JS is the bundle's own vendored Bootstrap 5 + Font Awesome 7
+//       (solid + brands) + graphite-fonts, loaded from bundleDir
+//       (site/assets/vendor/**). globalCSS points at the bundle's theme.css
+//       (its own url("../images/...) refs already rewritten to match the
+//       bundleDir layout — see starters/graphite/).
 // DEPENDS: nothing (imported by src/main/starters/index.js — registration is
 //          a separate agent's change, not made here)
 // CREATED: 2026-08-02
+// UPDATED: 2026-08-19 — dropped the now-unread `vendorDeps` field when the
+//          node_modules vendor path left with the first-wave starters
 // =============================================================
 
 const INDEX_BODY = `			<nav class="navbar navbar-expand-md fixed-top site-navbar is-overlay" data-nav-overlay="true">
@@ -1346,7 +1347,6 @@ export default {
     }
   ],
   assets: {},
-  vendorDeps: [],
   bundleDir: 'graphite',
   globalCSS: 'assets/css/theme.css',
   framework: {

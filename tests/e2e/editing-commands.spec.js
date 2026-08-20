@@ -13,14 +13,17 @@
  *          isComponentLocked(). One spec proves both items are enabled AND
  *          functional on an unlocked <div>; the other proves they still stay
  *          disabled on genuinely locked (removable:false) template chrome —
- *          same landing-starter chrome + project-creation pattern
- *          reorder.spec.js's master-template spec already uses.
+ *          same chrome fixture reorder.spec.js's master-template spec uses.
+ * UPDATED: 2026-08-19 — that chrome fixture moved off the removed 'landing'
+ *          starter onto helpers.js#seedTemplatedChromeProject.
  */
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject, selectFirstByTag, EXPECTED_PLUGIN_COUNT } from './helpers.js'
+import {
+  launch, openSeedProject, selectFirstByTag, seedTemplatedChromeProject, EXPECTED_PLUGIN_COUNT
+} from './helpers.js'
 
 // Open the context menu for whatever's currently selected — same event the
 // canvas iframe and DOM tree emit (single open path, main.js). Mirrors
@@ -354,30 +357,13 @@ test('Edit Tag / Wrap with Tag stay disabled on locked (removable:false) templat
   const projectPath = join(projectDir, 'chrome.gstrap')
 
   const { app, appWindow } = await launch()
-  await appWindow.waitForFunction(
-    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
-    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
-  )
-  // 'landing' starter (src/main/starters/landing.js): a master template with
-  // locked <header>/<footer> chrome (panels/templates/lock.js#lockOne sets
-  // editable/draggable/removable/copyable = false) around one editable
-  // content region — same project-creation pattern reorder.spec.js's
+  // A master template with locked <header>/<footer> chrome (panels/templates/
+  // lock.js#lockOne sets editable/draggable/removable/copyable = false) around
+  // one editable content region — the same fixture reorder.spec.js's
   // master-template spec uses.
-  await appWindow.evaluate(async path => {
-    const project = await window.grapestrap.project.new({
-      name: 'chrometest', location: path, templateId: 'landing'
-    })
-    const { projectState, pageState } = window.__gstrap
-    projectState.set(project)
-    pageState.open(project.pages[0].name)
-  }, projectPath)
-  await appWindow.waitForFunction(() => {
-    const ed = window.__gstrap?.pluginRegistry?.bound?.editor
-    const doc = ed?.Canvas?.getFrameEl?.()?.contentDocument
-    return !!doc?.querySelector('[data-grpstr-region="content"]')
-  }, null, { timeout: 10_000 })
+  await seedTemplatedChromeProject(appWindow, projectPath)
 
-  await selectFirstByTag(appWindow, 'header')
+  expect(await selectFirstByTag(appWindow, 'header'), 'no <header> chrome to select').toBe('header')
   const headerLocked = await appWindow.evaluate(() =>
     window.__gstrap.pluginRegistry.bound.editor.getSelected()?.get('removable'))
   expect(headerLocked).toBe(false)   // sanity: this really is the locked chrome, not free content

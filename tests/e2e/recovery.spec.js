@@ -107,6 +107,14 @@ test('Recovery: dirty project + SIGKILL → relaunch offers restore → edit ret
     // Restored work is unsaved again, and the snapshot survives until save.
     expect(await appWindow2.evaluate(() => window.__gstrap.projectState.isDirty())).toBe(true)
     expect(await fileExists(recoveryPath)).toBe(true)
+    // Regression: restore re-emits project:opened, whose per-open recovery
+    // check used to re-offer the still-on-disk snapshot in an endless
+    // Recover/Discard loop. Once the snapshot loop is armed for the restored
+    // project, no recovery dialog may be on screen.
+    await appWindow2.waitForFunction(
+      () => window.__gstrap?.recoveryState?.running === true, null, { timeout: 20_000 })
+    expect(await appWindow2.evaluate(
+      () => !!document.querySelector('.gstrap-modal-overlay'))).toBe(false)
   } finally {
     if (app2) await app2.close().catch(() => {})
     await fsp.rm(projectDir, { recursive: true, force: true })

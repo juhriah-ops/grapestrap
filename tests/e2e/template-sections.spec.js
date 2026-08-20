@@ -1,21 +1,24 @@
 // =============================================================
 // PATH: tests/e2e/template-sections.spec.js
-// ROLE: End-to-end coverage for the bundled TEMPLATE sections — the Graphite
-//       and Orbit page bands the stock blocks-sections plugin registers into
-//       the Library panel. Covers the whole three-part payload (images → CSS
+// ROLE: End-to-end coverage for the bundled TEMPLATE sections — the Graphite,
+//       Orbit and Vista page bands the stock blocks-sections plugin registers
+//       into the Library panel. Covers the whole three-part payload (images → CSS
 //       chunks → markup) through the real click path, plus the two properties
 //       that make a bundled section different from a Library ITEM: it lands as
 //       a FREE editable copy, and repeat inserts stack as siblings instead of
 //       nesting.
 // DEPENDS: ./helpers.js (launch, openSeedProject, dismissWelcome,
 //          createBundledStarterProject, fileExists),
-//          plugins/blocks-sections/{graphite,orbit}-sections.js (the data),
+//          plugins/blocks-sections/{graphite,orbit,vista}-sections.js (the data),
 //          src/renderer/editor/{insert-section,css-chunks}.js (the path)
 // CREATED: 2026-08-17
 // UPDATED: 2026-08-18 — GRAPHITE_ROWS/ORBIT_ROWS bumped for the two harvested
 //          navbar defs (graphite-navbar, orbit-navbar); their own coverage
 //          (markup/CSS markers/behaviors delivery) lives in
 //          navbar-behaviors.spec.js, not here.
+// UPDATED: 2026-08-19 — third group (Vista, VISTA_ROWS). Its nested-image
+//          insert (assets/images/thumbs/**, the first bundled section to ship
+//          images below the top level) gets its own test at the bottom.
 //
 // Section DATA correctness (namespacing, declared assets, marker hygiene) is
 // linted in tests/unit/template-sections-data.test.js — cheap and exhaustive
@@ -31,7 +34,8 @@ import { launch, openSeedProject, dismissWelcome, createBundledStarterProject, f
 // a silent change here means a section stopped registering.
 const GRAPHITE_ROWS = 8
 const ORBIT_ROWS = 9
-const BUNDLED_ROWS = GRAPHITE_ROWS + ORBIT_ROWS
+const VISTA_ROWS = 7
+const BUNDLED_ROWS = GRAPHITE_ROWS + ORBIT_ROWS + VISTA_ROWS
 
 // The section every insert assertion below drives: it is the one bundled
 // section carrying BOTH a CSS-referenced background image and a base chunk,
@@ -117,7 +121,7 @@ test('Library paints one read-only group per bundled template', async () => {
     }))
   }))
 
-  expect(panel.groups).toEqual(['Graphite', 'Orbit'])
+  expect(panel.groups).toEqual(['Graphite', 'Orbit', 'Vista'])
   expect(panel.bundledRows).toBe(BUNDLED_ROWS)
   expect(panel.insertButtons).toBe(BUNDLED_ROWS)
   expect(panel.previews).toBe(BUNDLED_ROWS)   // every def ships its own wireframe
@@ -125,7 +129,8 @@ test('Library paints one read-only group per bundled template', async () => {
   expect(panel.projectInsertButtons).toBe(0)
   expect(panel.perGroup).toEqual([
     { name: 'Graphite', rows: GRAPHITE_ROWS },
-    { name: 'Orbit', rows: ORBIT_ROWS }
+    { name: 'Orbit', rows: ORBIT_ROWS },
+    { name: 'Vista', rows: VISTA_ROWS }
   ])
 
   // Every row is addressable by its registered id, and carries its description
@@ -330,6 +335,38 @@ test('an inserted section is a free copy — every child is selectable', async (
   expect(editable.hoverable).toBe(true)
   expect(editable.removable).toBe(true)
   expect(editable.wrapped).toBe(false)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('a section whose images live in a subdirectory copies the whole path, not just the file', async () => {
+  // Vista's photo grid is the first bundled section to ship images below the
+  // top level (assets/images/thumbs/**). Nothing before it exercised
+  // copyFilesIdempotent's recursive mkdir on this path, and a section that
+  // flattened its images would render six broken tiles.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-tsec-vista-'))
+  const projectPath = join(projectDir, 'nested.gstrap')
+  const { app, appWindow } = await launch()
+  await dismissWelcome(appWindow)
+  await openSeedProject(appWindow, projectPath)
+  await installCounter(appWindow)
+
+  await insertBundled(appWindow, 'vista-photo-grid', 'gs-vista-photo-grid', 1)
+
+  const images = join(projectDir, 'site', 'assets', 'images')
+  expect(await fileExists(join(images, 'thumbs', 'gallery-jet-flight.jpg'))).toBe(true)
+  expect(await fileExists(join(images, 'thumbs', 'gallery-formation-detail.jpg'))).toBe(true)
+  // The chunk's own url("../images/overlay.png") texture is top-level, and
+  // both levels have to arrive from the one declaration list.
+  expect(await fileExists(join(images, 'overlay.png'))).toBe(true)
+  expect(await fileExists(join(images, 'gallery-jet-flight.jpg'))).toBe(false) // never flattened
+
+  expect(await markerCounts(appWindow, ['vista-base', 'vista-photo-grid'])).toEqual([1, 1])
+
+  const src = await appWindow.evaluate(() =>
+    window.__gstrap.pluginRegistry.bound.editor.getHtml())
+  expect(src).toContain('assets/images/thumbs/gallery-jet-flight.jpg')
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })

@@ -533,11 +533,12 @@ export async function createProject({ targetPath, name, templateId = 'blank', se
 
   if (starter) {
     // Writes site/templates/*.gstrap-tpl, site/pages/*.html (full HTML via
-    // composeFullPageHtml), text assets, vendor deps; appends the matching
-    // manifest entries and stamps metadata.starter. selectedPages narrows
+    // composeFullPageHtml), text assets, and the starter's asset bundle;
+    // appends the matching manifest entries and stamps metadata.starter
+    // (provenance only — nothing reads it back on load). selectedPages narrows
     // which pages get written — see applyStarter's doc block for the
-    // fail-open + shared-assets rationale (templates/assets/vendorDeps/
-    // bundle stay unconditional regardless of the selection).
+    // fail-open + shared-assets rationale (templates/assets/bundle stay
+    // unconditional regardless of the selection).
     await applyStarter({ site, starter, manifest, selectedPages })
   } else {
     const indexHtml = renderBlankIndex(name)
@@ -654,8 +655,8 @@ export async function loadProject(manifestPath) {
           // customScripts are emitted at end-of-body (composeFullPageHtml)
           // and stripped from the extracted body, so the parse always comes
           // back empty — the manifest is their source of truth. Without this
-          // the spread above clobbers them with [] on every load (first real
-          // producer: the Wave 4 Portfolio starter's glightbox init).
+          // the spread above clobbers them with [] on every load (Graphite's
+          // and Orbit's per-page assets/js/main.js is the live producer).
           customScripts: head.customScripts?.length
             ? head.customScripts
             : (page.head?.customScripts || [])

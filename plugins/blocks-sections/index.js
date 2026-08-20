@@ -10,13 +10,14 @@
  *      BLOCK and as a section, and carrying no `group` — so they stay out of
  *      the Library panel, which paints grouped sections only.
  *
- *   2. TEMPLATE sections (graphite-sections.js, orbit-sections.js, added
- *      2026-08-17) — the two bundled starters' own page bands, harvested into
- *      free editable copies. These carry a `group` (the template name), a CSS
- *      payload, and the images they need, and appear as read-only rows in the
- *      Library panel. Insert-panel blocks are deliberately NOT registered for
- *      them: their CSS chunks and images only land through the Library's
- *      insert path (renderer/editor/insert-section.js).
+ *   2. TEMPLATE sections (graphite-sections.js and orbit-sections.js, added
+ *      2026-08-17; vista-sections.js, 2026-08-19) — the bundled starters' own
+ *      page bands, harvested into free editable copies. These carry a `group`
+ *      (the template name), a CSS payload, and the images they need, and
+ *      appear as read-only rows in the Library panel. Insert-panel blocks are
+ *      deliberately NOT registered for them: their CSS chunks and images only
+ *      land through the Library's insert path
+ *      (renderer/editor/insert-section.js).
  *
  * Sections that need third-party JS (carousel/lightbox) declare dependencies;
  * the host injects locally bundled scripts into the canvas iframe on demand.
@@ -24,12 +25,16 @@
 
 import { CSS_PARTS as GRAPHITE_CSS_PARTS, SECTIONS as GRAPHITE_SECTIONS } from './graphite-sections.js'
 import { CSS_PARTS as ORBIT_CSS_PARTS, SECTIONS as ORBIT_SECTIONS } from './orbit-sections.js'
+import { CSS_PARTS as VISTA_CSS_PARTS, SECTIONS as VISTA_SECTIONS } from './vista-sections.js'
 
 // Each template's Library group header and the two data modules behind it.
-// The `group` string is what the Library panel prints above the rows.
+// The `group` string is what the Library panel prints above the rows, and the
+// order here is the order the groups paint in — same order as the New Project
+// dialog's starter list (src/main/starters/index.js).
 const TEMPLATE_FAMILIES = [
   { group: 'Graphite', sections: GRAPHITE_SECTIONS, cssParts: GRAPHITE_CSS_PARTS },
-  { group: 'Orbit',    sections: ORBIT_SECTIONS,    cssParts: ORBIT_CSS_PARTS }
+  { group: 'Orbit',    sections: ORBIT_SECTIONS,    cssParts: ORBIT_CSS_PARTS },
+  { group: 'Vista',    sections: VISTA_SECTIONS,    cssParts: VISTA_CSS_PARTS }
 ]
 
 // The Bootstrap version every def in this plugin was authored against —
@@ -208,21 +213,21 @@ const SECTIONS = [
     <div class="row g-4">
       <div class="col-md-4">
         <div class="text-center">
-          <div class="d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary rounded-circle mb-3" style="width:64px;height:64px;font-size:24px">★</div>
+          <div class="d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary rounded-circle mb-3 p-3 fs-4 lh-1">★</div>
           <h5>Fast</h5>
           <p class="text-secondary">Built for speed at every layer of the stack.</p>
         </div>
       </div>
       <div class="col-md-4">
         <div class="text-center">
-          <div class="d-inline-flex align-items-center justify-content-center bg-success-subtle text-success rounded-circle mb-3" style="width:64px;height:64px;font-size:24px">✓</div>
+          <div class="d-inline-flex align-items-center justify-content-center bg-success-subtle text-success rounded-circle mb-3 p-3 fs-4 lh-1">✓</div>
           <h5>Reliable</h5>
           <p class="text-secondary">99.99% uptime, audited regularly.</p>
         </div>
       </div>
       <div class="col-md-4">
         <div class="text-center">
-          <div class="d-inline-flex align-items-center justify-content-center bg-warning-subtle text-warning rounded-circle mb-3" style="width:64px;height:64px;font-size:24px">♥</div>
+          <div class="d-inline-flex align-items-center justify-content-center bg-warning-subtle text-warning rounded-circle mb-3 p-3 fs-4 lh-1">♥</div>
           <h5>Loved</h5>
           <p class="text-secondary">Thousands of teams already on board.</p>
         </div>

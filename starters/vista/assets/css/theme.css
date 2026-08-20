@@ -1,0 +1,376 @@
+/*
+	File: assets/css/theme.css
+	Purpose: Theme layer over Bootstrap 5 for the "Vista" (light) template —
+	         typography, section backdrops, pill/arrow buttons, content boxes,
+	         reveal-on-scroll states, and the navbar/footer skin.
+	         Loads after bootstrap.min.css.
+	Used by: index.html
+	GrapeStrap starter note (2026-08-19): this is the single editable
+	stylesheet of the Vista starter (manifest.globalCSS). Two changes from the
+	standalone source — the seven-palette switcher (its six per-palette accent
+	override blocks and the header swatch styles) is demo machinery and was
+	dropped, leaving green (the :root defaults below) as the one palette; and
+	every url() moved from the source's split images/ + assets/css/images/
+	pair onto the single ../images/ convention the other bundled starters use.
+	A spec greps this file for the dropped selectors, so mention them in prose
+	rather than by name. See src/main/starters/vista.js.
+*/
+
+/* Palette + metrics */
+
+	:root {
+		--accent: #98c593;
+		--accent-hover: #a8d5a3;
+		--accent-active: #88b583;
+		--accent-rgb: 152, 197, 147;
+		--ink: #39454b;
+		--paper: #ffffff;
+		--paper-alt: #f5f6f7;
+		--footer-ink: rgba(185, 186, 187, 0.5);
+		--footer-ink-hover: #b9babb;
+		--navbar-height: 3.5rem;
+	}
+
+/* Base typography */
+
+	html {
+		scroll-behavior: smooth;
+		scroll-padding-top: calc(var(--navbar-height) - 1px);
+	}
+
+	/* No overflow-x on body: it would flip computed overflow-y to auto and break
+	   Bootstrap ScrollSpy's scroll-root detection. Sections clip their own reveals. */
+	body {
+		padding-top: var(--navbar-height);
+		background: var(--paper);
+		font-family: 'Source Sans Pro', sans-serif;
+		font-weight: 300;
+		font-size: 1.5rem;
+		line-height: 1.75;
+		letter-spacing: 0.5px;
+		color: var(--ink);
+	}
+
+	h1, h2, h3, h4, h5, h6 {
+		font-weight: 900;
+		color: inherit;
+	}
+
+	h2 {
+		font-size: 2.25em;
+		letter-spacing: -2px;
+		line-height: 1.25;
+	}
+
+	a {
+		color: var(--accent);
+	}
+
+	@media (max-width: 1680px) {
+		body { font-size: 1.35rem; }
+	}
+
+	@media (max-width: 1280px) {
+		body { font-size: 1.2rem; }
+	}
+
+	@media (max-width: 767.98px) {
+		body { font-size: 1.1rem; }
+	}
+
+/* Navbar */
+
+	.site-navbar {
+		min-height: var(--navbar-height);
+		background: rgba(255, 255, 255, 0.95);
+		box-shadow: 0 0 0.15em 0 rgba(0, 0, 0, 0.1);
+		font-size: 1.125rem;
+	}
+
+		.site-navbar .site-logo {
+			font-weight: 900;
+			letter-spacing: -1px;
+			color: var(--ink);
+		}
+
+		.site-navbar .nav-link {
+			color: var(--ink);
+		}
+
+			.site-navbar .nav-link:hover,
+			.site-navbar .nav-link.active {
+				color: var(--accent);
+			}
+
+	@media (max-width: 767.98px) {
+		.site-navbar .navbar-collapse {
+			background: rgba(255, 255, 255, 0.97);
+		}
+	}
+
+/* Section backdrops (texture overlay + dark gradient + photo, parallax-fixed
+   on desktop). The gradient keeps the white hero type and the light arrow
+   icons legible regardless of how bright the photo underneath is. */
+
+	#intro {
+		background: url("../images/overlay.png"), linear-gradient(rgba(20, 22, 24, 0.4), rgba(20, 22, 24, 0.4)), url("../images/hero-backdrop.jpg");
+		background-size: 256px 256px, cover, cover;
+		background-attachment: fixed, fixed, fixed;
+		background-position: top left, center center, center center;
+		background-repeat: repeat, no-repeat, no-repeat;
+	}
+
+	#one {
+		background: url("../images/overlay.png"), linear-gradient(rgba(20, 22, 24, 0.35), rgba(20, 22, 24, 0.35)), url("../images/split-panel-backdrop.jpg");
+		background-size: 256px 256px, cover, cover;
+		background-attachment: fixed, fixed, fixed;
+		background-position: top left, center center, center center;
+		background-repeat: repeat, no-repeat, no-repeat;
+	}
+
+	#two {
+		background: url("../images/overlay.png"), linear-gradient(rgba(20, 22, 24, 0.4), rgba(20, 22, 24, 0.4)), url("../images/parallax-backdrop.jpg");
+		background-size: 256px 256px, cover, cover;
+		background-attachment: fixed, fixed, fixed;
+		background-position: top left, center center, center center;
+		background-repeat: repeat, no-repeat, no-repeat;
+	}
+
+	/* Fixed backgrounds jank on touch devices — fall back to scroll */
+	@media (hover: none), (max-width: 767.98px) {
+		#intro, #one, #two {
+			background-attachment: scroll, scroll, scroll;
+		}
+	}
+
+/* Hero */
+
+	.hero-section .hero-title {
+		font-size: 4.25em;
+		line-height: 1;
+		letter-spacing: -4px;
+	}
+
+	.hero-section .hero-copy {
+		max-width: 46em;
+	}
+
+/* Split panels */
+
+	.split-section {
+		position: relative;
+		overflow: hidden;
+		padding: 3em 0;
+	}
+
+	.content-box {
+		background: var(--paper);
+		color: var(--ink);
+		padding: 3.5em 2.5em;
+	}
+
+/* Buttons */
+
+	.btn-accent,
+	.btn-ghost {
+		border-radius: 3.5em;
+		height: 3.5em;
+		line-height: 3.5em;
+		padding: 0 2em;
+		font-size: 1em;
+		font-weight: 300;
+		letter-spacing: 0.5px;
+	}
+
+	.btn-accent {
+		background-color: var(--accent);
+		border: 0;
+		color: #fff;
+	}
+
+		.btn-accent:hover {
+			background-color: var(--accent-hover);
+			color: #fff;
+		}
+
+		.btn-accent:active {
+			background-color: var(--accent-active);
+			color: #fff;
+		}
+
+	.btn-ghost {
+		background-color: transparent;
+		border: solid 2px #e5e6e7;
+		color: inherit;
+	}
+
+		.btn-ghost:hover {
+			background-color: rgba(145, 146, 147, 0.035);
+			color: inherit;
+		}
+
+	.text-white .btn-ghost {
+		border-color: #fff;
+		background-color: rgba(64, 64, 64, 0.05);
+		color: #fff;
+	}
+
+		.text-white .btn-ghost:hover {
+			background-color: rgba(255, 255, 255, 0.1);
+			color: #fff;
+		}
+
+	.btn-down {
+		width: 5em;
+		height: 5em;
+		line-height: 4.5em;
+		padding: 0;
+		background-image: url("../images/arrow.svg");
+		background-position: center center;
+		background-repeat: no-repeat;
+		text-indent: -10em;
+		overflow: hidden;
+	}
+
+		.btn-down.btn-down-light {
+			background-image: url("../images/dark-arrow.svg");
+		}
+
+		.btn-down.btn-down-anchored {
+			position: absolute;
+			left: 50%;
+			bottom: 0;
+			transform: translateX(-50%);
+			height: 4.5em;
+			border-bottom: 0;
+			border-radius: 3em 3em 0 0;
+		}
+
+/* Showcase (work) + contact sections */
+
+	.showcase-section {
+		background: var(--paper);
+		padding: 6em 0;
+		overflow-x: hidden;
+	}
+
+	.contact-section {
+		background: var(--paper-alt);
+		padding: 6em 0 0;
+		overflow: hidden;
+	}
+
+	.section-header {
+		margin-bottom: 2em;
+	}
+
+	.gallery-item {
+		position: relative;
+		display: block;
+	}
+
+		/* Same texture overlay the original places over every gallery image */
+		.gallery-item::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			background: url("../images/overlay.png");
+		}
+
+	.contact-box {
+		padding: 2em;
+	}
+
+		.contact-box .form-control {
+			font-weight: 300;
+			letter-spacing: 0.5px;
+			color: var(--ink);
+		}
+
+			.contact-box .form-control:focus {
+				border-color: var(--accent);
+				box-shadow: 0 0 0 0.25rem rgba(var(--accent-rgb), 0.25);
+			}
+
+/* Footer */
+
+	.site-footer {
+		background: var(--ink);
+		color: var(--footer-ink);
+		padding: 1.5em 1em;
+	}
+
+		.site-footer a {
+			color: var(--footer-ink);
+			text-decoration: none;
+		}
+
+			.site-footer a:hover {
+				color: var(--footer-ink-hover);
+			}
+
+		.site-footer .social-links a {
+			display: inline-block;
+			padding: 0.5em;
+			font-size: 1.25em;
+		}
+
+		.site-footer .footer-copy {
+			font-size: 0.9em;
+		}
+
+/* Lightbox */
+
+	.lightbox-modal .modal-content {
+		background: var(--paper);
+	}
+
+	.lightbox-modal .carousel-item img {
+		max-height: 75vh;
+		object-fit: contain;
+	}
+
+	.lightbox-modal .carousel-caption {
+		position: static;
+		padding: 0.75em 0;
+		color: var(--ink);
+	}
+
+		.lightbox-modal .carousel-caption p {
+			margin: 0;
+		}
+
+/* Reveal-on-scroll (scrollex replacement; JS toggles .is-visible) */
+
+	@media (prefers-reduced-motion: no-preference) {
+
+		[data-reveal] {
+			transition: opacity 1s ease, transform 1s ease;
+		}
+
+		[data-reveal]:not(.is-visible) {
+			opacity: 0;
+		}
+
+		[data-reveal="from-right"]:not(.is-visible) {
+			transform: translateX(14em);
+		}
+
+		[data-reveal="from-left"]:not(.is-visible) {
+			transform: translateX(-14em);
+		}
+
+		[data-reveal="from-bottom"]:not(.is-visible) {
+			transform: translateY(10em);
+		}
+
+		/* Stagger gallery rows like the original's cascading enter */
+		.gallery-row:nth-of-type(2) [data-reveal] {
+			transition-delay: 0.1s;
+		}
+
+		.gallery-row:nth-of-type(3) [data-reveal] {
+			transition-delay: 0.2s;
+		}
+
+	}

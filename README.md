@@ -53,8 +53,7 @@ tested (127 end-to-end specs run in CI) but young. Report problems on the
   resolution is needed to deploy.
 - **Library items and snippets** — linked instances that propagate, and
   free-copy fragments.
-- **Starter templates** for new projects: Blank, Landing Page, Portfolio,
-  Blog.
+- **Starter templates** for new projects: Blank, Graphite, Orbit, Vista.
 - **Self-contained projects.** Each project keeps its deployable site in a
   `site/` folder with Bootstrap, Bootstrap Icons, and Font Awesome bundled
   in-project — no CDN dependency. Copy `site/` to a web server and every

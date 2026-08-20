@@ -147,6 +147,12 @@ const COMMON_OPTIONS = {
   // the canvas-drift-on-resize bug. Single source of truth: the GL host RO
   // calls relayoutAllMonaco() (see registerForRelayout / golden-layout-config).
   automaticLayout: false,
+  // Suggest/hover/param-hint widgets default to position:absolute and get
+  // clipped by Golden Layout's .lm_content { overflow: hidden } — in a narrow
+  // side panel the suggest list truncates at the panel edge. fixed keeps the
+  // widgets inside editor.getDomNode() (panel-scoped spec selectors intact)
+  // but positions them viewport-relative so they escape the clip.
+  fixedOverflowWidgets: true,
   bracketPairColorization: { enabled: true },
   guides: { bracketPairs: true, indentation: true },
   // Monaco's default disables quick suggestions inside strings — but CSS

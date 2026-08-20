@@ -3,14 +3,24 @@
  *
  * PATH: tests/e2e/preview-starter-assets.spec.js
  * ROLE: v0.1.0 acceptance §5 regression — preview a project created from a
- *       starter (Landing = bundled framework, Graphite = vendored framework)
- *       and fetch, exactly like a browser would, every stylesheet <link>,
- *       every <script src>, and every url() inside each served stylesheet.
- *       Each must answer 200 with the right Content-Type. preview.spec.js
- *       covers the blank seed project only, which is why a starter-specific
- *       CSS regression could pass the suite yet fail workstation acceptance.
+ *       starter (Graphite, Orbit and Vista, each with its own vendored
+ *       framework and its own webfont/photo set) and fetch, like a browser,
+ *       every stylesheet <link>, every <script src>, and every url() inside
+ *       each served stylesheet. Each must answer 200 with the right
+ *       Content-Type. preview.spec.js covers the blank seed project only,
+ *       which is why a starter-specific CSS regression could pass the suite
+ *       yet fail workstation acceptance.
  * DEPENDS: @playwright/test, node:http, ./helpers.js
  * CREATED: 2026-08-03
+ * UPDATED: 2026-08-19 — the two Landing cases moved to the surviving bundled
+ *          starters when the three first-wave starters were removed. The
+ *          "bundled framework vs vendored framework" axis this file used to
+ *          cover collapsed with them: every starter now vendors its own
+ *          framework, so the pinned stylesheet set below is Graphite's
+ *          vendored five plus its theme.css, not the app's bundled four.
+ * UPDATED: 2026-08-19 — Vista case added: its port relocated every image the
+ *          template references, so its theme.css url()s are freshly rewritten
+ *          and worth fetching for real.
  */
 import { test, expect } from '@playwright/test'
 import http from 'node:http'
@@ -119,10 +129,10 @@ async function assertAllAssetsServe(pageUrl) {
   expect(failures).toEqual([])
 }
 
-test('preview: Landing starter page serves every stylesheet, script and css url() it references', async () => {
-  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-landing-'))
+test('preview: Orbit starter page serves every stylesheet, script and css url() it references', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-orbit-'))
   const { app, appWindow } = await launch({ GRAPESTRAP_PREVIEW_CMD: STUB_BROWSER })
-  await createStarterProject(appWindow, join(projectDir, 'pv.gstrap'), 'landing')
+  await createStarterProject(appWindow, join(projectDir, 'pv.gstrap'), 'orbit')
 
   const status = await startPreview(appWindow)
   await assertAllAssetsServe(status.pageUrl)
@@ -135,6 +145,23 @@ test('preview: Graphite starter page serves every stylesheet, script and css url
   const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-graphite-'))
   const { app, appWindow } = await launch({ GRAPESTRAP_PREVIEW_CMD: STUB_BROWSER })
   await createStarterProject(appWindow, join(projectDir, 'pv.gstrap'), 'graphite')
+
+  const status = await startPreview(appWindow)
+  await assertAllAssetsServe(status.pageUrl)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('preview: Vista starter page serves every stylesheet, script and css url() it references', async () => {
+  // Vista is the port that MOVED images: the source's root images/ tree and
+  // its assets/css/images/ textures were merged into one assets/images/, and
+  // every url() in theme.css rewritten to match. That rewrite is exactly the
+  // kind of thing that looks right in the editor and 404s in a browser, which
+  // is what this file exists to catch.
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-vista-'))
+  const { app, appWindow } = await launch({ GRAPESTRAP_PREVIEW_CMD: STUB_BROWSER })
+  await createStarterProject(appWindow, join(projectDir, 'pv.gstrap'), 'vista')
 
   const status = await startPreview(appWindow)
   await assertAllAssetsServe(status.pageUrl)
@@ -192,16 +219,28 @@ test('legacy css url() migrates on open, persists on save, and previews resolvab
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
 
+// The starter's composed stylesheet set, in emit order: its vendored framework
+// CSS (manifest.framework.css — src/main/starters/graphite.js) followed by its
+// globalCSS. Pinned as a literal so a leak or a drop is a diff, not a guess.
+const GRAPHITE_STYLESHEETS = [
+  'assets/vendor/bootstrap/bootstrap.min.css',
+  'assets/vendor/fontawesome/css/fontawesome.min.css',
+  'assets/vendor/fontawesome/css/solid.min.css',
+  'assets/vendor/fontawesome/css/brands.min.css',
+  'assets/vendor/fonts/graphite-fonts.css',
+  'assets/css/theme.css'
+]
+
 // Acceptance §3→§5 order: the page is edited and SAVED before preview ever
 // starts, and again while it runs (step 17). Both the initial export and the
 // SSE re-export must keep serving the full asset set, and the stylesheet set
-// itself must stay exactly the composed four — a canvas-leaked framework tag
+// itself must stay exactly the composed list — a canvas-leaked framework tag
 // (absolute gstrap-plugin:// href) would render unstyled in a real browser
 // while every relative asset still probes 200.
-test('preview: Landing page edited + saved before and during preview keeps its stylesheet set intact', async () => {
-  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-landedit-'))
+test('preview: Graphite page edited + saved before and during preview keeps its stylesheet set intact', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-pv-graphite-edit-'))
   const { app, appWindow } = await launch({ GRAPESTRAP_PREVIEW_CMD: STUB_BROWSER })
-  await createStarterProject(appWindow, join(projectDir, 'pv.gstrap'), 'landing')
+  await createStarterProject(appWindow, join(projectDir, 'pv.gstrap'), 'graphite')
 
   // Step-10 stand-in: mutate an editable region, then a real save.
   await appWindow.evaluate(() => {
@@ -217,12 +256,7 @@ test('preview: Landing page edited + saved before and during preview keeps its s
 
   const before = await request(status.pageUrl)
   expect(before.body).toContain('acceptance-edit-1')
-  expect(stylesheetHrefs(before.body)).toEqual([
-    'assets/css/bootstrap.css',
-    'assets/css/bootstrap-icons.css',
-    'assets/css/all.css',
-    'assets/css/style.css'
-  ])
+  expect(stylesheetHrefs(before.body)).toEqual(GRAPHITE_STYLESHEETS)
 
   // Step 17: edit + save while the server runs → debounce → re-export.
   await appWindow.evaluate(() => {
@@ -235,12 +269,7 @@ test('preview: Landing page edited + saved before and during preview keeps its s
   { timeout: 10_000 }).toBe(true)
 
   const after = await request(status.pageUrl)
-  expect(stylesheetHrefs(after.body)).toEqual([
-    'assets/css/bootstrap.css',
-    'assets/css/bootstrap-icons.css',
-    'assets/css/all.css',
-    'assets/css/style.css'
-  ])
+  expect(stylesheetHrefs(after.body)).toEqual(GRAPHITE_STYLESHEETS)
   await assertAllAssetsServe(status.pageUrl)
 
   await app.close()

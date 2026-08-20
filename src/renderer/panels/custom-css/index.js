@@ -61,6 +61,8 @@ export function renderCustomCss(host) {
     minimap: { enabled: false },
     // automaticLayout intentionally OFF — see monaco-init.js for the rationale.
     automaticLayout: false,
+    // Escape .lm_content overflow clipping — see monaco-init.js COMMON_OPTIONS.
+    fixedOverflowWidgets: true,
     scrollBeyondLastLine: false
   })
   registerForRelayout(cssEditor)

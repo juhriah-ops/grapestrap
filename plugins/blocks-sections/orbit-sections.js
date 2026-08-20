@@ -49,9 +49,10 @@
 //     breakpoint); the source's extra four were tour filler.
 //   - The navbar def is the single <nav> element — Bootstrap's own Collapse
 //     component IS the mobile panel here, so unlike Graphite there is no
-//     off-canvas sibling to wrap it with. The starter's `<ul class=
-//     "theme-picker">` (the seven accent swatches, localStorage, and the
-//     data-theme wiring in main.js) is starter machinery and does not ship;
+//     off-canvas sibling to wrap it with. The gallery demo's `<ul class=
+//     "theme-picker">` (seven accent swatches, localStorage, data-theme
+//     wiring) never ships here — and since 2026-08-19 the starter itself
+//     no longer carries it either;
 //     the six-entry link list trims to four items plus the Components
 //     dropdown, keeping the dropdown's own nested "Layouts" submenu intact so
 //     the section still demonstrates the two-level menu. `.dropdown-submenu`
@@ -380,8 +381,8 @@ export const CSS_PARTS = {
   // source, so a straight rename to `.gs-orbit-nav` is the whole job — no
   // body-level rules to re-scope. Nested-submenu open/close and flyout
   // position are the behaviors runtime's job (gstrap-behaviors.css); the
-  // theme-picker and its seven swatch colors are starter machinery and do
-  // not ship with the section.
+  // theme-picker and its seven swatch colors are gallery-demo machinery and
+  // do not ship with the section (nor, since 2026-08-19, with the starter).
   'orbit-navbar': `.gs-orbit-nav {
   padding: 1em 1.5em;
   background-color: var(--gs-orbit-ink);

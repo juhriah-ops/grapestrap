@@ -2,8 +2,9 @@
 // PATH: src/main/copy-tasks.js
 // ROLE: Shared idempotent copy helpers — copyFilesIdempotent (explicit
 //       [src,dst] tuples) was extracted from the body of project-manager.js
-//       copyFrameworkAssets (Wave 4) once starters/index.js copyVendorAssets
-//       became a second consumer; copyDirIdempotent (whole-tree walk) was
+//       copyFrameworkAssets (Wave 4) once a second consumer appeared; today
+//       that second consumer is ipc-handlers.js sections:copy-assets (bundled
+//       Library sections' images). copyDirIdempotent (whole-tree walk) was
 //       added for starter asset bundles (starters/<name>/**, incl. binaries).
 //       Skip-if-exists semantics are identical in both: never clobber an
 //       asset the user may have hand-edited; collect failures for the caller
@@ -11,6 +12,8 @@
 // DEPENDS: node:fs, node:path
 // CREATED: 2026-07-12 (Wave 4)
 // UPDATED: 2026-08-02 — copyDirIdempotent added (Graphite starter bundle)
+// UPDATED: 2026-08-19 — copyVendorAssets (starters/index.js) retired with the
+//          first-wave starters; ROLE now names the live second consumer
 // =============================================================
 
 import { promises as fsp } from 'node:fs'

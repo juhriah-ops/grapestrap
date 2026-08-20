@@ -16,8 +16,13 @@
 // UPDATED: 2026-08-11 — per-page checklist under the starter select. A
 //          starter with 2+ pages reveals a checkbox list (all checked by
 //          default, select-all toggle) that narrows project:new's
-//          selectedPages; single-page starters (landing/portfolio) and Blank
-//          render exactly as before — no checklist ever appears for them.
+//          selectedPages; a single-page starter and Blank render exactly as
+//          before — no checklist ever appears for them.
+// UPDATED: 2026-08-19 — the first-wave single-page starters (landing,
+//          portfolio) were removed from the product; for a few hours only
+//          Blank reached the no-checklist branch. Vista then landed as a
+//          one-page starter, so MIN_PAGES_FOR_CHECKLIST guards a real
+//          registry entry again.
 // =============================================================
 
 import { t } from '../i18n.js'
@@ -26,7 +31,7 @@ import { templateSelectHtml } from './template-select.js'
 let activeDialog = null
 
 // A starter needs at least this many pages before the checklist is worth
-// showing — a 1-page starter (landing, portfolio) has nothing to narrow.
+// showing — a 1-page starter has nothing to narrow.
 const MIN_PAGES_FOR_CHECKLIST = 2
 
 /**

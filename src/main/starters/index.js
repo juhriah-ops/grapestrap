@@ -10,22 +10,19 @@
 //       is the absence of a starter (dialog prepends it, the same way the
 //       New Page dialog prepends "None").
 //
-//       Two flavours of starter live here. Landing/portfolio/blog are pure
-//       text: HTML strings plus a couple of node_modules vendor files pulled
-//       in by name (vendorDeps). Graphite and Orbit additionally carry a
-//       BINARY ASSET BUNDLE on disk at <appRoot>/starters/<bundleDir>/ —
-//       vendored Bootstrap + Font Awesome + webfonts + photos — copied
-//       wholesale into the new project, and declare the manifest overrides
-//       that go with it (globalCSS → their own theme.css, framework → their
-//       own CSS/JS set). A starter carrying `framework` owns the project's
-//       framework outright: project-manager skips copyFrameworkAssets for it
-//       on both create and load, and the page composer emits the vendored
-//       links instead.
-// DEPENDS: node:fs, node:path, electron (app.getAppPath for vendor + bundle
-//          sources), ../../shared/page-html.js (composeFullPageHtml),
-//          ../copy-tasks.js (copyFilesIdempotent — shared with
-//          copyFrameworkAssets — and copyDirIdempotent),
-//          ./landing.js, ./portfolio.js, ./blog.js, ./graphite.js, ./orbit.js
+//       Every registered starter is pure data: HTML strings for its pages and
+//       templates, plus a BINARY ASSET BUNDLE on disk at
+//       <appRoot>/starters/<bundleDir>/ — vendored Bootstrap + Font Awesome +
+//       webfonts + photos — copied wholesale into the new project, and the
+//       manifest overrides that go with it (globalCSS → their own theme.css,
+//       framework → their own CSS/JS set). A starter carrying `framework` owns
+//       the project's framework outright: project-manager skips
+//       copyFrameworkAssets for it on both create and load, and the page
+//       composer emits the vendored links instead.
+// DEPENDS: node:fs, node:path, electron (app.getAppPath for bundle sources),
+//          ../../shared/page-html.js (composeFullPageHtml),
+//          ../copy-tasks.js (copyDirIdempotent),
+//          ./graphite.js, ./orbit.js, ./vista.js
 // CREATED: 2026-07-12 (Wave 4)
 // UPDATED: 2026-08-11 — listStarters() now includes per-page metadata
 //                       (name/title/description, no HTML); new
@@ -36,38 +33,33 @@
 // UPDATED: 2026-08-17 — Orbit starter registered (second bundled starter,
 //                       same shape as Graphite: bundleDir + globalCSS +
 //                       framework overrides)
+// UPDATED: 2026-08-19 — the three first-wave starters (landing, portfolio,
+//                       blog) were removed from the product. They were the
+//                       only consumers of the node_modules vendorDeps path,
+//                       so VENDOR_FILES/copyVendorAssets went with them;
+//                       manifest.vendorDeps stays a manifest field, seeded
+//                       [] by project-manager. metadata.starter on projects
+//                       created from the removed ids is provenance only —
+//                       getStarter fails open, so those projects still open.
+// UPDATED: 2026-08-19 — Vista starter registered (third bundled starter, same
+//                       shape as Graphite and Orbit; one page rather than
+//                       five — it is a single-page template)
 // =============================================================
 
 import { promises as fsp } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import { composeFullPageHtml } from '../../shared/page-html.js'
-import { copyFilesIdempotent, copyDirIdempotent } from '../copy-tasks.js'
-import { landing } from './landing.js'
-import { portfolio } from './portfolio.js'
-import { blog } from './blog.js'
-// Graphite and Orbit are default exports (the others are named) — both are
-// generated pure-data rather than hand-authored alongside this registry.
+import { copyDirIdempotent } from '../copy-tasks.js'
+// Every starter is a default export — generated pure-data rather than
+// hand-authored alongside this registry.
 import graphite from './graphite.js'
 import orbit from './orbit.js'
+import vista from './vista.js'
 
 // Registration order = dialog display order (after the prepended Blank).
-const STARTERS = [landing, portfolio, blog, graphite, orbit]
+const STARTERS = [graphite, orbit, vista]
 const BY_ID = new Map(STARTERS.map(s => [s.id, s]))
-
-// In-project destinations mirror copyFrameworkAssets' un-min-first policy:
-// pages link the readable file; .min ships alongside for a deploy-time swap.
-// Sources resolve through app.getAppPath() → bundled node_modules, the exact
-// mechanism copyFrameworkAssets already proves in packaged builds.
-const VENDOR_FILES = {
-  glightbox: [
-    // [src relative to node_modules, dst relative to site/, fatal?]
-    ['glightbox/dist/css/glightbox.css',     'assets/vendor/glightbox/glightbox.css',     true],
-    ['glightbox/dist/css/glightbox.min.css', 'assets/vendor/glightbox/glightbox.min.css', false],
-    ['glightbox/dist/js/glightbox.js',       'assets/vendor/glightbox/glightbox.js',      true],
-    ['glightbox/dist/js/glightbox.min.js',   'assets/vendor/glightbox/glightbox.min.js',  false]
-  ]
-}
 
 /**
  * Dialog-facing list — ids, labels, and per-page metadata (name/title/
@@ -129,40 +121,11 @@ export function getStarterPage(starterId, pageName) {
 }
 
 /**
- * Copy a starter's vendor dependencies into site/assets/vendor/<dep>/.
- * Idempotent (skip-if-exists) via the shared copy helper. Unknown dep names
- * are an authoring error — throw with the known list so a bad starter
- * definition dies loudly in the spec run, not silently in the field.
- */
-export async function copyVendorAssets(siteRoot, deps = []) {
-  const appRoot = app.getAppPath()
-  const tasks = []
-  for (const dep of deps) {
-    const files = VENDOR_FILES[dep]
-    if (!files) {
-      throw new Error(
-        `Unknown vendor dependency "${dep}" — known: ${Object.keys(VENDOR_FILES).join(', ')}`
-      )
-    }
-    for (const [src, dst, fatal] of files) {
-      tasks.push([resolve(appRoot, 'node_modules', src), join(siteRoot, dst), fatal])
-    }
-  }
-  const fatal = await copyFilesIdempotent(tasks)
-  if (fatal.length) {
-    throw new Error(
-      `Could not copy vendor assets — ${fatal.join('; ')}. ` +
-      `Run \`npm install\` in the GrapeStrap project root.`
-    )
-  }
-}
-
-/**
  * Write a starter's templates, pages, text assets, and (if it has one) its
  * binary asset bundle into site/, and append the matching manifest entries.
- * Mutates `manifest` (pages, templates, vendorDeps, metadata.starter, and for
- * bundled starters globalCSS + framework); the caller (createProject) owns
- * writing the manifest file afterwards. Page bodies are authored fully
+ * Mutates `manifest` (pages, templates, metadata.starter, and for bundled
+ * starters globalCSS + framework); the caller (createProject) owns writing
+ * the manifest file afterwards. Page bodies are authored fully
  * composed (chrome + region content inline — W2's composed-page model), so no
  * region composition happens here and main never parses HTML.
  *
@@ -171,8 +134,8 @@ export async function copyVendorAssets(siteRoot, deps = []) {
  * @param {object}   args.starter - A STARTERS entry (see getStarter)
  * @param {object}   args.manifest - Manifest under construction; mutated in place
  * @param {string[]} [args.selectedPages] - Page `name`s to write. Filters ONLY
- *        the pages loop below — templates, text assets, vendorDeps, and (for
- *        bundled starters) the bundleDir copy are ALWAYS written in full,
+ *        the pages loop below — templates, text assets, and (for bundled
+ *        starters) the bundleDir copy are ALWAYS written in full,
  *        because they're shared infrastructure, not per-page content: a
  *        template's chrome and a starter's vendored framework/CSS/JS serve
  *        every page, including ones the user excluded now and adds later via
@@ -187,8 +150,8 @@ export async function copyVendorAssets(siteRoot, deps = []) {
  *        this file's header), so there's no seam here to rewrite or strip
  *        them; they simply 404 until that page is added back, at which point
  *        the link resolves again on its own.
- * @throws {Error} If a declared vendor dep is unknown, or a declared bundleDir
- *                 is missing from the app (a packaging error, not a user one).
+ * @throws {Error} If a declared bundleDir is missing from the app (a packaging
+ *                 error, not a user one).
  */
 export async function applyStarter({ site, starter, manifest, selectedPages }) {
   // Framework/stylesheet overrides are applied FIRST: composeFullPageHtml
@@ -245,15 +208,14 @@ export async function applyStarter({ site, starter, manifest, selectedPages }) {
     await writeInSite(site, rel, content)
   }
 
-  // Vendor deps (glightbox for Portfolio) + provenance.
-  await copyVendorAssets(site, starter.vendorDeps || [])
-  manifest.vendorDeps = [...(starter.vendorDeps || [])]
+  // Provenance only — nothing on the load path keys on this id, so a project
+  // created from a starter that has since been removed still opens (see the
+  // fail-open lookups in getStarter and menu-router's cmdNewPage).
   manifest.metadata.starter = starter.id
 
-  // Asset bundle (Graphite): copy <appRoot>/starters/<bundleDir>/ over site/.
-  // app.getAppPath() is the same resolution copyVendorAssets uses for
-  // node_modules — correct in dev AND inside app.asar, which is why the copy
-  // walks readdir/copyFile rather than fsp.cp.
+  // Asset bundle (Graphite, Orbit, Vista): copy <appRoot>/starters/<bundleDir>/ over
+  // site/. app.getAppPath() is correct in dev AND inside app.asar, which is
+  // why the copy walks readdir/copyFile rather than fsp.cp.
   if (starter.bundleDir) {
     const bundleRoot = join(app.getAppPath(), 'starters', starter.bundleDir)
     // A missing bundle means the app was packaged without starters/** — the

@@ -120,6 +120,11 @@ async function onProjectOpened(project) {
     return
   }
   const seq = ++openSeq
+  // Capture the restore guard BEFORE any await: restoreSnapshot() clears
+  // `restoring` synchronously after openIntoUi(), so by the time the prefs
+  // IPC below resolves the flag is already false and the re-offer fires —
+  // that was the endless Recover/Discard dialog loop on restore.
+  const wasRestoring = restoring
   const seconds = await readIntervalSeconds()
   // The await above can straddle a close or another open — bail if superseded.
   if (seq !== openSeq || projectState.current?.manifestPath !== path) return
@@ -136,7 +141,7 @@ async function onProjectOpened(project) {
   // Per-open offer: a crashed project that fell off the recents list (or was
   // opened while another boot offer was declined) still gets its prompt.
   // Suppressed during restore — restore re-opens the project itself.
-  if (!restoring) {
+  if (!wasRestoring) {
     offerIfRecoveryExists(path).catch(err => log.error('recovery: on-open check failed:', err))
   }
 }

@@ -12,35 +12,23 @@
 //       pages/ export layout makes them resolve correctly as-is. Framework
 //       CSS/JS is the bundle's own vendored Bootstrap 5.3.8 + Font Awesome
 //       7.3.1 (solid + brands) + vendored Roboto webfonts, loaded from
-//       bundleDir (site/assets/vendor/**) rather than the landing/portfolio
-//       node_modules vendorDeps path. globalCSS points at the bundle's
+//       bundleDir (site/assets/vendor/**). globalCSS points at the bundle's
 //       theme.css (its own url("../images/...) refs rewritten from the
 //       source's url("../../images/...) to match the bundleDir layout,
 //       where assets/images/ is a sibling of assets/css/ — see
 //       starters/orbit/).
 //
-//       In-page 7-theme switcher (blue/cyan/green/red/violet/amber/rose):
-//       navbar swatches set data-theme on <html>, persisted to localStorage
-//       under 'orbit-theme'. The source site restores the saved theme
-//       BEFORE first paint via an inline <script> in <head> — this starter
-//       shape has no head-script slot (composeFullPageHtml's customScripts
-//       only emits <script src=…>, never an inline block; see
-//       ../../shared/page-html.js), so that snippet cannot be ported as-is.
-//       main.js already re-applies the saved theme itself (it always has —
-//       the head snippet was purely a paint-order optimization on top of
-//       it), so nothing was functionally dropped; what changed here is
-//       ordering: the theme-restore block was moved to the TOP of main.js'
-//       IIFE (ahead of the dropdown/nav-collapse wiring it used to follow),
-//       so it runs as early as main.js's single <script src> tag allows.
-//       There is still one paint with the default (blue) theme before
-//       main.js runs and swaps it — canvas preview never executes main.js
-//       at all (consistent with Graphite; not a bug to chase here) — but a
-//       served/exported page now repaints as early as this starter shape
-//       permits.
+//       7-theme switcher: STRIPPED 2026-08-19 (user call, parity with the
+//       Vista starter) — the navbar swatch <ul>, main.js restore block, and
+//       theme.css :root[data-theme] overrides are all gone; blue (the :root
+//       default) is the shipped palette. The juhriah.com gallery demo keeps
+//       its picker — that is a preview affordance, not starter machinery.
 // DEPENDS: nothing (imported by src/main/starters/index.js — registration
 //          is part of this same port, unlike Graphite's original standalone
 //          commit)
 // CREATED: 2026-08-17
+// UPDATED: 2026-08-19 — dropped the now-unread `vendorDeps` field when the
+//          node_modules vendor path left with the first-wave starters
 // =============================================================
 
 const INDEX_BODY = `			<nav class="navbar navbar-expand-md site-navbar">
@@ -77,15 +65,6 @@ const INDEX_BODY = `			<nav class="navbar navbar-expand-md site-navbar">
 							<li class="nav-item"><a class="nav-link" href="two-sidebar.html">Two Sidebar</a></li>
 							<li class="nav-item"><a class="nav-link" href="no-sidebar.html">No Sidebar</a></li>
 							<li class="nav-item"><a class="nav-link" href="index.html#contact">Contact</a></li>
-						</ul>
-						<ul class="theme-picker" aria-label="Preview color themes">
-							<li><button type="button" class="theme-swatch is-active" data-theme-choice="blue" aria-pressed="true"><span class="visually-hidden">Blue theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="cyan" aria-pressed="false"><span class="visually-hidden">Cyan theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="green" aria-pressed="false"><span class="visually-hidden">Green theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="red" aria-pressed="false"><span class="visually-hidden">Red theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="violet" aria-pressed="false"><span class="visually-hidden">Violet theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="amber" aria-pressed="false"><span class="visually-hidden">Amber theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="rose" aria-pressed="false"><span class="visually-hidden">Rose theme</span></button></li>
 						</ul>
 					</div>
 				</div>
@@ -305,15 +284,6 @@ const LEFT_SIDEBAR_BODY = `			<nav class="navbar navbar-expand-md site-navbar">
 							<li class="nav-item"><a class="nav-link" href="no-sidebar.html">No Sidebar</a></li>
 							<li class="nav-item"><a class="nav-link" href="index.html#contact">Contact</a></li>
 						</ul>
-						<ul class="theme-picker" aria-label="Preview color themes">
-							<li><button type="button" class="theme-swatch is-active" data-theme-choice="blue" aria-pressed="true"><span class="visually-hidden">Blue theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="cyan" aria-pressed="false"><span class="visually-hidden">Cyan theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="green" aria-pressed="false"><span class="visually-hidden">Green theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="red" aria-pressed="false"><span class="visually-hidden">Red theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="violet" aria-pressed="false"><span class="visually-hidden">Violet theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="amber" aria-pressed="false"><span class="visually-hidden">Amber theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="rose" aria-pressed="false"><span class="visually-hidden">Rose theme</span></button></li>
-						</ul>
 					</div>
 				</div>
 			</nav>
@@ -500,15 +470,6 @@ const RIGHT_SIDEBAR_BODY = `			<nav class="navbar navbar-expand-md site-navbar">
 							<li class="nav-item"><a class="nav-link" href="no-sidebar.html">No Sidebar</a></li>
 							<li class="nav-item"><a class="nav-link" href="index.html#contact">Contact</a></li>
 						</ul>
-						<ul class="theme-picker" aria-label="Preview color themes">
-							<li><button type="button" class="theme-swatch is-active" data-theme-choice="blue" aria-pressed="true"><span class="visually-hidden">Blue theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="cyan" aria-pressed="false"><span class="visually-hidden">Cyan theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="green" aria-pressed="false"><span class="visually-hidden">Green theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="red" aria-pressed="false"><span class="visually-hidden">Red theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="violet" aria-pressed="false"><span class="visually-hidden">Violet theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="amber" aria-pressed="false"><span class="visually-hidden">Amber theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="rose" aria-pressed="false"><span class="visually-hidden">Rose theme</span></button></li>
-						</ul>
 					</div>
 				</div>
 			</nav>
@@ -692,15 +653,6 @@ const TWO_SIDEBAR_BODY = `			<nav class="navbar navbar-expand-md site-navbar">
 							<li class="nav-item"><a class="nav-link active" aria-current="page" href="two-sidebar.html">Two Sidebar</a></li>
 							<li class="nav-item"><a class="nav-link" href="no-sidebar.html">No Sidebar</a></li>
 							<li class="nav-item"><a class="nav-link" href="index.html#contact">Contact</a></li>
-						</ul>
-						<ul class="theme-picker" aria-label="Preview color themes">
-							<li><button type="button" class="theme-swatch is-active" data-theme-choice="blue" aria-pressed="true"><span class="visually-hidden">Blue theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="cyan" aria-pressed="false"><span class="visually-hidden">Cyan theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="green" aria-pressed="false"><span class="visually-hidden">Green theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="red" aria-pressed="false"><span class="visually-hidden">Red theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="violet" aria-pressed="false"><span class="visually-hidden">Violet theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="amber" aria-pressed="false"><span class="visually-hidden">Amber theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="rose" aria-pressed="false"><span class="visually-hidden">Rose theme</span></button></li>
 						</ul>
 					</div>
 				</div>
@@ -915,15 +867,6 @@ const NO_SIDEBAR_BODY = `			<nav class="navbar navbar-expand-md site-navbar">
 							<li class="nav-item"><a class="nav-link active" aria-current="page" href="no-sidebar.html">No Sidebar</a></li>
 							<li class="nav-item"><a class="nav-link" href="index.html#contact">Contact</a></li>
 						</ul>
-						<ul class="theme-picker" aria-label="Preview color themes">
-							<li><button type="button" class="theme-swatch is-active" data-theme-choice="blue" aria-pressed="true"><span class="visually-hidden">Blue theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="cyan" aria-pressed="false"><span class="visually-hidden">Cyan theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="green" aria-pressed="false"><span class="visually-hidden">Green theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="red" aria-pressed="false"><span class="visually-hidden">Red theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="violet" aria-pressed="false"><span class="visually-hidden">Violet theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="amber" aria-pressed="false"><span class="visually-hidden">Amber theme</span></button></li>
-							<li><button type="button" class="theme-swatch" data-theme-choice="rose" aria-pressed="false"><span class="visually-hidden">Rose theme</span></button></li>
-						</ul>
 					</div>
 				</div>
 			</nav>
@@ -1087,7 +1030,6 @@ export default {
     }
   ],
   assets: {},
-  vendorDeps: [],
   bundleDir: 'orbit',
   globalCSS: 'assets/css/theme.css',
   framework: {

@@ -163,14 +163,14 @@ test('Site Files: main.js listed (not theme.css/vendor); dblclick opens a javasc
   await appWindow.dblclick('.gstrap-fm-item[data-fm-file="assets/js/main.js"]')
 
   // Model creation is sync but content arrives via async file:read (same
-  // wait shape as php.spec.js's seedAndOpenPhp). 'orbit-theme' is the
-  // localStorage key main.js reads/writes — a marker unique to this
-  // starter's file (see starters/orbit/assets/js/main.js).
+  // wait shape as php.spec.js's seedAndOpenPhp). 'closeNestedSubmenus' is
+  // the submenu helper unique to this starter's main.js (the old
+  // 'orbit-theme' marker died with the 2026-08-19 theme-picker strip).
   await appWindow.waitForFunction(() => {
     const m = window.__gstrap?.pluginRegistry?.bound?.monaco
     const models = m?.editor?.getModels?.() || []
     return models.some(md =>
-      md?.getLanguageId?.() === 'javascript' && (md?.getValue?.() || '').includes('orbit-theme'))
+      md?.getLanguageId?.() === 'javascript' && (md?.getValue?.() || '').includes('closeNestedSubmenus'))
   }, null, { timeout: 10_000 })
 
   const tabKind = await appWindow.evaluate(() => window.__gstrap?.pageState?.active?.()?.kind || null)
@@ -194,7 +194,7 @@ test('Site Files: main.js listed (not theme.css/vendor); dblclick opens a javasc
     await new Promise(r => setTimeout(r, 250))
   }
   expect(onDisk).toContain(SENTINEL)
-  expect(onDisk).toContain('orbit-theme')
+  expect(onDisk).toContain('closeNestedSubmenus')
 
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })

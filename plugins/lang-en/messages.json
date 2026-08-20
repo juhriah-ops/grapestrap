@@ -572,9 +572,6 @@
   "dialog.about.pledge": "GrapeStrap collects no data and sends no telemetry — ever.",
   "dialog.about.close": "Close",
 
-  "starter.landing.label": "Landing Page",
-  "starter.portfolio.label": "Portfolio",
-  "starter.blog.label": "Blog",
   "starter.graphite.label": "Graphite",
   "starter.graphite.page.index": "Home (index)",
   "starter.graphite.page.elements": "Elements",
@@ -587,8 +584,8 @@
   "starter.orbit.page.right-sidebar": "Right sidebar",
   "starter.orbit.page.two-sidebar": "Two sidebar",
   "starter.orbit.page.no-sidebar": "No sidebar",
-  "starter.blog.page.index": "Blog index",
-  "starter.blog.page.post": "Post",
+  "starter.vista.label": "Vista",
+  "starter.vista.page.index": "Home (index)",
 
   "tpl.menu.make-region": "Make Editable Region…",
   "tpl.menu.remove-region": "Remove Editable Region",

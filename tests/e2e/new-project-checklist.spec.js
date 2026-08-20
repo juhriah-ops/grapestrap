@@ -11,6 +11,13 @@
  *       constraint that spec documents.
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-08-11
+ * UPDATED: 2026-08-19 — the no-checklist case drove the removed 'landing'
+ *          starter; it now drives Blank, which reaches the same hide+empty
+ *          branch (see the comment in that test).
+ * UPDATED: 2026-08-19 — that test also drives 'vista' now: as the one bundled
+ *          single-page starter it is the only fixture for the OTHER
+ *          no-checklist arm (a real registry entry under
+ *          MIN_PAGES_FOR_CHECKLIST).
  */
 import { test, expect } from '@playwright/test'
 import { launch, EXPECTED_PLUGIN_COUNT } from './helpers.js'
@@ -45,16 +52,33 @@ test('Selecting a multi-page starter (graphite) reveals the checklist with all 5
   await app.close()
 })
 
-test('Single-page starters (landing) never show the checklist; Blank hides it again after Graphite', async () => {
+test('Blank never shows the checklist, and hides + empties it again after Graphite', async () => {
   const { app, appWindow } = await launch()
   await openNewProjectDialog(appWindow)
 
-  await appWindow.selectOption('[data-npr-starter]', 'landing')
+  // syncChecklist()'s no-checklist branch has two arms (dialogs/new-project.js):
+  // an id that isn't a registry entry, and a registry entry with fewer than
+  // MIN_PAGES_FOR_CHECKLIST pages. Blank takes the first arm; Vista — a
+  // one-page starter — takes the second, which had no fixture between the
+  // removal of the first-wave single-page starters and Vista landing. Both
+  // arms hide AND empty through the same two lines, which is the contract that
+  // matters here: a stale list must never reach submit().
+  await appWindow.selectOption('[data-npr-starter]', 'blank')
   expect(await appWindow.evaluate(() => document.querySelector('[data-npr-pages]').hidden)).toBe(true)
 
   await appWindow.selectOption('[data-npr-starter]', 'graphite')
   expect(await appWindow.evaluate(() => document.querySelector('[data-npr-pages]').hidden)).toBe(false)
 
+  // The second arm: a real registry entry, still no checklist.
+  await appWindow.selectOption('[data-npr-starter]', 'vista')
+  const afterVista = await appWindow.evaluate(() => ({
+    hidden: document.querySelector('[data-npr-pages]').hidden,
+    itemCount: document.querySelectorAll('[data-npr-page]').length
+  }))
+  expect(afterVista.hidden).toBe(true)
+  expect(afterVista.itemCount).toBe(0)
+
+  await appWindow.selectOption('[data-npr-starter]', 'graphite')
   await appWindow.selectOption('[data-npr-starter]', 'blank')
   const afterBlank = await appWindow.evaluate(() => ({
     hidden: document.querySelector('[data-npr-pages]').hidden,

@@ -5,6 +5,13 @@ ROLE: Wave-6 workstation acceptance checklist for v0.1.0-rc.1 —
 DEPENDS: GRAPESTRAP_BUILD_PLAN_v5.md (Wave 6 scope), README.md,
          docs/INSTALL.md, CHANGELOG.md [Unreleased] (feature facts)
 CREATED: 2026-07-19 (Wave 6.4)
+UPDATED: 2026-08-19 — §2/§3/§10 rewritten for the current starter lineup
+         (Blank, Graphite, Orbit); the three first-wave starters this
+         checklist was written against were removed from the product
+UPDATED: 2026-08-19 — Vista added to the starter lineup (step 6). The
+         Graphite walkthrough in §2 is unchanged; Vista's own disk/manifest
+         behaviour is covered by tests/e2e/vista-starter.spec.js, and it is
+         the one starter with no page checklist (single page)
 ============================================================= -->
 
 # Acceptance Checklist: GrapeStrap v0.1.0-rc.1
@@ -33,19 +40,19 @@ Run the steps in order. Steps marked with a section header share setup with the 
 | 4 | Confirm the session type with `echo $XDG_SESSION_TYPE`, then launch GrapeStrap from the launcher. | The app starts. In a Wayland session it runs on the native Wayland backend (auto-detected); in an X11 session it runs plain X11. No blank window, no crash on startup. | | Record the session type. If rendering misbehaves, retest with `GRAPESTRAP_FORCE_X11=1` and note the difference. |
 | 5 | **Watch item.** With the app open under Wayland, check the taskbar/dock/window switcher. | The window is associated with the installed desktop entry: GrapeStrap name and icon, and launching a second time focuses/groups with the existing entry. Not shown as a generic "Electron" window. | | `desktopName`/`syncDesktopName` unset in the builder config — this is the specific risk being checked. |
 
-## 2. Create a project from the Landing starter (~4 min)
+## 2. Create a project from the Graphite starter (~4 min)
 
 | # | Step | Expected result | Pass/Fail | Notes |
 |---|------|-----------------|-----------|-------|
-| 6 | File → New Project. In the New Project dialog, review the starter template choices. | Four starters are offered: Blank, Landing Page, Portfolio, Blog. | | |
-| 7 | Select **Landing Page**, choose a parent folder, and create the project. | The project scaffolds and opens: pages and a master template appear in the File Manager (Templates section populated), and the project's `site/assets/` tree contains Bootstrap, Bootstrap Icons, and Font Awesome — no CDN references. | | |
+| 6 | File → New Project. In the New Project dialog, review the starter template choices, selecting each in turn. | Four starters are offered: Blank, Graphite, Orbit, Vista. Graphite and Orbit each reveal a 5-page checklist; Blank and Vista show none (Vista is a single-page template). | | |
+| 7 | Select **Graphite**, leave all 5 pages checked, choose a parent folder, and create the project. | The project scaffolds and opens: the 5 pages appear in the File Manager, and the project's `site/assets/vendor/` tree contains the starter's own vendored Bootstrap, Font Awesome, and webfonts — no CDN references. Graphite brings its own framework, so there is no app-managed `site/assets/css/bootstrap.css` and no Templates section to populate. | | |
 | 8 | In the system file manager, double-click the project's `.gstrap` manifest file. | The file opens in GrapeStrap (MIME association `application/x-grapestrap` works end to end). | | Close the second instance/window afterward if one opens. **The double-click always launches the INSTALLED build** — if a dev tree or older install is also present, make sure every later step runs in the build under test (the 2026-08-03 §5 failure came from continuing in a stale installed rc.2). |
 
 ## 3. Edit a region page (~4 min)
 
 | # | Step | Expected result | Pass/Fail | Notes |
 |---|------|-----------------|-----------|-------|
-| 9 | Open a page that uses the master template. Click into the template-owned chrome (header/footer). | Locked template chrome renders dimmed in the canvas; the status bar reports the locked state (`Locked — template "<name>"`); locked elements cannot be edited or deleted and get no resize handles. | | |
+| 9 | No bundled starter ships a master template, so make one: select the page's header, right-click → **Make Editable Region…** on the main content area, save it as a template via the Templates section, then create a page from it. Open that page and click into the template-owned chrome (header/footer). | Locked template chrome renders dimmed in the canvas; the status bar reports the locked state (`Locked — template "<name>"`); locked elements cannot be edited or deleted and get no resize handles. | | |
 | 10 | Click into an editable region and change some text. | The status bar shows the region indicator (`Region: <id>`); the edit applies normally and the page/tab shows dirty state. | | |
 | 11 | Save (Ctrl+S). | Save succeeds; dirty indicators clear. | | |
 
@@ -101,8 +108,8 @@ Run the steps in order. Steps marked with a section header share setup with the 
 
 | # | Step | Expected result | Pass/Fail | Notes |
 |---|------|-----------------|-----------|-------|
-| 30 | Run Export (File menu) and choose an empty output directory. | Export completes without errors. The output directory contains one full HTML document per page plus a self-contained `assets/` tree (Bootstrap, Bootstrap Icons, Font Awesome, `style.css`). No `.gstrap-tpl` files in the output. | | |
-| 31 | Open the exported landing page HTML file directly in a browser (file://, no server). | The page renders fully styled with all framework links resolving locally — no network requests, no missing CSS/JS/fonts. | | |
+| 30 | Run Export (File menu) and choose an empty output directory. | Export completes without errors. The output directory contains one full HTML document per page plus a self-contained `assets/` tree (the starter's vendored Bootstrap, Font Awesome, webfonts, and `theme.css`). No `.gstrap-tpl` files in the output. | | |
+| 31 | Open the exported `index.html` directly in a browser (file://, no server). | The page renders fully styled with all framework links resolving locally — no network requests, no missing CSS/JS/fonts. | | |
 
 ## 11. About modal (~1 min)
 

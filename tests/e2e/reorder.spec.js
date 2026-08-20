@@ -8,12 +8,15 @@
  *       root component and on a locked master-template page wrapper.
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-08-11
+ * UPDATED: 2026-08-19 — the locked-wrapper spec's fixture moved off the
+ *          removed 'landing' starter onto helpers.js#seedTemplatedChromeProject
+ *          (same chrome shape, same lock path).
  */
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
 import { promises as fsp } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { launch, openSeedProject, selectFirstByTag, EXPECTED_PLUGIN_COUNT } from './helpers.js'
+import { launch, openSeedProject, selectFirstByTag, seedTemplatedChromeProject } from './helpers.js'
 
 // Open the context menu for whatever's currently selected — same event the
 // canvas iframe and DOM tree emit (single open path, main.js), the same
@@ -130,32 +133,18 @@ test('disabled on root: selecting the wrapper disables Move Up / Move Down / Mov
 })
 
 test('disabled (Move to Top of Page only) on a master-template page: wrapper stays locked while chrome propagates', async () => {
-  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-reorder-landing-'))
-  const projectPath = join(projectDir, 'landing.gstrap')
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-reorder-framed-'))
+  const projectPath = join(projectDir, 'framed.gstrap')
 
   const { app, appWindow } = await launch()
-  await appWindow.waitForFunction(
-    n => window.__gstrap?.pluginRegistry?.activated?.length === n,
-    EXPECTED_PLUGIN_COUNT, { timeout: 15_000 }
-  )
-  // 'landing' starter (src/main/starters/landing.js): one master template
-  // ('site') with locked header/footer chrome + one composed page ('index')
-  // whose wrapper goes droppable:false while it's active (panels/templates/
-  // lock.js#relockTemplateChrome — not modified here).
-  // Same project-creation-via-evaluate pattern as graphite-starter.spec.js.
-  await appWindow.evaluate(async path => {
-    const project = await window.grapestrap.project.new({
-      name: 'landingtest', location: path, templateId: 'landing'
-    })
-    const { projectState, pageState } = window.__gstrap
-    projectState.set(project)
-    pageState.open(project.pages[0].name)
-  }, projectPath)
-  await appWindow.waitForFunction(() => {
-    const ed = window.__gstrap?.pluginRegistry?.bound?.editor
-    const doc = ed?.Canvas?.getFrameEl?.()?.contentDocument
-    return !!doc?.querySelector('[data-grpstr-region="content"]')
-  }, null, { timeout: 10_000 })
+  // One master template ('site') with locked header/footer chrome + one page
+  // built from it, whose wrapper goes droppable:false while it's active
+  // (panels/templates/lock.js#relockTemplateChrome — not modified here). Until
+  // 2026-08-19 this came from the 'landing' starter; that starter was removed
+  // from the product and no bundled starter ships a master template any more,
+  // so the fixture is seeded through the templates test surface instead —
+  // same shape of chrome, same lock path (helpers.js).
+  await seedTemplatedChromeProject(appWindow, projectPath)
 
   // relockTemplateChrome's WRAPPER-level droppable:false only runs on its two
   // full-walk triggers (canvas:frame:load, sync:code-to-canvas) — neither
@@ -178,12 +167,12 @@ test('disabled (Move to Top of Page only) on a master-template page: wrapper sta
     window.__gstrap.pluginRegistry.bound.editor.getWrapper().get('droppable'))
   expect(wrapperLocked).toBe(false)
 
-  // The region's own h1 ("Headline that converts") is free content, not
-  // chrome — landing's header/footer carry no <h1> — so removable stays
-  // true and isRoot is false: only the wrapper's droppable:false should gate
-  // Move to Top of Page. Move Up/Down must stay enabled: they never leave
-  // the region's own subtree, so the locked root is irrelevant to them.
-  await selectFirstByTag(appWindow, 'h1')
+  // The region's own h1 is free content, not chrome — the fixture's
+  // header/footer deliberately carry no <h1> — so removable stays true and
+  // isRoot is false: only the wrapper's droppable:false should gate Move to
+  // Top of Page. Move Up/Down must stay enabled: they never leave the
+  // region's own subtree, so the locked root is irrelevant to them.
+  expect(await selectFirstByTag(appWindow, 'h1'), 'no <h1> in the region to select').toBe('h1')
 
   await openMenuForSelection(appWindow)
   const states = await menuItemStates(appWindow)

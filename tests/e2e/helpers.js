@@ -5,6 +5,12 @@
  * ROLE: Launch/seed/select/dismiss helpers + shared constants for the domain spec files (split out of smoke.spec.js in Wave 0 of the v0.1.0 campaign)
  * DEPENDS: @playwright/test (_electron)
  * CREATED: 2026-07-12
+ * UPDATED: 2026-08-19 — added seedTemplatedChromeProject, the replacement
+ *          fixture for the specs that used to reach for the 'landing' starter
+ *          purely to get LOCKED master-template chrome (reorder.spec.js,
+ *          editing-commands.spec.js). The three first-wave starters were
+ *          removed from the product and no bundled starter ships a master
+ *          template any more, so the fixture is built here instead.
  * UPDATED: 2026-08-18 — selectFirstByTag returns the tag it selected (or
  *          null), so a spec can assert it actually hit something instead of
  *          silently continuing with no selection.
@@ -108,6 +114,60 @@ export async function selectFirstByTag(appWindow, tag) {
 
 /** True if `path` exists on disk, false for any access error (ENOENT etc). */
 export const fileExists = p => fsp.access(p).then(() => true, () => false)
+
+// Master chrome + one editable region, shaped exactly like what the retired
+// 'landing' starter used to scaffold: a <header> and a <footer> that the lock
+// path owns, wrapped around a region whose own content stays free. The <h1>
+// lives INSIDE the region and nowhere else, so a spec can select it and know
+// it got free content rather than chrome; the chrome headings are <h2>/<h6>
+// for the same reason.
+const TEMPLATED_CHROME_HTML = [
+  '<header class="container py-3"><h2>Framed Site</h2></header>',
+  '<main class="container py-5" data-grpstr-region="content">',
+  '  <h1>Headline in the region</h1>',
+  '  <p>Body copy in the region.</p>',
+  '</main>',
+  '<footer class="container py-3"><h6>© Framed Site</h6></footer>'
+].join('\n')
+
+/**
+ * Seed a blank project, then build a MASTER-TEMPLATE PAGE inside it and leave
+ * that page's tab open — the fixture for anything that needs locked template
+ * chrome (lock flags on header/footer, wrapper droppable:false on a templated
+ * page). Replaces the old "create a project from the 'landing' starter" trick:
+ * no bundled starter ships a master template any more, so the template is
+ * authored here through the same public test surface templates.spec.js drives
+ * (window.__gstrap.templates), which is also the surface a user's own
+ * Templates-panel workflow goes through.
+ *
+ * Waits until the composed page is live in the canvas, so the caller can
+ * select components immediately.
+ *
+ * @param {import('@playwright/test').Page} appWindow
+ * @param {string} projectPath - Absolute .gstrap manifest path to create at
+ * @param {object} [opts]
+ * @param {string} [opts.tplName='site']   - Master template name
+ * @param {string} [opts.pageName='framed'] - Page built from that template
+ * @returns {Promise<void>}
+ * @throws {Error} inside the page context if the templates test surface is
+ *         missing or rejects the seed — a silent no-op here would surface far
+ *         away as "the chrome isn't locked", which is the wrong bug to chase.
+ */
+export async function seedTemplatedChromeProject(appWindow, projectPath, { tplName = 'site', pageName = 'framed' } = {}) {
+  await openSeedProject(appWindow, projectPath)
+  await appWindow.evaluate(({ tplName, pageName, tplHtml }) => {
+    const api = window.__gstrap?.templates
+    if (!api) throw new Error('window.__gstrap.templates missing')
+    if (!api.createTemplate(tplName, tplHtml)) throw new Error(`createTemplate rejected "${tplName}"`)
+    if (!api.createPage(pageName, tplName)) throw new Error(`createPage rejected "${pageName}"`)
+  }, { tplName, pageName, tplHtml: TEMPLATED_CHROME_HTML })
+  // createPage opens the new page's tab; wait for the composed body to land.
+  await appWindow.waitForFunction(() => {
+    const ed = window.__gstrap?.pluginRegistry?.bound?.editor
+    const doc = ed?.Canvas?.getFrameEl?.()?.contentDocument
+    return !!doc?.querySelector('[data-grpstr-region="content"]')
+  }, null, { timeout: 10_000 })
+}
 
 /**
  * Create a project from a bundled-asset starter (one that carries its own
