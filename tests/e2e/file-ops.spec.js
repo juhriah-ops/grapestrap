@@ -10,6 +10,11 @@
 //       this spec covers the layer those features will sit on.
 // DEPENDS: ./helpers.js (launch, openSeedProject, dismissWelcome)
 // CREATED: 2026-07-12
+// UPDATED: 2026-08-30 (Phase C review) — extended the path-jail case with an
+//          absolute-path escape (read + write) and a symlink escape (a
+//          symlink physically inside site/ whose target resolves outside
+//          projectRoot); the symlink case needs safePath() to be
+//          realpath-based to pass — written against that fixed contract.
 // =============================================================
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
@@ -89,6 +94,29 @@ test('File ops: no-project and path-escape requests are refused', async () => {
   expect(await rejectionOf('read', '../outside.txt')).toContain('path escapes project root')
   expect(await rejectionOf('write', '../evil.txt', 'x')).toContain('path escapes project root')
   expect(await rejectionOf('delete', '../victim')).toContain('path escapes project root')
+
+  // Absolute paths outside the project must be refused the same way as a
+  // relative '../' escape — safePath() computes a path relative to
+  // projectRoot either way, so an absolute path that lands outside it
+  // rejects on the same "escapes project root" check (an absolute path
+  // that resolves INSIDE projectRoot is allowed — that isn't this case).
+  const outsideAbsolutePath = join(projectDir, '..', 'absolute-outside.txt')
+  expect(await rejectionOf('read', outsideAbsolutePath)).toContain('path escapes project root')
+  expect(await rejectionOf('write', outsideAbsolutePath, 'x')).toContain('path escapes project root')
+  await expect(fsp.access(outsideAbsolutePath)).rejects.toThrow()
+
+  // Symlink escape: a symlink physically inside site/ whose target resolves
+  // outside the project root. Plain string/path-join checks on the
+  // symlink's own path can't catch this — the path string itself never
+  // leaves site/ — only a realpath-based safePath() can. Written against
+  // that fixed contract: asserts the escape is refused, not what the
+  // symlink's target contains.
+  const outsideDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-fops2-outside-'))
+  const secretFile = join(outsideDir, 'secret.txt')
+  await fsp.writeFile(secretFile, 'top secret', 'utf8')
+  await fsp.symlink(secretFile, join(projectDir, 'site', 'escape-link.txt'))
+  expect(await rejectionOf('read', 'site/escape-link.txt')).toContain('path escapes project root')
+  await fsp.rm(outsideDir, { recursive: true, force: true })
 
   // exists() deliberately swallows errors and reports false (documented
   // catch-all in file-operations.js) — assert that contract, not a throw.

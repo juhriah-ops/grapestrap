@@ -50,6 +50,48 @@
 //   unknown-call           tool result for a callId nobody is waiting on
 //   encryption-unavailable safeStorage cannot encrypt on this system
 
+// ─── Per-turn context block ───────────────────────────────────────────────
+//
+// agent-session.js prepends this block to the newest user message; the fake
+// provider strips it back off so its FAKE: script keys off what the user
+// actually typed. Both halves live here because they only work if they agree
+// exactly, and a silent disagreement is nasty: the block would survive into
+// the fake's prompt, every FAKE: command would stop matching, and each one
+// would quietly fall through to the echo branch instead of failing loudly.
+
+export const CONTEXT_BLOCK_OPEN = '[editor context]'
+export const CONTEXT_BLOCK_CLOSE = '[end editor context]'
+
+function escapeForRegex(literal) {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Regex matching a leading context block plus the blank line after it.
+ *
+ * Built from the delimiter constants rather than written out, so the two
+ * cannot drift, and returned fresh per call so no caller can leave state on
+ * a shared RegExp object.
+ *
+ * @returns {RegExp} anchored at the start of the message
+ */
+export function buildContextStripRegex() {
+  return new RegExp(
+    `^${escapeForRegex(CONTEXT_BLOCK_OPEN)}\\n[\\s\\S]*?\\n${escapeForRegex(CONTEXT_BLOCK_CLOSE)}\\n+`
+  )
+}
+
+/**
+ * Cap on the selected element's HTML inside a per-turn context block.
+ *
+ * A selection can be the whole page body, and the context block is resent on
+ * every turn — uncapped, one deep selection quietly doubles the cost of the
+ * rest of the conversation. The renderer is expected to cap on its side too;
+ * agent-session.js enforces it again because a cap that only one side honors
+ * is not a cap.
+ */
+export const CONTEXT_HTML_CAP = 4000
+
 export const TURN_ERROR_TYPES = Object.freeze(new Set([
   'auth',
   'rate-limit',

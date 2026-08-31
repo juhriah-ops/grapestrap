@@ -7,6 +7,7 @@
  *
  * Built-in command handlers for v0.0.1 are sparse — we route to handlers that
  * mostly emit events for other modules to handle. v0.0.2 wires the full set.
+ *
  */
 
 import { eventBus } from '../state/event-bus.js'

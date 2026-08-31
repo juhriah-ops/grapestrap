@@ -11,11 +11,21 @@
 //
 // The prompt IS the script. The newest user message selects the branch:
 //
-//   FAKE:stream                → five text deltas, stopReason 'end_turn'
-//   FAKE:error <type>          → rejects typed (auth|rate-limit|network|api)
-//   FAKE:refusal               → resolves stopReason 'refusal', no text
-//   FAKE:tool <name> <json>    → runs that tool, then confirms in two deltas
-//   anything else              → "Echo: <text>" in two deltas
+//   FAKE:stream                  → five text deltas, stopReason 'end_turn'
+//   FAKE:error <type>            → rejects typed (auth|rate-limit|network|api)
+//   FAKE:refusal                 → resolves stopReason 'refusal', no text
+//   FAKE:tool <name> <json>      → runs that tool, confirms its RESULT
+//   FAKE:tool-deny <name> <json> → runs that tool expecting the executor to
+//                                  refuse, and confirms the ERROR message
+//   FAKE:tools <json-array>      → [{name, input}, …] run SEQUENTIALLY in one
+//                                  turn, each result streamed as it lands —
+//                                  the multi-call shape undo fusion is specced
+//                                  against
+//   anything else                → "Echo: <text>" in two deltas
+//
+// Both tool commands go through the tool's real bridged run(), so a spec
+// exercising them exercises the whole main↔renderer round trip — the pending
+// map, the ai:tool-call event, and ai:tool-result — not a stub of it.
 //
 // Chunk boundaries and ordering are identical on every run, so specs can
 // assert on them exactly. Each chunk yields a full event-loop turn (not just
@@ -23,7 +33,9 @@
 // finish before the next IPC message is even dequeued, which would make the
 // session's single-flight 'busy' guard impossible to observe from a spec.
 
-import { CURATED_MODELS, TURN_ERROR_TYPES, createProviderError } from './contract.js'
+import {
+  CURATED_MODELS, TURN_ERROR_TYPES, buildContextStripRegex, createProviderError
+} from './contract.js'
 
 const COMMAND_PREFIX = 'FAKE:'
 const ECHO_PREFIX = 'Echo: '
@@ -64,9 +76,27 @@ function getNewestUserText(messages) {
   if (!Array.isArray(messages)) return ''
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const entry = messages[index]
-    if (entry?.role === 'user') return flattenContent(entry.content)
+    if (entry?.role === 'user') return stripContextBlock(flattenContent(entry.content))
   }
   return ''
+}
+
+// Built from the shared delimiters in contract.js, not hand-written here —
+// the strip pattern and the block agent-session emits have to agree, and a
+// hand-copied regex would let them drift apart silently.
+const CONTEXT_STRIP_PATTERN = buildContextStripRegex()
+
+/**
+ * Drop the volatile editor-context block agent-session prepends to the
+ * newest user message. The fake script keys off what the USER typed; with
+ * the block left in place every FAKE: command would start with the context
+ * delimiter instead and fall through to the echo branch.
+ *
+ * @param {string} text - flattened user message text
+ * @returns {string} the user's own prompt, trimmed
+ */
+function stripContextBlock(text) {
+  return text.replace(CONTEXT_STRIP_PATTERN, '').trim()
 }
 
 /**
@@ -115,16 +145,15 @@ function stringifyResult(result) {
  *
  * @param {string} name - tool name from the command
  * @param {string} rawInput - JSON text from the command
+ * @param {boolean} expectDeny - true for the tool-deny branch, which catches
+ *        the executor's refusal and reports it instead of failing the turn
  * @param {{tools: Array<object>|undefined, signal: AbortSignal|undefined, onDelta: Function|undefined}} context
  * @returns {Promise<{stopReason: string, text: string, usage: object}>}
- * @throws {Error} typed 'api' error for an unknown tool or unparseable input
+ * @throws {Error} typed 'api' error for an unknown tool or unparseable input,
+ *         or the executor's own rejection when expectDeny is false
  */
-async function runFakeTool(name, rawInput, { tools, signal, onDelta }) {
-  const available = Array.isArray(tools) ? tools : []
-  const tool = available.find(candidate => candidate?.name === name)
-  if (!tool || typeof tool.run !== 'function') {
-    throw createProviderError('api', `Fake provider: no runnable tool named "${name}".`)
-  }
+async function runFakeTool(name, rawInput, expectDeny, { tools, signal, onDelta }) {
+  const tool = requireTool(tools, name)
 
   let input = null
   try {
@@ -133,8 +162,73 @@ async function runFakeTool(name, rawInput, { tools, signal, onDelta }) {
     throw createProviderError('api', `Fake provider: tool input is not valid JSON — ${error.message}`)
   }
 
-  const result = await tool.run(input)
-  return emitChunks([`Tool ${name} returned: `, stringifyResult(result)], { signal, onDelta })
+  if (!expectDeny) {
+    // Success path: a rejection here is a real failure and propagates, ending
+    // the turn in 'error' exactly as a live provider's would.
+    const result = await tool.run(input)
+    return emitChunks([`Tool ${name} returned: `, stringifyResult(result)], { signal, onDelta })
+  }
+
+  // Deny path: stands in for the model reading an is_error tool result and
+  // telling the user about it rather than retrying in a loop.
+  try {
+    const result = await tool.run(input)
+    return emitChunks([`Tool ${name} returned: `, stringifyResult(result)], { signal, onDelta })
+  } catch (error) {
+    return emitChunks([`Tool ${name} error: `, error?.message || String(error)], { signal, onDelta })
+  }
+}
+
+/**
+ * Look up a runnable tool by name.
+ *
+ * @param {Array<object>|undefined} tools - provider-neutral tool definitions
+ * @param {string} name - tool name from the command
+ * @returns {object} the tool
+ * @throws {Error} typed 'api' error when no such runnable tool exists
+ */
+function requireTool(tools, name) {
+  const available = Array.isArray(tools) ? tools : []
+  const tool = available.find(candidate => candidate?.name === name)
+  if (!tool || typeof tool.run !== 'function') {
+    throw createProviderError('api', `Fake provider: no runnable tool named "${name}".`)
+  }
+  return tool
+}
+
+/**
+ * Run several tools SEQUENTIALLY inside one turn, streaming each result as it
+ * lands. This is the multi-call turn shape — several edits arriving from a
+ * single user message — that the renderer's undo fusion is specced against,
+ * so the calls must not be parallelised: the order they land in is the thing
+ * under test.
+ *
+ * @param {string} rawList - JSON array text of [{ name, input }, …]
+ * @param {{tools: Array<object>|undefined, signal: AbortSignal|undefined, onDelta: Function|undefined}} context
+ * @returns {Promise<{stopReason: string, text: string, usage: object}>}
+ * @throws {Error} typed 'api' error for bad JSON, a non-array, or an unknown tool
+ */
+async function runFakeToolSequence(rawList, { tools, signal, onDelta }) {
+  let calls = null
+  try {
+    calls = JSON.parse(rawList)
+  } catch (error) {
+    throw createProviderError('api', `Fake provider: tool list is not valid JSON — ${error.message}`)
+  }
+  if (!Array.isArray(calls) || calls.length === 0) {
+    throw createProviderError('api', 'Fake provider: tool list must be a non-empty JSON array.')
+  }
+
+  let text = ''
+  for (const call of calls) {
+    const tool = requireTool(tools, call?.name)
+    // Awaited in sequence: each call's result must be delivered through the
+    // bridge before the next one is issued.
+    const result = await tool.run(call?.input ?? {})
+    const step = await emitChunks([`${call.name}: `, `${stringifyResult(result)}\n`], { signal, onDelta })
+    text += step.text
+  }
+  return { stopReason: 'end_turn', text, usage: ZERO_USAGE }
 }
 
 /**
@@ -172,10 +266,22 @@ async function createTurn({ messages, tools, signal, onDelta }) {
   }
 
   // Input JSON may contain spaces, so everything after the tool name is one
-  // greedy capture rather than a whitespace split.
+  // greedy capture rather than a whitespace split. The three tool commands
+  // are matched longest-prefix first; each pattern anchors its own literal,
+  // so 'tools'/'tool-deny' can never be swallowed by the bare 'tool' branch.
+  const sequenceMatch = /^tools\s+([\s\S]+)$/.exec(command)
+  if (sequenceMatch) {
+    return runFakeToolSequence(sequenceMatch[1], { tools, signal, onDelta })
+  }
+
+  const denyMatch = /^tool-deny\s+(\S+)\s+([\s\S]+)$/.exec(command)
+  if (denyMatch) {
+    return runFakeTool(denyMatch[1], denyMatch[2], true, { tools, signal, onDelta })
+  }
+
   const toolMatch = /^tool\s+(\S+)\s+([\s\S]+)$/.exec(command)
   if (toolMatch) {
-    return runFakeTool(toolMatch[1], toolMatch[2], { tools, signal, onDelta })
+    return runFakeTool(toolMatch[1], toolMatch[2], false, { tools, signal, onDelta })
   }
 
   // Unrecognized FAKE: command — echo like any other prompt rather than

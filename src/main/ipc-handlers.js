@@ -7,6 +7,9 @@
  * Convention: handlers return plain serializable objects. Errors propagate as
  * thrown values; the renderer's preload converts them into rejected promises.
  *
+ * UPDATED: 2026-08-30 (Phase C tool bridge) — `ai:send` threads an optional
+ * `context` object through to sendTurn as a third argument, alongside text
+ * and the sender; no behavior change for a caller that omits it.
  * UPDATED: 2026-08-30 (review pass) — `ai:*` handlers now pass through
  * agent-session.js's own return envelopes for cancel/reset/tool-result
  * instead of flattening them to {ok:true} (a failed tool-result callId was
@@ -378,7 +381,7 @@ export function registerIpcHandlers({ pluginRegistry }) {
 
   ipcMain.handle('ai:list-models', async () => ({ ok: true, models: await listModels() }))
 
-  ipcMain.handle('ai:send', (event, { text } = {}) => sendTurn(text, event.sender))
+  ipcMain.handle('ai:send', (event, { text, context } = {}) => sendTurn(text, event.sender, context))
 
   // cancelTurn/resetHistory/handleToolResult already return the caller-
   // facing envelope (e.g. cancelTurn's {ok,turnId}) — pass it straight

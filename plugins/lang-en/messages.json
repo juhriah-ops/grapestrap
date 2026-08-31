@@ -94,6 +94,12 @@
   "ai.error.api": "The AI service returned an error.",
   "ai.error.busy": "A reply is already in progress.",
   "ai.refusal": "The model declined this request.",
+  "ai.confirm.overwrite": "Overwrite {path}?",
+  "ai.confirm.allow": "Overwrite",
+  "ai.confirm.deny": "Deny",
+  "ai.toolrow.running": "Running {tool}…",
+  "ai.toolrow.done": "Ran {tool}",
+  "ai.toolrow.failed": "{tool} failed",
 
   "action.create": "Create",
   "action.save": "Save",

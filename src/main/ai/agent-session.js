@@ -2,7 +2,7 @@
 // PATH: src/main/ai/agent-session.js
 // ROLE: Singleton agent-turn service — conversation history, single-flight
 //       turn loop, batched ai:delta push, cancel/reset, tool-result bridge
-// DEPENDS: contract.js, provider.js, prefs.js, logger.js,
+// DEPENDS: contract.js, tools.js, provider.js, prefs.js, logger.js,
 //          key-store.js (dynamic import)
 // CREATED: 2026-08-30
 // =============================================================
@@ -37,7 +37,11 @@
 import { log } from '../logger.js'
 import { getPref } from '../prefs.js'
 import { getProvider } from './provider.js'
-import { createProviderError, createResultError, toTurnError } from './contract.js'
+import {
+  CONTEXT_BLOCK_CLOSE, CONTEXT_BLOCK_OPEN, CONTEXT_HTML_CAP,
+  createProviderError, createResultError, toTurnError
+} from './contract.js'
+import { buildTools } from './tools.js'
 
 // Deltas are coalesced into at most one IPC message per interval. Raw SDK
 // deltas arrive far faster than the panel can paint; 40 ms reads as instant
@@ -65,23 +69,30 @@ const AI_PREF_FALLBACKS = Object.freeze({
 
 // Prompt caching is a prefix match, so a single varying byte here costs every
 // cache hit for the rest of the session. Frozen on purpose: no timestamp, no
-// project name, no model name. Per-turn context rides the newest user turn.
+// project name, no page names, no counts. Every volatile fact belongs in the
+// per-turn context block, which rides the newest user message instead.
 const SYSTEM_PROMPT = [
-  'You are the GrapeStrap assistant, embedded in a desktop visual editor for static Bootstrap 5 websites.',
-  'You help the user build and edit pages made of plain HTML, CSS, and JavaScript.',
+  'You are the GrapeStrap assistant, embedded in a desktop visual editor for building static websites. The user is looking at a visual canvas showing one page of their project, alongside a file tree, a style panel, and a code view. Pages are plain HTML files on disk inside the project, styled with Bootstrap 5 plus a project global stylesheet. Bootstrap 5, Bootstrap Icons, and Font Awesome are already installed locally in every project, so never suggest a CDN link, a package install, or a build step.',
   '',
-  'Ground rules:',
-  '- Work from the page context the user gives you. If you do not have it, ask for it instead of guessing.',
-  '- Keep answers short. A concrete snippet beats a paragraph.',
-  '- Never write inline style attributes or inline event handlers. Use CSS classes and script-side bindings.',
-  '- Bootstrap 5, Bootstrap Icons, and Font Awesome are already local to the project. Never suggest a CDN link.',
-  '- Class and id names describe what an element is, never how it looks and never a data value.'
+  'Everything you change in the project happens through tools. You cannot edit the canvas, the markup, or a file by describing the change or by printing code and hoping the user pastes it — if a change should land in the project, call the tool that makes it land. When the user is only asking a question, answer in chat and call nothing.',
+  '',
+  'Read before you write. The overview tool tells you which pages exist and which one is open, the selection tool tells you what the user currently has selected, and the page and file readers show you real content. Never guess at a file path, a page name, a class name, or the current markup: if you have not seen it this turn, fetch it first.',
+  '',
+  'Keep every edit small and targeted. Prefer replacing the selected element over rewriting a whole page, and prefer appending to the global stylesheet over replacing it. A sweeping rewrite is hard for the user to review and hard to undo, so make the smallest change that satisfies the request, then say plainly what you changed.',
+  '',
+  'Write markup the way this project does. Class and id names describe what an element is, never how it looks and never a data value, so use names like primary-action or card-grid rather than big-red-button or mt-20. Never write an inline style attribute and never write an inline event handler such as onclick: styling goes in CSS classes, behavior goes in script. Reuse Bootstrap 5 components and utilities where they fit.',
+  '',
+  'You never save the project. Tool calls change the document inside the editor, and those changes stay unsaved until the user saves them. When you have finished a set of edits, tell the user to press Ctrl+S to save. Do not claim that anything has been saved, and do not ask for permission to save.',
+  '',
+  'Some tools are gated behind the user. Overwriting an existing file asks them to confirm, and any tool call can come back as an error because they declined it or because it did not apply. A declined or failed call is not something to retry in a loop: report what happened, and ask the user how they want to proceed.',
+  '',
+  'Keep replies short. A concrete snippet, or a one-line summary of what you changed, beats a paragraph of explanation.'
 ].join('\n')
 
-// Renderer-executed tools. Phase C fills this with { name, description,
-// inputSchema } definitions; Phase A ships an empty surface, which makes the
-// turn a plain streaming completion while the bridge below stays wired.
-const RENDERER_TOOL_DEFINITIONS = Object.freeze([])
+// Built once at module load: the tool set is byte-stable, and rebuilding it
+// per turn would allocate a fresh closure set for no reason. dispatchToolCall
+// is a hoisted function declaration, so it is already initialized here.
+const RENDERER_TOOLS = buildTools({ requestToolRun: dispatchToolCall })
 
 let generation = 0          // bumped on send/cancel/reset — stale results drop
 let turnCounter = 0         // turn id sequence
@@ -315,21 +326,6 @@ function dispatchToolCall(name, input) {
 }
 
 /**
- * Wrap a tool definition so its run() routes through the renderer bridge.
- *
- * @param {{name: string, description: string, inputSchema: object}} definition
- * @returns {object} provider-neutral runnable tool
- */
-function buildBridgedTool(definition) {
-  return {
-    name: definition.name,
-    description: definition.description,
-    inputSchema: definition.inputSchema,
-    run: input => dispatchToolCall(definition.name, input)
-  }
-}
-
-/**
  * Fail every parked tool call. A turn that ended cannot answer them, and a
  * promise nobody will ever settle would pin the SDK loop forever.
  *
@@ -348,32 +344,78 @@ function clearPendingToolCalls(reason) {
 // ─── Turn lifecycle ──────────────────────────────────────────────────────
 
 /**
- * Per-turn context that must NOT be cached. Phase C returns the selected
- * element, open page, and current CSS here.
+ * Truncate long text, marking that it was cut so the model does not read a
+ * clipped fragment as the whole thing.
  *
- * @returns {string|null} context text, or null when there is none
+ * @param {string} value - text to cap
+ * @param {number} cap - maximum characters to keep
+ * @returns {string}
  */
-function getVolatileContext() {
-  return null
+function capText(value, cap) {
+  if (typeof value !== 'string') return ''
+  if (value.length <= cap) return value
+  return `${value.slice(0, cap)}\n… (truncated)`
+}
+
+/**
+ * Render the renderer-supplied editor context as a compact plain-text block.
+ *
+ * Plain text rather than JSON on purpose: this is read by the model, not
+ * parsed by code, and JSON braces and escaping would spend tokens the block
+ * is resent with on every single turn.
+ *
+ * @param {object|null|undefined} context - { projectName, pagesList, activePage, selected }
+ * @returns {string|null} the block, or null when there is nothing worth sending
+ */
+function formatContextBlock(context) {
+  if (!context || typeof context !== 'object') return null
+
+  const lines = []
+  if (context.projectName) lines.push(`project: ${context.projectName}`)
+
+  const pages = Array.isArray(context.pagesList) ? context.pagesList.join(', ') : context.pagesList
+  if (pages) lines.push(`pages: ${capText(String(pages), CONTEXT_HTML_CAP)}`)
+
+  if (context.activePage) lines.push(`active page: ${context.activePage}`)
+  const hasProjectInfo = lines.length > 0
+
+  const selected = context.selected
+  if (selected && typeof selected === 'object') {
+    lines.push(`selected: ${selected.quickTag || '(unnamed element)'}`)
+    if (selected.html) {
+      // Capped again on this side: the renderer caps too, but a cap only one
+      // side honors is not a cap, and this text is resent every turn.
+      lines.push('selected html:', capText(String(selected.html), CONTEXT_HTML_CAP))
+    }
+  } else if (hasProjectInfo) {
+    // "nothing is selected" is worth saying only alongside a project — on its
+    // own it is a block that costs tokens and tells the model nothing.
+    lines.push('selected: none')
+  }
+
+  if (lines.length === 0) return null
+  return [CONTEXT_BLOCK_OPEN, ...lines, CONTEXT_BLOCK_CLOSE].join('\n')
 }
 
 /**
  * Build the message array for one request.
  *
- * Volatile context is merged into the newest user turn only. Putting it in
- * the system prompt or an older message would change the cached prefix and
- * throw away every cache hit.
+ * The context block is prepended to the newest user message and nowhere else.
+ * It is volatile by nature — the selection changes constantly — so it must
+ * never reach the system prompt (which is the cached prefix) or an older
+ * message (which would rewrite cached history and describe a selection the
+ * user has long since moved off).
  *
+ * @param {object} turn - the running turn, carrying its own context block
  * @returns {Array<{role: string, content: unknown}>}
  */
-function buildTurnMessages() {
+function buildTurnMessages(turn) {
   const messages = history.map(entry => ({ role: entry.role, content: entry.content }))
-  const context = getVolatileContext()
-  if (!context) return messages
+  if (!turn.contextBlock) return messages
 
   const newest = messages[messages.length - 1]
   if (newest?.role !== 'user' || typeof newest.content !== 'string') return messages
-  messages[messages.length - 1] = { role: 'user', content: `${context}\n\n${newest.content}` }
+  messages[messages.length - 1] = { role: 'user', content: `${turn.contextBlock}\n\n${newest.content}` }
   return messages
 }
 
@@ -454,8 +496,8 @@ async function runTurn(turn) {
       model: settings.model,
       effort: settings.effort,
       system: SYSTEM_PROMPT,
-      messages: buildTurnMessages(),
-      tools: RENDERER_TOOL_DEFINITIONS.map(buildBridgedTool),
+      messages: buildTurnMessages(turn),
+      tools: RENDERER_TOOLS,
       signal: turn.abortController.signal,
       onDelta: chunk => handleDelta(turn, chunk)
     })
@@ -558,9 +600,12 @@ export async function validateKey(providerId, key) {
  *
  * @param {string} text - the user's message
  * @param {object} webContents - Electron webContents to push events to
+ * @param {object} [context] - editor state captured by the renderer at send
+ *        time: { projectName, pagesList, activePage, selected: null | { quickTag, html } }.
+ *        Optional — omitting it simply sends no context block.
  * @returns {{ok: true, turnId: string} | {ok: false, error: {type: string, message: string}}}
  */
-export function sendTurn(text, webContents) {
+export function sendTurn(text, webContents, context) {
   const message = typeof text === 'string' ? text.trim() : ''
   if (!message) {
     return { ok: false, error: createResultError('invalid', 'Cannot send an empty message.') }
@@ -582,7 +627,10 @@ export function sendTurn(text, webContents) {
     target: webContents,
     abortController: new AbortController(),
     accumulatedText: '',
-    callCounter: 0
+    callCounter: 0,
+    // Rendered once, at send time: the selection the user meant is the one
+    // they had when they pressed send, not whatever it drifts to mid-turn.
+    contextBlock: formatContextBlock(context)
   }
   activeTurn = turn
 
@@ -641,6 +689,28 @@ export function resetHistory() {
 }
 
 /**
+ * Coerce a renderer tool result into tool_result content.
+ *
+ * A tool_result block is text. Renderer executors are expected to return a
+ * string already, but one returning an object must not reach the SDK as
+ * "[object Object]" — that reads to the model as a successful call with
+ * meaningless output, which is worse than an error.
+ *
+ * @param {unknown} result - whatever the renderer sent back
+ * @returns {string} text for the tool_result block
+ */
+function toToolResultText(result) {
+  if (typeof result === 'string') return result
+  if (result === null || result === undefined) return ''
+  try {
+    return JSON.stringify(result)
+  } catch (error) {
+    // Circular structures and BigInt both throw here.
+    return String(result)
+  }
+}
+
+/**
  * Deliver a renderer-executed tool's result back into the agent loop.
  *
  * @param {{callId: string, result: unknown, isError: boolean}} payload
@@ -657,10 +727,12 @@ export function handleToolResult({ callId, result, isError } = {}) {
   clearTimeout(pending.timer)
 
   if (isError) {
-    // Rejecting is what makes the SDK tool runner send is_error: true.
-    pending.reject(new Error(typeof result === 'string' ? result : 'Tool execution failed.'))
+    // Rejecting is what makes the SDK tool runner mark the result is_error —
+    // a user declining an overwrite arrives here, and the model has to see it
+    // as a refused call rather than as content.
+    pending.reject(new Error(toToolResultText(result) || 'Tool execution failed.'))
   } else {
-    pending.resolve(result)
+    pending.resolve(toToolResultText(result))
   }
   return { ok: true }
 }

@@ -233,7 +233,9 @@
    (styles/modals.css) rather than inventing a second button language. */
 .gstrap-ai-send,
 .gstrap-ai-stop,
-.gstrap-ai-reset {
+.gstrap-ai-reset,
+.gstrap-ai-confirm-allow,
+.gstrap-ai-confirm-deny {
   font: inherit;
   font-size: 12px;
   padding: 7px 14px;
@@ -246,7 +248,8 @@
 }
 .gstrap-ai-send:hover,
 .gstrap-ai-stop:hover,
-.gstrap-ai-reset:hover {
+.gstrap-ai-reset:hover,
+.gstrap-ai-confirm-deny:hover {
   background: var(--bg-4);
   border-color: var(--text-3);
 }
@@ -283,4 +286,28 @@
 .gstrap-ai-stop:hover {
   background: color-mix(in srgb, var(--error) 15%, var(--bg-3));
   border-color: var(--error);
+}
+
+/* Inline overwrite confirmation (write_file over an existing target). The
+   row itself is a .gstrap-ai-msg-notice with data-ai-kind="confirm"; these
+   rules only lay out its inner text + action pair. */
+.gstrap-ai-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gstrap-ai-confirm-text {
+  flex: 1 1 100%;
+}
+.gstrap-ai-confirm-allow,
+.gstrap-ai-confirm-deny {
+  padding: 2px 10px;
+}
+.gstrap-ai-confirm-allow {
+  color: var(--error);
+  border-color: var(--error);
+}
+.gstrap-ai-confirm-allow:hover {
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-3));
 }

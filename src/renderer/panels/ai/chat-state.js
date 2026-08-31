@@ -25,6 +25,10 @@
  *   text       PLAIN TEXT, never HTML. index.js writes it with textContent —
  *              model output is untrusted and must never reach innerHTML.
  *   streaming  true while deltas are still landing on this message
+ *   ref        optional opaque correlation id for a row that has to address
+ *              something outside the transcript. Currently only the pending
+ *              tool callId on a kind:'confirm' row, so the panel can route an
+ *              Allow/Deny click back to the right tool call. Never rendered.
  *
  * subscribe(cb) calls back with { type, message } after every mutation, where
  * type is 'added' | 'updated' | 'removed' | 'cleared' (message is null for
@@ -82,9 +86,10 @@ function notify(type, message) {
  * @param {object} [options]
  * @param {string} [options.kind='message'] - row sub-type
  * @param {boolean} [options.streaming=false] - true while deltas keep landing
+ * @param {string} [options.ref=''] - opaque correlation id (see header)
  * @returns {object|null} copy of the stored message, or null when rejected
  */
-function addMessage(role, text, { kind = DEFAULT_KIND, streaming = false } = {}) {
+function addMessage(role, text, { kind = DEFAULT_KIND, streaming = false, ref = '' } = {}) {
   if (!MESSAGE_ROLES.has(role)) {
     log.error(`chat-state: refusing unknown role "${role}"`)
     return null
@@ -94,7 +99,8 @@ function addMessage(role, text, { kind = DEFAULT_KIND, streaming = false } = {})
     role,
     kind: typeof kind === 'string' && kind ? kind : DEFAULT_KIND,
     text: typeof text === 'string' ? text : '',
-    streaming: !!streaming
+    streaming: !!streaming,
+    ref: typeof ref === 'string' ? ref : ''
   }
   nextMessageId += 1
   messages.push(message)
@@ -145,11 +151,12 @@ export function startAssistantMessage() {
  * Add a non-model UI line — a refusal, a cancellation, a tool announcement.
  *
  * @param {string} text - plain text body
- * @param {string} kind - reason, e.g. 'refusal' | 'cancelled' | 'tool'
+ * @param {string} kind - reason, e.g. 'refusal' | 'cancelled' | 'tool' | 'confirm'
+ * @param {string} [ref=''] - correlation id; a 'confirm' row carries the tool callId
  * @returns {object|null} copy of the stored message
  */
-export function addNotice(text, kind) {
-  return addMessage('notice', text, { kind })
+export function addNotice(text, kind, ref = '') {
+  return addMessage('notice', text, { kind, ref })
 }
 
 /**
@@ -176,6 +183,26 @@ export function appendDelta(id, chunk) {
   if (!message) return null
   if (typeof chunk !== 'string' || !chunk) return copyOf(message)
   message.text += chunk
+  notify('updated', message)
+  return copyOf(message)
+}
+
+/**
+ * Overwrite a message's text outright.
+ *
+ * Separate from appendDelta because the tool rows rewrite themselves in place
+ * — "Running x…" becomes "Ran x" — rather than accumulating.
+ *
+ * @param {string} id - message id
+ * @param {string} text - the replacement text
+ * @returns {object|null} copy of the updated message, or null when unknown
+ */
+export function setText(id, text) {
+  const message = findMessage(id)
+  if (!message) return null
+  const next = typeof text === 'string' ? text : ''
+  if (message.text === next) return copyOf(message)
+  message.text = next
   notify('updated', message)
   return copyOf(message)
 }
@@ -248,6 +275,7 @@ export const chatState = Object.freeze({
   addNotice,
   addError,
   appendDelta,
+  setText,
   finishMessage,
   removeMessage,
   clear,

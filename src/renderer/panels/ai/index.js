@@ -36,6 +36,8 @@
 import { t } from '../../i18n.js'
 import { log } from '../../log.js'
 import { chatState } from './chat-state.js'
+import { buildTurnContext } from './context.js'
+import { executeToolCall, resolveToolConfirm, finishToolTurn, hasPendingConfirm } from './tool-executor.js'
 
 // How close to the bottom the transcript must already be for a new message to
 // pull the view down with it. Above that, the user is reading back and the
@@ -45,6 +47,10 @@ const NEAR_BOTTOM_THRESHOLD_PX = 48
 // ai:turn states that end a turn. 'running' is the only other state main
 // emits; anything else is a contract drift and gets logged, not acted on.
 const TERMINAL_TURN_STATES = new Set(['done', 'cancelled', 'error'])
+
+// main's catch-all error type — everything it cannot categorize collapses to
+// this, so its payload message carries the only specific information there is.
+const GENERIC_ERROR_TYPE = 'api'
 
 // Row modifier class per transcript role. Closed set — a role outside it is a
 // chat-state bug, not a styling decision.
@@ -195,14 +201,22 @@ function applyStaticLabels() {
  */
 function errorRowText(error) {
   const type = typeof error?.type === 'string' ? error.type : ''
-  if (type) {
+  const message = typeof error?.message === 'string' ? error.message.trim() : ''
+
+  // The CATEGORICAL types get the catalog's wording: "check your linked key"
+  // is more use than whatever the SDK said. 'api' is the opposite case — it
+  // is main's catch-all bucket, so everything uncategorized lands there,
+  // including a tool executor's own refusal ("User denied the write.", a
+  // rejected path). Its catalog string says nothing actionable, so the
+  // specific message wins whenever there is one.
+  if (type && type !== GENERIC_ERROR_TYPE) {
     const key = `ai.error.${type}`
     // t() returns the key verbatim when the catalog has no entry — that is
     // the miss signal, and the cue to use main's message instead.
     const resolved = t(key)
     if (resolved && resolved !== key) return resolved
   }
-  return error?.message || t('ai.error.api')
+  return message || t('ai.error.api')
 }
 
 // ─── Rendering ─────────────────────────────────────────────────────────────
@@ -225,9 +239,51 @@ function buildRow(message) {
   row.dataset.aiRole = message.role
   row.dataset.aiKind = message.kind
   if (message.streaming) row.dataset.aiStreaming = 'true'
+
+  if (message.kind === 'confirm') {
+    row.classList.add('gstrap-ai-confirm')
+    fillConfirmRow(row, message)
+    return row
+  }
+
   // textContent, never innerHTML — this is model/user text.
   row.textContent = message.text
   return row
+}
+
+/**
+ * Build the Allow/Deny controls for a parked write confirmation.
+ *
+ * The row's `ref` is the tool callId; it rides on the buttons as
+ * data-ai-call-id so the delegated click handler can answer the right call
+ * without a lookup back through the transcript.
+ *
+ * @param {HTMLElement} row - the confirm row being built
+ * @param {{text: string, ref: string}} message - the stored confirm message
+ * @returns {void}
+ */
+function fillConfirmRow(row, message) {
+  const prompt = document.createElement('span')
+  prompt.className = 'gstrap-ai-confirm-text'
+  // The path in here comes from the model — textContent, never innerHTML.
+  prompt.textContent = message.text
+  row.appendChild(prompt)
+
+  const allowButton = document.createElement('button')
+  allowButton.type = 'button'
+  allowButton.className = 'gstrap-ai-confirm-allow'
+  allowButton.dataset.aiAction = 'confirm-allow'
+  allowButton.dataset.aiCallId = message.ref || ''
+  allowButton.textContent = t('ai.confirm.allow')
+  row.appendChild(allowButton)
+
+  const denyButton = document.createElement('button')
+  denyButton.type = 'button'
+  denyButton.className = 'gstrap-ai-confirm-deny'
+  denyButton.dataset.aiAction = 'confirm-deny'
+  denyButton.dataset.aiCallId = message.ref || ''
+  denyButton.textContent = t('ai.confirm.deny')
+  row.appendChild(denyButton)
 }
 
 /**
@@ -254,6 +310,10 @@ function appendRow(message) {
 function updateRow(message) {
   const row = rowElementsById.get(message.id)
   if (!row) return
+  // A confirm row owns child elements; writing textContent over it would
+  // delete its buttons. Nothing updates a confirm row today — it is only
+  // added and removed — so this is a guard, not a branch in normal use.
+  if (message.kind === 'confirm') return
   row.textContent = message.text
   if (message.streaming) row.dataset.aiStreaming = 'true'
   else delete row.dataset.aiStreaming
@@ -535,20 +595,19 @@ function handleTurn(payload) {
 }
 
 /**
- * Show that the model asked for a tool.
+ * Hand a tool call to the executor, which adds its own transcript row and
+ * owns the ai:tool-result reply.
  *
- * DISPLAY ONLY — answering the call (grapestrap.ai.toolResult) belongs to the
- * Phase C renderer-side tool executor. This row exists so the request is
- * visible in the transcript instead of looking like a stall.
+ * The turn guard stays here rather than in the executor: this is the module
+ * that knows which turn the panel is showing, and a call from a turn we are
+ * not tracking must not mutate the user's canvas.
  *
- * @param {{turnId: string, name: string}} payload - ai:tool-call payload
+ * @param {{turnId: string, callId: string, name: string, input: object}} payload
  * @returns {void}
  */
 function handleToolCall(payload) {
   if (!adoptTurn(payload?.turnId)) return
-  const name = typeof payload?.name === 'string' ? payload.name : ''
-  if (!name) return
-  chatState.addNotice(name, 'tool')
+  executeToolCall(payload)
 }
 
 /**
@@ -576,6 +635,11 @@ function releaseTurn() {
   // safety net on the paths (a failed invoke, a cancel main had nothing to
   // abort) where no terminal event is ever coming to do it.
   finishStreamingMessage()
+  // Fuses the turn's canvas mutations into one undo step and clears any
+  // confirm row the user never answered. Runs on EVERY exit — a cancel
+  // mid-confirm would otherwise leave a dead Allow/Deny row on screen and
+  // the undo group open into the next turn.
+  finishToolTurn()
   activeTurnId = null
   setTurnRunning(false)
 }
@@ -607,7 +671,11 @@ async function submitComposer() {
 
   let result = null
   try {
-    result = await bridge.send(text)
+    // The context snapshot is taken HERE, at the moment the user pressed
+    // Send — not when the turn reaches the provider — so the selection and
+    // active page the model is told about are the ones the user was looking
+    // at when they asked.
+    result = await bridge.send(text, buildTurnContext())
   } catch (error) {
     // The invoke itself failed, so no terminal ai:turn is coming for this
     // send — the panel has to close the turn out on its own or it stays
@@ -707,6 +775,8 @@ function wireAiPanel() {
     if (action === 'send') submitComposer()
     else if (action === 'stop') stopTurn()
     else if (action === 'reset') resetConversation()
+    else if (action === 'confirm-allow') resolveToolConfirm(button.dataset.aiCallId || '', true)
+    else if (action === 'confirm-deny') resolveToolConfirm(button.dataset.aiCallId || '', false)
   })
 
   inputElement.addEventListener('keydown', event => {
@@ -750,6 +820,10 @@ function installTestSurface() {
     sendText: text => {
       inputElement.value = typeof text === 'string' ? text : ''
       return submitComposer()
-    }
+    },
+    // Phase C surface: ai-tools.spec.js drives the write-confirm row and
+    // reads the context payload the model would receive.
+    hasPendingConfirm,
+    buildContext: buildTurnContext
   }
 }

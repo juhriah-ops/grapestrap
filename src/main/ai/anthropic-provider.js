@@ -377,12 +377,14 @@ async function createTurn({ key, model, effort, system, messages, tools, signal,
     params.output_config = { effort: VALID_EFFORTS.has(effort) ? effort : DEFAULT_EFFORT }
   }
   if (typeof system === 'string' && system.length > 0) {
-    // The breakpoint is here so it stays correct as the prefix grows, but it
-    // does NOT cache yet: the Phase A system prompt is ~181 tokens, under the
-    // 512-token minimum cacheable prefix on Opus 5 / Sonnet 5 (4096 on Haiku
-    // 4.5), and a below-minimum prefix is silently not cached. It becomes
-    // effective once Phase C's tool schemas push the prefix past that floor —
-    // which is also why the prompt has to stay byte-stable now.
+    // Cached prefix = tools block + this system block, in that render order.
+    // As of Phase C the nine tool schemas plus the system prompt clear the
+    // 512-token minimum cacheable prefix on Opus 5 / Sonnet 5, so this
+    // breakpoint now actually caches. Haiku 4.5's minimum is 4096 tokens, so
+    // it may still fall below — a below-minimum prefix is silently not
+    // cached, never an error. Both halves must stay byte-stable to hit:
+    // sorted tool order (tools.js) and a frozen prompt (agent-session.js).
+    // Verify with usage.cache_read_input_tokens, not by inspection.
     params.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }]
   }
 
