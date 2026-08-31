@@ -6,7 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-> **Before tagging 0.2.0:** widen all five plugin manifests' `grapestrapVersion` range — `plugins/*/grapestrap.json` are still pinned `>=0.0.1 <0.2.0`, which would refuse to load under the very release that ships the AI panel.
+## [v0.1.3] — 2026-08-31 (preliminary AI release, for testing)
+
+> Preliminary build of the AI round for install testing — the polished cut of this feature set ships later as v0.2.0. (The five bundled plugin manifests' `grapestrapVersion` ranges were widened to `<0.3.0` in this release, ahead of that.)
 
 ### Added
 - **Bootstrap is now an editable stylesheet, not a locked vendor file**: a fourth tab, **Bootstrap**, joins DOM / Properties / Custom CSS on the right, holding the project's own `site/assets/css/bootstrap.css`. Change a variable, retune a component, delete a chunk you never use — the canvas repaints as you type (the preview reads your unsaved buffer, nothing is written until you save), Ctrl+S writes it back to the project, and **export ships your version**, never a fresh copy of the shipped one. Every project keeps its own copy, so editing one project's Bootstrap never touches another's. Projects built on a starter that brings its own framework (Graphite, Orbit, Vista) show a short note pointing at Site Files instead — there is no app-managed Bootstrap in those to edit. The tab hides and restores from **View → Toggle Bootstrap CSS** like the others, and saved workspace layouts made before this existed gain the tab the next time they're applied. One caveat worth knowing: unsaved Bootstrap edits are deliberately left out of the 30-second crash snapshot (a 280KB stylesheet on every tick, for a file that changes rarely), so they are not crash-recovered — same as file-tab edits.
