@@ -65,7 +65,8 @@ export default defineConfig({
                 'electron-log',
                 'chokidar',
                 'simple-git',
-                'semver'
+                'semver',
+                /^@anthropic-ai\/sdk/
               ]
             }
           }

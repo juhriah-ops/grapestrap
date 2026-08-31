@@ -7,6 +7,14 @@
  * Convention: handlers return plain serializable objects. Errors propagate as
  * thrown values; the renderer's preload converts them into rejected promises.
  *
+ * UPDATED: 2026-08-30 (review pass) — `ai:*` handlers now pass through
+ * agent-session.js's own return envelopes for cancel/reset/tool-result
+ * instead of flattening them to {ok:true} (a failed tool-result callId was
+ * silently swallowed into a hang); added `ai:validate-key`; every
+ * destructuring handler now defaults its payload to `{}`.
+ * UPDATED: 2026-08-30 — `ai:*` block (v0.2 Phase A agent panel wiring:
+ * status/set-key/clear-key/list-models/send/cancel/reset/tool-result,
+ * routed to ai/agent-session.js + ai/key-store.js).
  * UPDATED: 2026-08-18 — `behaviors:ensure` (version-checked copy of the
  * app-bundled behaviors runtime pair into the open project's site/assets/).
  */
@@ -35,6 +43,10 @@ import {
 import { startPreview, refreshPreview, stopPreview } from './preview-server.js'
 import { listStarters, getStarterPage } from './starters/index.js'
 import { bindGitStatus, notifyChange as notifyGitChange, refreshNow as refreshGitStatus } from './git-status.js'
+import {
+  getStatus, sendTurn, cancelTurn, resetHistory, handleToolResult, listModels, validateKey
+} from './ai/agent-session.js'
+import { setKey, clearKey } from './ai/key-store.js'
 
 let pluginRegistryRef = null
 
@@ -318,6 +330,67 @@ export function registerIpcHandlers({ pluginRegistry }) {
   // the wire payload, or null when no project is open — never throws across
   // the bridge (F11). Pushes land on `git:status` like every other broadcast.
   ipcMain.handle('git:refresh', () => refreshGitStatus())
+
+  // ─── AI agent panel (v0.2 Phase A) ─────────────────────────────────────────
+  // Mechanical wiring only: agent-session.js owns the turn state machine and
+  // the actual provider call, key-store.js owns safeStorage-encrypted key
+  // persistence. Every handler here is a thin pass-through — none of them
+  // sees, logs, or echoes key material. Streamed content (deltas, tool
+  // calls, terminal turn state) is pushed to the renderer as events
+  // ('ai:delta' / 'ai:tool-call' / 'ai:turn'), not returned from these
+  // handles — see agent-session.js for the push side.
+  //
+  // Every handler below that destructures its payload defaults it to `{}` —
+  // ipcRenderer.invoke can be called directly (bypassing the preload
+  // wrapper) with no payload at all, and a bare destructure on `undefined`
+  // throws a TypeError instead of a clean validation failure.
+  ipcMain.handle('ai:status', () => getStatus())
+
+  ipcMain.handle('ai:set-key', async (_e, { providerId, key } = {}) => {
+    try {
+      await setKey(providerId, key)
+      return { ok: true }
+    } catch (err) {
+      const isEncryptionGap = err?.message === 'encryption-unavailable'
+      // Log the failure shape only — never `key`, never `err` verbatim (an
+      // unexpected error class could stringify something we don't control).
+      if (!isEncryptionGap) log.warn(`ai:set-key failed for provider "${providerId}"`)
+      return {
+        ok: false,
+        error: {
+          type: isEncryptionGap ? 'encryption-unavailable' : 'api',
+          message: isEncryptionGap
+            ? 'Key encryption is not available on this system.'
+            : 'Could not store the key.'
+        }
+      }
+    }
+  })
+
+  ipcMain.handle('ai:clear-key', async (_e, { providerId } = {}) => {
+    await clearKey(providerId)
+    return { ok: true }
+  })
+
+  // Round-trips a typed-but-unsaved key against the provider before the
+  // user commits it via ai:set-key — never persists anything itself.
+  ipcMain.handle('ai:validate-key', (_e, { providerId, key } = {}) => validateKey(providerId, key))
+
+  ipcMain.handle('ai:list-models', async () => ({ ok: true, models: await listModels() }))
+
+  ipcMain.handle('ai:send', (event, { text } = {}) => sendTurn(text, event.sender))
+
+  // cancelTurn/resetHistory/handleToolResult already return the caller-
+  // facing envelope (e.g. cancelTurn's {ok,turnId}) — pass it straight
+  // through rather than flattening it to a hardcoded {ok:true}, which used
+  // to silently discard a failed/unknown callId from handleToolResult and
+  // turn it into a hang instead of a rejection the renderer could act on.
+  ipcMain.handle('ai:cancel', () => cancelTurn())
+
+  ipcMain.handle('ai:reset', () => resetHistory())
+
+  ipcMain.handle('ai:tool-result', (_e, { callId, result, isError } = {}) =>
+    handleToolResult({ callId, result, isError }))
 
   // ─── External shell actions ────────────────────────────────────────────────
   ipcMain.handle('shell:open-external', (_e, url) => {

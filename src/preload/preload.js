@@ -121,6 +121,29 @@ const grapestrap = {
   shell: {
     openExternal: (url)  => ipcRenderer.invoke('shell:open-external', url),
     showInFolder: (path) => ipcRenderer.invoke('shell:show-in-folder', path)
+  },
+
+  // ─── AI agent panel (v0.2 Phase A) ─────────────────────────────────────────
+  // Non-secret prefs (provider/model/effort) live in prefs.ai — see
+  // src/main/prefs.js. setKey/clearKey pass the plaintext key across the
+  // bridge exactly once, on its way to being encrypted in main
+  // (ai/key-store.js); nothing key-shaped is cached, returned, or logged on
+  // this side. onDelta/onToolCall/onTurn are push subscriptions for one
+  // in-flight turn's stream — each returns an unsubscribe fn, same as
+  // git.onStatus above.
+  ai: {
+    status:      ()                        => ipcRenderer.invoke('ai:status'),
+    setKey:      (providerId, key)         => ipcRenderer.invoke('ai:set-key', { providerId, key }),
+    clearKey:    (providerId)              => ipcRenderer.invoke('ai:clear-key', { providerId }),
+    validateKey: (providerId, key)         => ipcRenderer.invoke('ai:validate-key', { providerId, key }),
+    listModels:  ()                        => ipcRenderer.invoke('ai:list-models'),
+    send:        (text)                    => ipcRenderer.invoke('ai:send', { text }),
+    cancel:      ()                        => ipcRenderer.invoke('ai:cancel'),
+    reset:       ()                        => ipcRenderer.invoke('ai:reset'),
+    toolResult:  (callId, result, isError) => ipcRenderer.invoke('ai:tool-result', { callId, result, isError }),
+    onDelta:     (cb) => subscribe('ai:delta', cb),
+    onToolCall:  (cb) => subscribe('ai:tool-call', cb),
+    onTurn:      (cb) => subscribe('ai:turn', cb)
   }
 }
 
