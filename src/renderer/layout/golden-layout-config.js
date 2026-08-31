@@ -5,12 +5,12 @@
  * of these separate views should all be on the right as tabs in one panel
  * like the library and assets"):
  *
- *   ┌─────────────────┬──────────────────────────┬─────────────────────────┐
- *   │ Project │ Lib │ │  CANVAS / CODE / SPLIT   │ DOM │ Props │ CSS │ BS  │
- *   │ Asset           │                          │                         │
- *   └─────────────────┴──────────────────────────┴─────────────────────────┘
- *      LEFT STACK              CENTER                  RIGHT STACK
- *      (3 tabs)                                        (4 tabs)
+ *   ┌─────────────────┬──────────────────────────┬─────────────────────────────┐
+ *   │ Project │ Lib │ │  CANVAS / CODE / SPLIT   │ DOM │ Props │ CSS │ BS │ AI │
+ *   │ Asset           │                          │                             │
+ *   └─────────────────┴──────────────────────────┴─────────────────────────────┘
+ *      LEFT STACK              CENTER                     RIGHT STACK
+ *      (3 tabs)                                           (5 tabs)
  *
  * Each pane registers with Golden Layout under a unique component name. Plugins
  * can register additional panels via `api.registerPanel({ id, ... })` which adds
@@ -34,6 +34,7 @@ import { renderCanvas }      from '../panels/canvas/index.js'
 import { renderProperties }  from '../panels/properties-side/index.js'
 import { renderCustomCss }   from '../panels/custom-css/index.js'
 import { renderBootstrapCss } from '../panels/bootstrap-css/index.js'
+import { renderAiPanel }      from '../panels/ai/index.js'
 import { renderLibraryItems } from '../panels/library-items/index.js'
 import { renderAssetManager } from '../panels/asset-manager/index.js'
 import { relayoutAllMonaco } from '../editor/monaco-init.js'
@@ -56,14 +57,15 @@ let layout = null
 // windowed on 2026-07-06).
 //
 // The two side stacks stopped holding the same number of tabs on 2026-08-18
-// (the Bootstrap panel made the right stack 4), hence separate counts: reusing
-// the left stack's ÷3 on a 4-tab stack would put the right stack's effective
-// floor back at 240px and reintroduce exactly that regression. If a stack
-// gains or loses a tab, update its count here.
+// (the Bootstrap panel made the right stack 4; the AI panel made it 5 on
+// 2026-08-30), hence separate counts: reusing the left stack's ÷3 on a 5-tab
+// stack would put the right stack's effective floor at 5 × (180÷3) = 300px
+// and reintroduce exactly that regression. If a stack gains or loses a tab,
+// update its count here.
 const STACK_MIN_W = 180
 const STACK_MIN_H = 120
 const LEFT_STACK_TAB_COUNT = 3    // Project / Library / Assets
-const RIGHT_STACK_TAB_COUNT = 4   // DOM / Properties / Custom CSS / Bootstrap
+const RIGHT_STACK_TAB_COUNT = 5   // DOM / Properties / Custom CSS / Bootstrap / AI
 const LEFT_PANEL_MIN_W = STACK_MIN_W / LEFT_STACK_TAB_COUNT
 const LEFT_PANEL_MIN_H = STACK_MIN_H / LEFT_STACK_TAB_COUNT
 const RIGHT_PANEL_MIN_W = STACK_MIN_W / RIGHT_STACK_TAB_COUNT
@@ -95,7 +97,8 @@ const PANEL_TITLE_KEYS = {
   'dom-tree':      'panel.dom-tree',
   'properties':    'panel.properties',
   'custom-css':    'panel.custom-css',
-  'bootstrap-css': 'panel.bootstrap-css'
+  'bootstrap-css': 'panel.bootstrap-css',
+  'ai':            'panel.ai'
 }
 
 /**
@@ -150,12 +153,12 @@ const DEFAULT_CONFIG = {
             isClosable: false, minWidth: CANVAS_MIN_W, minHeight: CANVAS_MIN_H }
         ]
       },
-      // RIGHT STACK — DOM / Properties / Custom CSS / Bootstrap as tabs
+      // RIGHT STACK — DOM / Properties / Custom CSS / Bootstrap / AI as tabs
       // (consolidated per nola1 user 2026-05-05). Properties is the
       // default-active tab since it's the most common edit surface; DOM is the
       // secondary outline view; Custom CSS is the project-global stylesheet
       // editor; Bootstrap (2026-08-18) is the project's own copy of the
-      // framework sheet.
+      // framework sheet; AI (2026-08-30) is the project-aware chat panel.
       {
         type: 'stack',
         width: 26,
@@ -168,6 +171,8 @@ const DEFAULT_CONFIG = {
           { type: 'component', componentType: 'custom-css',
             isClosable: false, minWidth: RIGHT_PANEL_MIN_W, minHeight: RIGHT_PANEL_MIN_H },
           { type: 'component', componentType: 'bootstrap-css',
+            isClosable: false, minWidth: RIGHT_PANEL_MIN_W, minHeight: RIGHT_PANEL_MIN_H },
+          { type: 'component', componentType: 'ai',
             isClosable: false, minWidth: RIGHT_PANEL_MIN_W, minHeight: RIGHT_PANEL_MIN_H }
         ]
       }
@@ -187,7 +192,8 @@ const PANEL_FACTORIES = {
   'canvas':        renderCanvas,
   'properties':    renderProperties,
   'custom-css':    renderCustomCss,
-  'bootstrap-css': renderBootstrapCss
+  'bootstrap-css': renderBootstrapCss,
+  'ai':            renderAiPanel
 }
 
 export function initGoldenLayout(host) {
@@ -336,7 +342,7 @@ export function applyLayoutConfig(config) {
   layout.loadLayout(config)
 }
 
-/** componentTypes a workspace config may reference (the 8 built-in panels). */
+/** componentTypes a workspace config may reference (the 9 built-in panels). */
 export function getRegisteredComponentTypes() {
   return Object.keys(PANEL_FACTORIES)
 }

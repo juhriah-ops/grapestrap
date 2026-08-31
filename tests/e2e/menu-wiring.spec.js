@@ -12,6 +12,7 @@
  * DEPENDS: @playwright/test, ./helpers.js, src/renderer/shortcuts/menu-router.js
  * CREATED: 2026-08-06
  * UPDATED: 2026-08-18 — View → Toggle Bootstrap CSS
+ * UPDATED: 2026-08-30 — View → Toggle AI Panel
  */
 import { test, expect } from '@playwright/test'
 import { promises as fsp } from 'node:fs'
@@ -29,6 +30,7 @@ const L = {
   toggleBreakpoints: 'Toggle Breakpoint Slider',
   toggleCustomCss: 'Toggle Custom CSS',
   toggleBootstrapCss: 'Toggle Bootstrap CSS',
+  toggleAi: 'Toggle AI Panel',
   insertForms: 'Forms'
 }
 
@@ -53,7 +55,7 @@ async function seededLaunch() {
   return { app, appWindow, projectPath }
 }
 
-test('View toggles: Linked Files, Breakpoint Slider, Custom CSS, Bootstrap CSS route through the native menu', async () => {
+test('View toggles: Linked Files, Breakpoint Slider, Custom CSS, Bootstrap CSS, AI Panel route through the native menu', async () => {
   const { app, appWindow } = await seededLaunch()
 
   // Linked Files + Breakpoints bars are visible with a page tab open;
@@ -70,12 +72,13 @@ test('View toggles: Linked Files, Breakpoint Slider, Custom CSS, Bootstrap CSS r
     await appWindow.waitForFunction(i => !document.getElementById(i).hidden, id, { timeout: 3_000 })
   }
 
-  // Custom CSS and Bootstrap are right-stack tabs — hidden via a body class.
-  // The router is an explicit case whitelist, so a missing case here shows up
-  // as the menu item doing nothing at all.
+  // Custom CSS, Bootstrap, and AI are right-stack tabs — hidden via a body
+  // class. The router is an explicit case whitelist, so a missing case here
+  // shows up as the menu item doing nothing at all.
   for (const [label, bodyClass] of [
     [L.toggleCustomCss, 'is-hide-custom-css'],
-    [L.toggleBootstrapCss, 'is-hide-bootstrap-css']
+    [L.toggleBootstrapCss, 'is-hide-bootstrap-css'],
+    [L.toggleAi, 'is-hide-ai']
   ]) {
     await clickMenuItem(app, L.view, label)
     await appWindow.waitForFunction(

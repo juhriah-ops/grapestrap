@@ -11,6 +11,8 @@
  * CREATED: 2026-07-12
  * UPDATED: 2026-08-18 — Bootstrap panel: 4th right tab in the collapse spec,
  *          plus the ensureCorePanels injection spec
+ * UPDATED: 2026-08-30 — AI panel: 5th right tab in the collapse spec, plus a
+ *          matching ensureCorePanels injection spec for 'ai'
  */
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
@@ -355,11 +357,12 @@ test('workspace saved with all right tabs hidden round-trips the collapse', asyn
   expect(rightBaseline).toBeGreaterThan(100)
 
   // Hide every right tab → stack collapses. DOM is already hidden by
-  // default prefs; hide the other three.
+  // default prefs; hide the other four.
   await appWindow.evaluate(() => {
     window.__gstrap.eventBus.emit('view:toggle-properties')
     window.__gstrap.eventBus.emit('view:toggle-custom-css')
     window.__gstrap.eventBus.emit('view:toggle-bootstrap-css')
+    window.__gstrap.eventBus.emit('view:toggle-ai')
   })
   await appWindow.waitForTimeout(250)
   expect(await rightStackWidth()).toBeLessThan(10)
@@ -530,6 +533,46 @@ test('a workspace saved before the Bootstrap panel existed gains it on apply', a
   expect(after.hosts).toBe(1)
   // Injected beside its siblings, and titled with the same i18n string the
   // tab-hide CSS selects on.
+  expect(after.rightTabTitles).toContain('Bootstrap')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+// Same ensureCorePanels contract, second core panel: a layout saved before
+// the AI panel existed (2026-08-30) must gain it on apply too, without
+// disturbing the Bootstrap panel it already has.
+test('a workspace saved before the AI panel existed gains it on apply', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-ws-inject-ai-'))
+  const { app, appWindow, xdgRoot } = await launch()
+  await openSeedProject(appWindow, join(projectDir, 'inject-ai.gstrap'))
+
+  expect((await appWindow.evaluate(() => window.__gstrap.workspaces.save('legacy-ai')))?.ok).toBe(true)
+  const file = join(xdgRoot, 'state', 'GrapeStrap', 'workspaces', 'legacy-ai.json')
+  const record = JSON.parse(await fsp.readFile(file, 'utf8'))
+  const stripPanel = node => {
+    if (!node || typeof node !== 'object' || !Array.isArray(node.content)) return
+    node.content = node.content.filter(child => child.componentType !== 'ai')
+    node.content.forEach(stripPanel)
+  }
+  stripPanel(record.gl.root)
+  delete record.visibility.aiPanelVisible
+  expect(JSON.stringify(record)).not.toContain('"ai"')
+  await fsp.writeFile(file, JSON.stringify(record), 'utf8')
+
+  expect((await appWindow.evaluate(() => window.__gstrap.workspaces.apply('legacy-ai')))?.ok).toBe(true)
+  await appWindow.waitForTimeout(300)
+
+  const after = await appWindow.evaluate(() => ({
+    aiHosts: document.querySelectorAll('.gstrap-ai-host').length,
+    bscssHosts: document.querySelectorAll('.gstrap-bscss-host').length,
+    rightTabTitles: [...document.querySelectorAll('.lm_item.lm_stack:has(.gstrap-dom-host) .lm_tab')]
+      .map(tab => tab.getAttribute('title'))
+  }))
+  expect(after.aiHosts).toBe(1)
+  // Bootstrap (already present in this layout) is untouched by the AI injection.
+  expect(after.bscssHosts).toBe(1)
+  expect(after.rightTabTitles).toContain('AI')
   expect(after.rightTabTitles).toContain('Bootstrap')
 
   await app.close()

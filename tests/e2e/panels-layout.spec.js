@@ -6,6 +6,7 @@
  * DEPENDS: @playwright/test, ./helpers.js
  * CREATED: 2026-07-12
  * UPDATED: 2026-08-18 — right stack is 4 tabs (Bootstrap panel added)
+ * UPDATED: 2026-08-30 — right stack is 5 tabs (AI panel added)
  */
 import { test, expect } from '@playwright/test'
 import { join } from 'node:path'
@@ -172,7 +173,7 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
   // Make every GL-managed panel visible so each host renders.
   await appWindow.evaluate(() => {
     document.body.classList.remove(
-      'is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-bootstrap-css','is-hide-file-manager')
+      'is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-bootstrap-css','is-hide-ai','is-hide-file-manager')
   })
   await appWindow.waitForTimeout(100)
 
@@ -186,6 +187,7 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
         'gstrap-props-host': 'Properties',
         'gstrap-cssp-host': 'Custom CSS',
         'gstrap-bscss-host': 'Bootstrap',
+        'gstrap-ai-host': 'AI',
         'gstrap-fm-host': 'Project'
       }
       const tab = document.querySelector(`.lm_tab[title="${titleMap[cls]}"]`)
@@ -208,7 +210,7 @@ test('Panel layout: hosts align with their .lm_items section, not the header', a
     }, hostClass)
   }
 
-  for (const cls of ['gstrap-fm-host', 'gstrap-dom-host', 'gstrap-props-host', 'gstrap-cssp-host', 'gstrap-bscss-host']) {
+  for (const cls of ['gstrap-fm-host', 'gstrap-dom-host', 'gstrap-props-host', 'gstrap-cssp-host', 'gstrap-bscss-host', 'gstrap-ai-host']) {
     const p = await activateAndMeasure(cls)
     expect(p.found, `${cls} should exist`).toBe(true)
     expect(p.rendered, `${cls} should be rendered after activation`).toBe(true)
@@ -224,8 +226,8 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
   // Consolidation 2026-05-05 (alpha.12): DOM Tree, Properties, and Custom CSS
   // are tabs in a single right-side stack (per nola1 user request: "all of
   // these separate views should all be on the right as tabs in one panel like
-  // the library and assets"), joined by Bootstrap on 2026-08-18. Toggle
-  // behavior:
+  // the library and assets"), joined by Bootstrap on 2026-08-18 and AI on
+  // 2026-08-30. Toggle behavior:
   //
   //   - Hide one tab → only its tab+content goes away; stack stays for the
   //     others; canvas does NOT grow.
@@ -238,11 +240,11 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
   const { app, appWindow } = await launch()
   await openSeedProject(appWindow, projectPath)
 
-  // Reset to a known state: clear all three body classes; restore the stack
+  // Reset to a known state: clear all five body classes; restore the stack
   // if a prior test collapsed it.
   await appWindow.evaluate(() => {
     document.body.classList.remove(
-      'is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-bootstrap-css')
+      'is-hide-dom-tree','is-hide-properties','is-hide-custom-css','is-hide-bootstrap-css','is-hide-ai')
     // If the right stack is currently collapsed (no in-process state to
     // restore via panel-visibility from outside), trigger any one show toggle.
     window.__gstrap.eventBus.emit('view:toggle-dom-tree')
@@ -260,7 +262,8 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
 
   async function rightStackVisible() {
     return appWindow.evaluate(() => {
-      // Right stack = the .lm_item.lm_stack containing all three host classes.
+      // Right stack = the .lm_item.lm_stack containing the DOM host (any one
+      // of the five right-stack host classes would locate the same stack).
       const stack = document.querySelector('.lm_item.lm_stack:has(.gstrap-dom-host)')
       if (!stack) return false
       const r = stack.getBoundingClientRect()
@@ -275,11 +278,12 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
     })
   }
 
-  // Baseline: all four visible, right stack visible
+  // Baseline: all five visible, right stack visible
   expect(await tabPresent('gstrap-dom-host')).toBe(true)
   expect(await tabPresent('gstrap-props-host')).toBe(true)
   expect(await tabPresent('gstrap-cssp-host')).toBe(true)
   expect(await tabPresent('gstrap-bscss-host')).toBe(true)
+  expect(await tabPresent('gstrap-ai-host')).toBe(true)
   expect(await rightStackVisible()).toBe(true)
   const canvasBaseline = await canvasWidth()
   expect(canvasBaseline).toBeGreaterThan(0)
@@ -298,15 +302,21 @@ test('Right-stack tabs: individual hide leaves stack, all-hidden collapses stack
   expect(await tabPresent('gstrap-props-host')).toBe(false)
   expect(await rightStackVisible()).toBe(true)
 
-  // Hide Custom CSS — Bootstrap still holds the stack open.
+  // Hide Custom CSS — Bootstrap and AI still hold the stack open.
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-custom-css'))
   await appWindow.waitForTimeout(150)
   expect(await tabPresent('gstrap-cssp-host')).toBe(false)
   expect(await rightStackVisible()).toBe(true)
 
-  // Hide Bootstrap — now EVERY tab is hidden, the stack must collapse and
-  // canvas must grow to reclaim the right column.
+  // Hide Bootstrap — AI still holds the stack open.
   await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-bootstrap-css'))
+  await appWindow.waitForTimeout(150)
+  expect(await tabPresent('gstrap-bscss-host')).toBe(false)
+  expect(await rightStackVisible()).toBe(true)
+
+  // Hide AI — now EVERY tab is hidden, the stack must collapse and canvas
+  // must grow to reclaim the right column.
+  await appWindow.evaluate(() => window.__gstrap.eventBus.emit('view:toggle-ai'))
   await appWindow.waitForTimeout(200)
   expect(await rightStackVisible()).toBe(false)
   const canvasAllHidden = await canvasWidth()

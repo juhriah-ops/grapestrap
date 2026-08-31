@@ -1,0 +1,286 @@
+/* GrapeStrap — AI panel
+   PATH: src/renderer/styles/ai-panel.css
+   ROLE: Host + transcript + composer layout for the AI chat panel (5th
+         right-stack tab, added 2026-08-30). The DOM is owned by
+         src/renderer/ai/index.js (renderAiPanel) — this file styles against
+         its published class/attribute contract only:
+           .gstrap-ai-host                 (column flex, full height)
+           .gstrap-ai-transcript           (scrollable message list)
+           .gstrap-ai-msg                  (+ -user / -assistant / -notice / -error)
+           .gstrap-ai-msg-notice.gstrap-ai-toolrow  (tool-call announcement variant)
+           .gstrap-ai-empty (+ -title / -body)      (centered placeholder)
+           .gstrap-ai-composer / .gstrap-ai-composer-actions
+           .gstrap-ai-input / .gstrap-ai-send / .gstrap-ai-stop / .gstrap-ai-reset
+         Show/hide of the Stop button and the empty block is driven by the
+         native `hidden` attribute in index.js — this file does not fight
+         that with its own display rules. Send/Reset go through the native
+         `disabled` attribute (:disabled below), not a class. Two host data
+         attributes exist purely for CSS to react to cosmetically:
+         data-ai-state ("idle"|"running") and data-ai-linked ("true"|"false").
+         Button look mirrors the house .gstrap-btn / .gstrap-btn-primary
+         pattern in styles/modals.css.
+   DEPENDS: theme-dark.css (tokens)
+   CREATED: 2026-08-30 */
+
+.gstrap-ai-host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-family: var(--font-ui);
+}
+
+/* panels.css gives .gstrap-persistent-root only position:relative + 100%
+   size (the house default for a panel's heavyweight-widget subtree — see its
+   comment there). The AI panel's shell (transcript above, composer below)
+   needs a column flex context of its own on top of that, same idiom
+   .gstrap-canvas-host.is-split uses for its row-flex split view. Without
+   this, .gstrap-ai-transcript's flex:1/overflow-y:auto below has no flex
+   parent to size against and nothing scrolls. */
+.gstrap-ai-host .gstrap-persistent-root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Transcript ──────────────────────────────────────────────────────────── */
+.gstrap-ai-transcript {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+/* ─── Empty state — visibility is JS-driven (el.hidden); this only styles the
+   centered placeholder itself. */
+.gstrap-ai-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+}
+/* index.js toggles this element with el.hidden (hasMessages), and author
+   styles always beat the UA [hidden]{display:none} rule regardless of
+   specificity — without this override the flex display above wins and the
+   empty state never goes away once messages land. House pattern: panels.css
+   pairs .gstrap-canvas-design/-code's display rules with the same [hidden]
+   override for the identical reason. */
+.gstrap-ai-empty[hidden] {
+  display: none;
+}
+.gstrap-ai-empty-title {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.gstrap-ai-empty-body {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 32ch;
+}
+/* The "ready" variant leaves the body empty (title says it all) — collapse
+   the gap it would otherwise reserve. */
+.gstrap-ai-empty-body:empty {
+  display: none;
+}
+/* The not-linked title stands out from the neutral "ready" placeholder so a
+   locked panel doesn't read the same as an ordinary empty one. */
+.gstrap-ai-empty[data-ai-kind="not-linked"] .gstrap-ai-empty-title {
+  color: var(--warning);
+}
+
+/* ─── Message rows ────────────────────────────────────────────────────────── */
+.gstrap-ai-msg {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.gstrap-ai-msg-user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-2));
+  border: 1px solid var(--accent-2);
+  color: var(--text-1);
+}
+
+.gstrap-ai-msg-assistant {
+  align-self: flex-start;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+}
+
+.gstrap-ai-msg-notice {
+  align-self: center;
+  max-width: 100%;
+  background: none;
+  border: none;
+  padding: 2px 8px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.gstrap-ai-msg-error {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-2));
+  border: 1px solid var(--error);
+  color: var(--text-1);
+}
+
+/* Tool-call announcement: a notice with its own look (left accent bar, mono
+   type) instead of the plain italic/centered notice style above — same
+   specificity trick as toast type modifiers, applied on top of -notice. */
+.gstrap-ai-msg-notice.gstrap-ai-toolrow {
+  align-self: flex-start;
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+/* A streaming assistant row gets an accent edge and a blinking caret so a
+   long generation reads as "still going," not stalled. */
+.gstrap-ai-msg[data-ai-streaming="true"] {
+  border-color: var(--accent);
+}
+.gstrap-ai-msg[data-ai-streaming="true"]::after {
+  content: '\258C';
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent);
+  animation: gstrap-ai-caret-blink 1s steps(1, start) infinite;
+}
+@keyframes gstrap-ai-caret-blink {
+  50% { opacity: 0; }
+}
+
+/* ─── Composer ────────────────────────────────────────────────────────────── */
+.gstrap-ai-composer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-3);
+  border-top: 1px solid var(--border);
+  transition: border-color 100ms ease;
+}
+/* Cosmetic-only cue that a turn is streaming — the Stop button's own
+   visibility is native `hidden`, not this. */
+.gstrap-ai-host[data-ai-state="running"] .gstrap-ai-composer {
+  border-top-color: var(--accent);
+}
+/* Cosmetic-only cue that the panel is locked — Input/Send are already
+   `disabled` by index.js; this just tints the bar to match. */
+.gstrap-ai-host[data-ai-linked="false"] .gstrap-ai-composer {
+  background: var(--bg-2);
+}
+
+/* Grows with content up to ~6 lines (6 × 18px line-height + vertical
+   padding), then scrolls internally — the composer bar itself never grows
+   past that. */
+.gstrap-ai-input {
+  flex: 1 1 auto;
+  min-height: 34px;
+  max-height: 124px;
+  resize: none;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+}
+.gstrap-ai-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.gstrap-ai-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gstrap-ai-composer-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Button look matches the house .gstrap-btn / .gstrap-btn-primary pattern
+   (styles/modals.css) rather than inventing a second button language. */
+.gstrap-ai-send,
+.gstrap-ai-stop,
+.gstrap-ai-reset {
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 14px;
+  background: var(--bg-3);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.gstrap-ai-send:hover,
+.gstrap-ai-stop:hover,
+.gstrap-ai-reset:hover {
+  background: var(--bg-4);
+  border-color: var(--text-3);
+}
+.gstrap-ai-send:focus,
+.gstrap-ai-stop:focus,
+.gstrap-ai-reset:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.gstrap-ai-send:disabled,
+.gstrap-ai-stop:disabled,
+.gstrap-ai-reset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Send is the primary action. */
+.gstrap-ai-send {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0a0e0a;
+  font-weight: 600;
+}
+.gstrap-ai-send:hover {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+/* Stop reads as an interrupt, not a routine action. */
+.gstrap-ai-stop {
+  color: var(--error);
+  border-color: var(--error);
+}
+.gstrap-ai-stop:hover {
+  background: color-mix(in srgb, var(--error) 15%, var(--bg-3));
+  border-color: var(--error);
+}

@@ -172,6 +172,7 @@ async function dispatchCommand(action, args = []) {
     case 'view:toggle-breakpoints':
     case 'view:toggle-custom-css':
     case 'view:toggle-bootstrap-css':
+    case 'view:toggle-ai':
       return eventBus.emit(action)
 
     // Insert menu items focus the matching Insert-panel tab. If the panel

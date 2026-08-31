@@ -15,7 +15,7 @@
  *     The stack itself stays for the remaining tabs. Same pattern that the
  *     right-stack tabs use, just on the left.
  *
- *   - **Right-stack tabs** (DOM Tree, Properties, Custom CSS, Bootstrap) —
+ *   - **Right-stack tabs** (DOM Tree, Properties, Custom CSS, Bootstrap, AI) —
  *     driven through `panel-visibility.js`. Each toggle adds/removes a body
  *     class that hides its `.lm_tab` + `.lm_content` host (CSS in
  *     golden-layout-overrides.css). If EVERY tab ends up hidden, the
@@ -55,7 +55,8 @@ const RIGHT_STACK_TABS = {
   'view:toggle-dom-tree':      { panelKey: 'dom-tree',      prefKey: 'domTreeVisible',         defaultVisible: true },
   'view:toggle-properties':    { panelKey: 'properties',    prefKey: 'propertiesPanelVisible', defaultVisible: true },
   'view:toggle-custom-css':    { panelKey: 'custom-css',    prefKey: 'customCssVisible',       defaultVisible: true },
-  'view:toggle-bootstrap-css': { panelKey: 'bootstrap-css', prefKey: 'bootstrapCssVisible',    defaultVisible: true }
+  'view:toggle-bootstrap-css': { panelKey: 'bootstrap-css', prefKey: 'bootstrapCssVisible',    defaultVisible: true },
+  'view:toggle-ai':            { panelKey: 'ai',            prefKey: 'aiPanelVisible',          defaultVisible: true }
 }
 
 export async function wireViewToggles() {

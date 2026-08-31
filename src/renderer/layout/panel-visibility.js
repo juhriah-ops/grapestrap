@@ -2,8 +2,9 @@
  * GrapeStrap — GL panel visibility (tab hide + auto-collapse stack)
  *
  * After the 2026-05-05 right-side consolidation (DOM / Properties / Custom CSS
- * — joined by Bootstrap on 2026-08-18 — are tabs in a single right-side stack,
- * same pattern as Project / Library / Assets on the left), per-panel
+ * — joined by Bootstrap on 2026-08-18 and AI on 2026-08-30 — are tabs in a
+ * single right-side stack, same pattern as Project / Library / Assets on the
+ * left), per-panel
  * visibility is just hiding a tab in its stack. Two pieces:
  *
  *   1. Each panel's "hide" state is a body class. CSS rules in
@@ -47,7 +48,8 @@ const RIGHT_TAB_CLASSES = {
   'dom-tree':      { bodyClass: 'is-hide-dom-tree' },
   'properties':    { bodyClass: 'is-hide-properties' },
   'custom-css':    { bodyClass: 'is-hide-custom-css' },
-  'bootstrap-css': { bodyClass: 'is-hide-bootstrap-css' }
+  'bootstrap-css': { bodyClass: 'is-hide-bootstrap-css' },
+  'ai':            { bodyClass: 'is-hide-ai' }
 }
 
 // Snapshot of sibling sizes when the right stack itself is collapsed. WeakMap
@@ -71,7 +73,7 @@ function findRightStack() {
   const root = layout.rootItem
   if (!root) return null
   const dom = findComponentByType(root, 'dom-tree')
-  // The stack containing DOM (plus Properties, Custom CSS, Bootstrap) is
+  // The stack containing DOM (plus Properties, Custom CSS, Bootstrap, AI) is
   // dom.parent.
   return dom?.parent || null
 }

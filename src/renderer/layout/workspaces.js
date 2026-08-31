@@ -15,6 +15,8 @@
  * CREATED: 2026-07-12
  * UPDATED: 2026-08-18 — ensureCorePanels injects the Bootstrap panel into
  *          layouts saved before it existed
+ * UPDATED: 2026-08-30 — AI panel added as a 2nd core right-stack panel
+ *          (same ensureCorePanels injection contract as Bootstrap)
  *
  * Apply flow (PLAN.md §3.3): validate (fail open — F1/F2) → ensureCorePanels
  * (a saved layout predating a panel gains it, fail-open — 2026-08-18) →
@@ -50,7 +52,8 @@ const PRESET_SLUGS = new Set(PRESET_NAMES.map(n => n.toLowerCase()))
 const ALL_VISIBLE = {
   tabsVisible: true, insertPanelVisible: true, propertyStripVisible: true,
   statusBarVisible: true, fileManagerVisible: true, domTreeVisible: true,
-  propertiesPanelVisible: true, customCssVisible: true, bootstrapCssVisible: true
+  propertiesPanelVisible: true, customCssVisible: true, bootstrapCssVisible: true,
+  aiPanelVisible: true
 }
 
 // Right-stack panels that must exist in EVERY applied layout, and the panels
@@ -59,7 +62,7 @@ const ALL_VISIBLE = {
 // valid, so without ensureCorePanels a user with a saved layout would never
 // see the new tab (and its View toggle would silently no-op). Order matters:
 // the first anchor found wins.
-const CORE_RIGHT_PANELS = ['bootstrap-css']
+const CORE_RIGHT_PANELS = ['bootstrap-css', 'ai']
 const RIGHT_STACK_ANCHORS = ['custom-css', 'properties', 'dom-tree']
 
 // Saved-name cache: inline duplicate validation + native-menu pushes.

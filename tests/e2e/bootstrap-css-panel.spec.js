@@ -11,6 +11,8 @@
  *          src/renderer/panels/bootstrap-css/index.js,
  *          src/renderer/editor/grapesjs-init.js, src/main/project-manager.js
  * CREATED: 2026-08-18
+ * UPDATED: 2026-08-30 — right-stack tab-title assertion extended for the
+ *          5th tab (AI)
  */
 import { test, expect } from '@playwright/test'
 import { join, dirname } from 'node:path'
@@ -50,11 +52,11 @@ test('Bootstrap panel: edit previews live, saves to disk, and wins at export', a
   const { app, appWindow } = await launch()
   await openSeedProject(appWindow, projectPath)
 
-  // ── The 4th right-stack tab ────────────────────────────────────────────────
+  // ── The 4th right-stack tab (5th as of the 2026-08-30 AI panel) ────────────
   const rightTabTitles = await appWindow.evaluate(() =>
     [...document.querySelectorAll('.lm_item.lm_stack:has(.gstrap-dom-host) .lm_tab')]
       .map(tab => tab.getAttribute('title')))
-  expect(rightTabTitles).toEqual(['DOM', 'Properties', 'Custom CSS', 'Bootstrap'])
+  expect(rightTabTitles).toEqual(['DOM', 'Properties', 'Custom CSS', 'Bootstrap', 'AI'])
 
   // A blank project has an editable sheet, so the panel shows its editor.
   const initial = await appWindow.evaluate(() => ({

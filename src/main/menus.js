@@ -112,6 +112,7 @@ export function buildMenu({ onAction, workspaceNames = [] }) {
       { label: tMenu('menu.view.toggle-breakpoints'),                                    click: send('view:toggle-breakpoints') },
       { label: tMenu('menu.view.toggle-custom-css'),                                     click: send('view:toggle-custom-css') },
       { label: tMenu('menu.view.toggle-bootstrap-css'),                                  click: send('view:toggle-bootstrap-css') },
+      { label: tMenu('menu.view.toggle-ai'),                                             click: send('view:toggle-ai') },
       { type: 'separator' },
       {
         label: tMenu('menu.view.responsive-preview'),
