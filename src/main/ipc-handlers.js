@@ -352,7 +352,10 @@ export function registerIpcHandlers({ pluginRegistry }) {
   // ipcRenderer.invoke can be called directly (bypassing the preload
   // wrapper) with no payload at all, and a bare destructure on `undefined`
   // throws a TypeError instead of a clean validation failure.
-  ipcMain.handle('ai:status', () => getStatus())
+  // Optional providerId: the settings pane stages provider changes behind a
+  // Save button, so it probes the SELECTED provider's key state before that
+  // choice is persisted. getStatus ignores non-string/empty values.
+  ipcMain.handle('ai:status', (_e, { providerId } = {}) => getStatus(providerId))
 
   ipcMain.handle('ai:set-key', async (_e, { providerId, key } = {}) => {
     try {
@@ -389,9 +392,11 @@ export function registerIpcHandlers({ pluginRegistry }) {
   // of just resolving — wrap it the same way ai:set-key wraps its own
   // failure modes, so a bad host degrades to an error envelope the
   // renderer can show inline instead of a rejected invoke.
-  ipcMain.handle('ai:list-models', async () => {
+  // Optional provider/ollamaHost overrides, same staged-settings reason as
+  // ai:status above — listModels validates/ignores anything non-string.
+  ipcMain.handle('ai:list-models', async (_e, { provider, ollamaHost } = {}) => {
     try {
-      const models = await listModels()
+      const models = await listModels({ provider, ollamaHost })
       return { ok: true, models }
     } catch (err) {
       return { ok: false, error: { type: err?.type || 'api', message: err?.message || 'Could not list models.' } }

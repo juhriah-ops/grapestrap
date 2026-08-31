@@ -10,7 +10,9 @@
    to the existing text-input styling groups (Ollama host address field).
    UPDATED: 2026-08-30 (review pass) — .gstrap-prefs-ai-model-other had
    picked up display:block by being joined into .gstrap-prefs-ai-host-input's
-   rule; split back into its own original rule, host-input keeps its own. */
+   rule; split back into its own original rule, host-input keeps its own.
+   UPDATED: 2026-08-31 (deferred save + connection flag) — connection-flag
+   dot/label and Save-row styles appended at the end of this file. */
 
 .gstrap-prefs-overlay {
   position: fixed;
@@ -519,3 +521,38 @@
   padding-top: 12px;
   margin: 0;
 }
+
+/* Connection flag (deferred-save rework, 2026-08-31) — dot + label at the
+   top of the AI pane. State rides the data-state attribute, per the
+   no-appearance-classes rule. */
+.gstrap-prefs-ai-connection {
+  color: var(--text-2);
+  font-size: 12px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gstrap-prefs-ai-connection::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex: none;
+}
+.gstrap-prefs-ai-connection[data-state="connected"]::before { background: var(--success); }
+.gstrap-prefs-ai-connection[data-state="disconnected"]::before { background: var(--error); }
+.gstrap-prefs-ai-connection[data-state="connected"] { color: var(--text-1); }
+
+/* Save row — button + unsaved/saved state label. */
+.gstrap-prefs-ai-save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gstrap-prefs-ai-save-state {
+  font-size: 12px;
+}
+.gstrap-prefs-ai-save-state[data-state="dirty"] { color: var(--warning); }
+.gstrap-prefs-ai-save-state[data-state="saved"] { color: var(--success); }

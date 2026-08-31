@@ -28,6 +28,11 @@
  * account/key section is gone) and Ollama host validation. The model-list
  * load-failure branch is NOT reachable under GSTRAP_AI_FAKE=1 — see the
  * comment above that spec for why, and what it asserts instead.
+ * UPDATED: 2026-08-31 (deferred save + connection flag) — the pane stages
+ * edits behind a Save button now, so every persist assertion gained an
+ * explicit "not persisted yet" check + a Save click; added specs for the
+ * Save row's dirty/saved states, close-discards-staged-edits, and the
+ * connection flag.
  */
 import { test, expect } from '@playwright/test'
 import { launch, EXPECTED_PLUGIN_COUNT } from './helpers.js'
@@ -74,13 +79,25 @@ test('Preferences AI tab paints a real pane, not the General/Editor/Plugins stub
     () => document.querySelector('.gstrap-prefs-ai-privacy')?.textContent || ''
   )
   expect(privacyText).toBe(
-    'Nothing leaves this machine until you link an account and use the AI panel. Once linked, the messages you type and any page or element content the assistant requests are sent to Anthropic under your own API key. GrapeStrap sends no telemetry, ever.'
+    'Nothing leaves this machine until you connect a provider and use the AI panel. Once connected, the messages you type and any page or element content the assistant requests are sent to the provider you chose above. GrapeStrap sends no telemetry, ever.'
   )
+
+  // Deferred-save rework: the connection flag paints at the top of the pane
+  // (fake mode reports hasKey:true for the anthropic branch → connected),
+  // and the Save button exists but starts disabled — nothing is dirty yet.
+  const connectionState = await appWindow.evaluate(
+    () => document.querySelector('[data-prefs-ai-connection]')?.dataset.state
+  )
+  expect(connectionState).toBe('connected')
+  const saveDisabled = await appWindow.evaluate(
+    () => document.querySelector('[data-prefs-action="ai-save"]')?.disabled
+  )
+  expect(saveDisabled).toBe(true)
 
   await app.close()
 })
 
-test('Preferences AI tab: model select shows the curated ids and a change persists', async () => {
+test('Preferences AI tab: model select shows the curated ids; a change stages, then Save persists', async () => {
   const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
   await openPreferencesOnAiTab(appWindow)
 
@@ -93,6 +110,19 @@ test('Preferences AI tab: model select shows the curated ids and a change persis
   expect(modelValues).toContain('__other__')
 
   await appWindow.selectOption('#gstrap-prefs-ai-model', 'claude-sonnet-5')
+
+  // Staged, NOT persisted: the deferred-save contract. The Save button
+  // lights up with the "Unsaved changes" flag, and prefs.ai still holds
+  // the default until Save is clicked.
+  await appWindow.waitForSelector('[data-prefs-ai-save-state][data-state="dirty"]', { timeout: 3_000 })
+  const beforeSave = await appWindow.evaluate(() => window.grapestrap.prefs.get('ai'))
+  expect(beforeSave.model).toBe('claude-opus-5')
+  const saveEnabled = await appWindow.evaluate(
+    () => !document.querySelector('[data-prefs-action="ai-save"]')?.disabled
+  )
+  expect(saveEnabled).toBe(true)
+
+  await appWindow.click('[data-prefs-action="ai-save"]')
 
   // Persistence, read back through the same bridge the app itself uses —
   // not a re-scrape of the DOM, which would only prove the <select> updated.
@@ -110,10 +140,44 @@ test('Preferences AI tab: model select shows the curated ids and a change persis
     provider: 'anthropic', model: 'claude-sonnet-5', effort: 'high', ollamaHost: 'http://127.0.0.1:11434'
   })
 
+  // …and the Save row confirms: button back to disabled, "Saved ✓" shown.
+  await appWindow.waitForSelector('[data-prefs-ai-save-state][data-state="saved"]', { timeout: 3_000 })
+  const saveDisabledAfter = await appWindow.evaluate(
+    () => document.querySelector('[data-prefs-action="ai-save"]')?.disabled
+  )
+  expect(saveDisabledAfter).toBe(true)
+
   await app.close()
 })
 
-test('Preferences AI tab: effort select persists a change', async () => {
+test('Preferences AI tab: closing without Save discards staged edits', async () => {
+  const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
+  await openPreferencesOnAiTab(appWindow)
+
+  await appWindow.selectOption('#gstrap-prefs-ai-model', 'claude-haiku-4-5')
+  await appWindow.waitForSelector('[data-prefs-ai-save-state][data-state="dirty"]', { timeout: 3_000 })
+
+  // Esc closes the dialog; the staged model must NOT land in prefs.
+  await appWindow.keyboard.press('Escape')
+  await appWindow.waitForSelector('.gstrap-prefs-overlay', { state: 'detached', timeout: 3_000 })
+  const persisted = await appWindow.evaluate(() => window.grapestrap.prefs.get('ai'))
+  expect(persisted.model).toBe('claude-opus-5')
+
+  // Reopening paints the persisted value, clean Save row.
+  await openPreferencesOnAiTab(appWindow)
+  const reopenedModel = await appWindow.evaluate(
+    () => document.querySelector('#gstrap-prefs-ai-model')?.value
+  )
+  expect(reopenedModel).toBe('claude-opus-5')
+  const saveDisabled = await appWindow.evaluate(
+    () => document.querySelector('[data-prefs-action="ai-save"]')?.disabled
+  )
+  expect(saveDisabled).toBe(true)
+
+  await app.close()
+})
+
+test('Preferences AI tab: effort select stages a change, Save persists it', async () => {
   const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
   await openPreferencesOnAiTab(appWindow)
 
@@ -124,6 +188,14 @@ test('Preferences AI tab: effort select persists a change', async () => {
 
   await appWindow.selectOption('#gstrap-prefs-ai-effort', 'low')
 
+  // Staged, not persisted, until Save. (Effort edits update the Save row
+  // via the targeted painter, not a full repaint — the flag showing up IS
+  // the assertion that the painter ran.)
+  await appWindow.waitForSelector('[data-prefs-ai-save-state][data-state="dirty"]', { timeout: 3_000 })
+  const beforeSave = await appWindow.evaluate(() => window.grapestrap.prefs.get('ai'))
+  expect(beforeSave.effort).toBe('high')
+
+  await appWindow.click('[data-prefs-action="ai-save"]')
   await appWindow.waitForFunction(
     () => window.grapestrap.prefs.get('ai').then(ai => ai.effort === 'low'),
     null, { timeout: 3_000 }
@@ -285,7 +357,7 @@ test('Preferences AI tab (needs-key fake mode): a correct key links, or the no-k
 // stays faked) — see the model-list spec below for what that means for the
 // load-failed/Retry branch specifically.
 
-test('Preferences AI tab: switching Provider to Ollama persists the full 4-key object, paints the host section, and removes the account/key section', async () => {
+test('Preferences AI tab: switching Provider to Ollama stages, Save persists the full 4-key object; host section paints, account/key section is gone', async () => {
   const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
   await openPreferencesOnAiTab(appWindow)
 
@@ -295,6 +367,20 @@ test('Preferences AI tab: switching Provider to Ollama persists the full 4-key o
   expect(providerValues).toEqual(['anthropic', 'ollama'])
 
   await appWindow.selectOption('#gstrap-prefs-ai-provider', 'ollama')
+
+  // The switch stages: the pane repaints as Ollama right away, but prefs.ai
+  // stays anthropic until Save. Wait for the switch chain to settle (the
+  // repainted model select carries the staged pick) before saving, so the
+  // Save can't race the async model-list load.
+  await appWindow.waitForSelector('[data-prefs-ai-field="ollama-host"]', { timeout: 5_000 })
+  await appWindow.waitForFunction(
+    () => (document.querySelector('#gstrap-prefs-ai-model')?.value || '').length > 0,
+    null, { timeout: 5_000 }
+  )
+  const beforeSave = await appWindow.evaluate(() => window.grapestrap.prefs.get('ai'))
+  expect(beforeSave.provider).toBe('anthropic')
+
+  await appWindow.click('[data-prefs-action="ai-save"]')
   await appWindow.waitForFunction(
     () => window.grapestrap.prefs.get('ai').then(ai => ai.provider === 'ollama'),
     null, { timeout: 5_000 }
@@ -330,15 +416,21 @@ test('Preferences AI tab: switching Provider to Ollama persists the full 4-key o
   await app.close()
 })
 
-test('Preferences AI tab (Ollama provider): host validation — garbage rejected inline, a valid http(s) address persists', async () => {
+test('Preferences AI tab (Ollama provider): host validation — garbage rejected inline, a valid http(s) address stages and Save persists it', async () => {
   const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
   await openPreferencesOnAiTab(appWindow)
   await appWindow.selectOption('#gstrap-prefs-ai-provider', 'ollama')
   await appWindow.waitForSelector('[data-prefs-ai-field="ollama-host"]', { timeout: 5_000 })
+  // Let the provider-switch chain settle (staged model picked) before
+  // touching the host field, so its repaints can't race ours.
+  await appWindow.waitForFunction(
+    () => (document.querySelector('#gstrap-prefs-ai-model')?.value || '').length > 0,
+    null, { timeout: 5_000 }
+  )
 
   const hostInputSelector = '[data-prefs-ai-field="ollama-host"]'
 
-  // Garbage — no scheme at all — is rejected inline and never persisted.
+  // Garbage — no scheme at all — is rejected inline and never staged.
   await appWindow.fill(hostInputSelector, 'not a url')
   await appWindow.locator(hostInputSelector).blur()
   await appWindow.waitForSelector('[data-prefs-ai-host-error]:not([hidden])', { timeout: 5_000 })
@@ -351,25 +443,23 @@ test('Preferences AI tab (Ollama provider): host validation — garbage rejected
 
   // A valid address (a different port, so this actually proves a change
   // landed rather than coincidentally matching the untouched default)
-  // clears the error and persists.
+  // clears the error, stages, and persists on Save — with the whole staged
+  // object (provider switched to ollama above) landing in one write.
   await appWindow.fill(hostInputSelector, 'http://127.0.0.1:12345')
   await appWindow.locator(hostInputSelector).blur()
+  await appWindow.waitForSelector('[data-prefs-ai-save-state][data-state="dirty"]', { timeout: 3_000 })
+  const stagedOnly = await appWindow.evaluate(() => window.grapestrap.prefs.get('ai'))
+  expect(stagedOnly.ollamaHost).toBe('http://127.0.0.1:11434') // still the default — staged, not saved
+
+  await appWindow.click('[data-prefs-action="ai-save"]')
   await appWindow.waitForFunction(
-    () => window.grapestrap.prefs.get('ai').then(ai => ai.ollamaHost === 'http://127.0.0.1:12345'),
+    () => window.grapestrap.prefs.get('ai').then(ai => ai.ollamaHost === 'http://127.0.0.1:12345' && ai.provider === 'ollama'),
     null, { timeout: 3_000 }
   )
   const errorHiddenNow = await appWindow.evaluate(
     () => document.querySelector('[data-prefs-ai-host-error]')?.hidden
   )
   expect(errorHiddenNow).toBe(true)
-
-  // The exact address named in the task brief also round-trips cleanly.
-  await appWindow.fill(hostInputSelector, 'http://127.0.0.1:11434')
-  await appWindow.locator(hostInputSelector).blur()
-  await appWindow.waitForFunction(
-    () => window.grapestrap.prefs.get('ai').then(ai => ai.ollamaHost === 'http://127.0.0.1:11434'),
-    null, { timeout: 3_000 }
-  )
 
   await app.close()
 })
@@ -403,7 +493,9 @@ test('Preferences AI tab (Ollama provider): ai.listModels() is intercepted by GS
   )
 
   // The pane reflects that success: a normal select, not the load-failed
-  // error/Retry block.
+  // error/Retry block. (Wait for the staged switch's async list load to
+  // settle — the loading line has no select yet.)
+  await appWindow.waitForSelector('#gstrap-prefs-ai-model', { timeout: 5_000 })
   const hasModelSelect = await appWindow.evaluate(() => !!document.querySelector('#gstrap-prefs-ai-model'))
   const hasRetryButton = await appWindow.evaluate(() => !!document.querySelector('[data-prefs-action="ai-models-retry"]'))
   expect(hasModelSelect).toBe(true)

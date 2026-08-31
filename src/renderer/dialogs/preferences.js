@@ -20,6 +20,14 @@
  * Every prefs.ai write now always carries all four fields — provider,
  * model, effort, ollamaHost — since prefs:set replaces the object rather
  * than merging it; see persistAiPrefs.
+ * UPDATED: 2026-08-31 (deferred save + connection flag) — the AI pane no
+ * longer persists on every change. Field edits stage into aiPrefs and set
+ * aiDirty; only the pane's Save button writes prefs.ai (closing the dialog
+ * discards staged edits). Because staged provider/host choices are not on
+ * disk yet, ai.status()/ai.listModels() now take overrides so the pane can
+ * probe the SELECTED provider before saving. A connection line at the top
+ * of the pane reports linked-key state (Anthropic) or whether the host
+ * actually answered the model-list probe (Ollama).
  *
  * Shortcuts UI:
  *   - One row per command from DEFAULT_BINDINGS, with the active binding
@@ -65,7 +73,7 @@ const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
 // little more permissive than that one shape so a future/renamed id
 // doesn't need this pattern touched). Also blocks the literal sentinel
 // value the model <select> uses for its "Other…" option — see
-// persistModelOther.
+// stageModelOther.
 const MODEL_OTHER_PATTERN = /^[a-z0-9.-]+$/i
 
 let activeTab = 'shortcuts'
@@ -124,6 +132,13 @@ let aiSwitchGen = 0
 // list's first entry. Never written to prefs — intentionally lost on
 // relaunch, same as any other pane-only convenience state in this file.
 let lastModelByProvider = {}
+// Deferred-save state: aiDirty is true whenever aiPrefs has staged edits
+// that prefs.ai does not — it enables the Save button and the "Unsaved
+// changes" flag. aiJustSaved drives the transient "Saved ✓" confirmation
+// and is cleared by the next staged edit. Closing the dialog discards
+// staged edits (aiPrefs is rebuilt from disk on every open).
+let aiDirty = false
+let aiJustSaved = false
 
 export function openPreferencesDialog() {
   if (overlay) return
@@ -164,16 +179,11 @@ export function openPreferencesDialog() {
 
 function close() {
   if (!overlay) return
-  // Flush a pending, not-yet-blurred "Other…" model id edit before the
-  // overlay is torn down. Escape — the common way to close this dialog —
-  // never fires the input's own 'change' event, so a typed-but-unblurred
-  // custom model id would otherwise be silently lost (F8).
-  const modelOtherInput = overlay.querySelector('[data-prefs-ai-field="model-other"]')
-  if (modelOtherInput) persistModelOther(modelOtherInput.value)
-  // Same reasoning, same flush, for a pending unblurred Ollama host edit.
-  const hostInput = overlay.querySelector('[data-prefs-ai-field="ollama-host"]')
-  if (hostInput) persistOllamaHost(hostInput.value)
-
+  // No flush of pending edits here anymore: since the deferred-save rework,
+  // closing without Save DISCARDS staged AI edits by design — the Save
+  // button + "Unsaved changes" flag are what make that contract visible.
+  // (Clicking Save blurs a focused text field first, so its 'change' fires
+  // and stages the value before the save handler reads aiPrefs.)
   document.removeEventListener('keydown', onKeyDown, true)
   overlay.parentNode?.removeChild(overlay)
   overlay = null
@@ -187,6 +197,8 @@ function close() {
   aiModelOtherError = null
   aiHostError = null
   aiLinkInFlight = false
+  aiDirty = false
+  aiJustSaved = false
 }
 
 async function loadOverrides() {
@@ -232,20 +244,43 @@ async function loadAiStatus() {
 }
 
 /**
- * Refresh aiModels/aiModelsError from the CURRENTLY persisted provider —
- * main resolves listModels() against prefs.ai.provider server-side, so
- * there is no per-call provider override; a provider switch must persist
- * first (see handleProviderChange) before calling this again.
+ * Re-probe key/connection status for the STAGED provider (aiPrefs.provider)
+ * WITHOUT rebuilding aiPrefs from disk — unlike loadAiStatus, which would
+ * clobber unsaved staged edits with the persisted values. Used after a
+ * provider switch (so the Account section and connection flag reflect the
+ * selected-but-unsaved provider), after a Save, and after link/unlink.
+ *
+ * A failed probe keeps the last aiStatus rather than blanking the pane —
+ * status() is a cheap local read, and the pane was already painted from a
+ * good status once this session.
+ * @returns {Promise<void>} never rejects
+ */
+async function probeAiStatus() {
+  try {
+    const status = await window.grapestrap?.ai?.status?.(aiPrefs.provider)
+    if (status?.ok) aiStatus = status
+  } catch {
+    // keep the previous aiStatus
+  }
+}
+
+/**
+ * Refresh aiModels/aiModelsError. With no argument, main resolves the
+ * provider/host from persisted prefs.ai (the initial-open path). Staged
+ * callers (provider switch, host edit, Retry) pass the pane's unsaved
+ * provider/host so the fetch — and the connection flag it feeds — reflects
+ * what is SELECTED, not what was last saved.
  *
  * ai.listModels() now does a live fetch for some providers (Ollama) and
  * can resolve {ok:false} (e.g. an unreachable host) — that never throws
  * out of here, it just populates aiModelsError for paintAiModelSection's
  * load-failed/Retry branch.
+ * @param {{provider?: string, ollamaHost?: string}} [overrides]
  * @returns {Promise<void>}
  */
-async function loadAiModels() {
+async function loadAiModels(overrides) {
   try {
-    const result = await window.grapestrap?.ai?.listModels?.()
+    const result = await window.grapestrap?.ai?.listModels?.(overrides)
     if (result?.ok && Array.isArray(result.models)) {
       aiModels = result.models
       aiModelsError = null
@@ -360,8 +395,12 @@ function paintAiPane() {
     return `<div class="gstrap-prefs-ai"><p class="gstrap-prefs-ai-guidance">${escHtml(t('ai.settings.status-error'))}</p></div>`
   }
   const isOllama = aiPrefs.provider === 'ollama'
+  const connectionState = aiConnectionState()
   return `
     <div class="gstrap-prefs-ai">
+      <p class="gstrap-prefs-ai-connection" data-prefs-ai-connection data-state="${connectionState}">
+        ${escHtml(t(`ai.settings.connection.${connectionState}`))}
+      </p>
       <section class="gstrap-prefs-ai-section">
         <h3 class="gstrap-prefs-ai-heading">${escHtml(t('ai.settings.provider.label'))}</h3>
         ${paintAiProviderSelect()}
@@ -374,9 +413,35 @@ function paintAiPane() {
         <h3 class="gstrap-prefs-ai-heading">${escHtml(t('ai.settings.model.heading'))}</h3>
         ${paintAiModelSection()}
       </section>
+      <div class="gstrap-prefs-ai-save-row">
+        <button class="gstrap-prefs-btn gstrap-prefs-ai-save" data-prefs-action="ai-save" ${aiDirty ? '' : 'disabled'}>
+          ${escHtml(t('ai.settings.save'))}
+        </button>
+        <span class="gstrap-prefs-ai-save-state" data-prefs-ai-save-state data-state="${aiDirty ? 'dirty' : (aiJustSaved ? 'saved' : 'clean')}">
+          ${escHtml(aiDirty ? t('ai.settings.unsaved') : (aiJustSaved ? t('ai.settings.saved') : ''))}
+        </span>
+      </div>
       <p class="gstrap-prefs-ai-privacy">${escHtml(t('ai.settings.privacy'))}</p>
     </div>
   `
+}
+
+/**
+ * Derive the pane's connection-flag state from what the pane already knows:
+ *  - Ollama: the model-list probe doubles as the connection check — a live
+ *    fetch against the staged host either loaded a list (connected), failed
+ *    (disconnected), or hasn't settled yet (checking).
+ *  - Key-based providers (Anthropic): connected means a usable key exists
+ *    for the STAGED provider — aiStatus tracks it via probeAiStatus.
+ * @returns {'connected'|'disconnected'|'checking'}
+ */
+function aiConnectionState() {
+  if (aiPrefs.provider === 'ollama') {
+    if (aiModelsError) return 'disconnected'
+    if (aiModels.length > 0) return 'connected'
+    return 'checking'
+  }
+  return aiStatus.hasKey ? 'connected' : 'disconnected'
 }
 
 /**
@@ -635,7 +700,7 @@ function handleAiFieldChange(field, value) {
     return
   }
   if (field === 'ollama-host') {
-    persistOllamaHost(value)
+    stageOllamaHost(value)
     return
   }
   if (field === 'model') {
@@ -647,34 +712,81 @@ function handleAiFieldChange(field, value) {
     aiModelOtherMode = false
     aiModelOtherError = null
     aiPrefs = { ...aiPrefs, model: value }
-    persistAiPrefs()
+    markAiDirty()
     paint()
     return
   }
   if (field === 'model-other') {
-    persistModelOther(value)
+    stageModelOther(value)
     return
   }
   if (field === 'effort') {
     aiPrefs = { ...aiPrefs, effort: value }
-    persistAiPrefs()
+    markAiDirty()
+    paintAiSaveRow()
   }
 }
 
 /**
- * Validate and persist the free-text "Other…" model id. Shared by the
- * field's own 'change' handler and close()'s pending-edit flush, so both
- * paths reject the same way.
+ * Flag the pane as having staged, unsaved edits — enables the Save button
+ * and swaps any "Saved ✓" confirmation back to "Unsaved changes". Callers
+ * that repaint anyway rely on paint(); micro-edits (effort, the free-text
+ * model id) call paintAiSaveRow() instead to avoid a full repaint.
+ */
+function markAiDirty() {
+  aiDirty = true
+  aiJustSaved = false
+}
+
+/**
+ * Targeted DOM update for the Save row (button enablement + state label),
+ * for staged edits that don't warrant a full paint() — same reasoning as
+ * the textContent-only error painters above.
+ */
+function paintAiSaveRow() {
+  const button = overlay?.querySelector('[data-prefs-action="ai-save"]')
+  if (button) button.disabled = !aiDirty
+  const state = overlay?.querySelector('[data-prefs-ai-save-state]')
+  if (state) {
+    state.dataset.state = aiDirty ? 'dirty' : (aiJustSaved ? 'saved' : 'clean')
+    state.textContent = aiDirty ? t('ai.settings.unsaved') : (aiJustSaved ? t('ai.settings.saved') : '')
+  }
+}
+
+/**
+ * Handle the AI pane's Save button: write the staged aiPrefs to prefs.ai,
+ * then re-probe status (persisted state just changed under it) and repaint
+ * with the "Saved ✓" confirmation. A failed write keeps the pane dirty —
+ * persistAiPrefs already toasted the error, and clearing the flag would
+ * falsely tell the user their edits are on disk.
+ * @returns {Promise<void>}
+ */
+async function handleAiSave() {
+  if (!aiDirty) return
+  const saved = await persistAiPrefs()
+  if (!overlay) return
+  if (saved) {
+    aiDirty = false
+    aiJustSaved = true
+  }
+  await probeAiStatus()
+  if (!overlay) return
+  paint()
+}
+
+/**
+ * Validate and STAGE the free-text "Other…" model id (nothing persists
+ * until Save).
  *
  * Empty and the literal sentinel value `__other__` (what the <select>'s
- * own "Other…" option uses — persisting it as a real model id would make
+ * own "Other…" option uses — staging it as a real model id would make
  * the pane's own curated/other detection ambiguous on the next load) are
  * both rejected the same as an invalid character, via the same inline
  * message; there is no meaningfully different guidance to give for each.
  *
  * @param {string} rawValue - the model-other input's current value
  */
-function persistModelOther(rawValue) {
+function stageModelOther(rawValue) {
   const trimmed = rawValue.trim()
   if (!trimmed || trimmed === '__other__' || !MODEL_OTHER_PATTERN.test(trimmed)) {
     aiModelOtherError = t('ai.settings.model-other-invalid')
@@ -683,8 +795,10 @@ function persistModelOther(rawValue) {
   }
   aiModelOtherError = null
   paintAiModelErrorText()
+  if (trimmed === aiPrefs.model) return
   aiPrefs = { ...aiPrefs, model: trimmed }
-  persistAiPrefs()
+  markAiDirty()
+  paintAiSaveRow()
 }
 
 /**
@@ -705,12 +819,18 @@ function isValidOllamaHost(value) {
 }
 
 /**
- * Validate and persist the Ollama host field. Shared by the field's own
- * 'change' handler and close()'s pending-edit flush, same pattern as
- * persistModelOther.
+ * Validate and STAGE the Ollama host field (nothing persists until Save),
+ * then re-run the model-list probe against the staged host — that probe is
+ * also what feeds the connection flag, so editing the address gives live
+ * connected/not-connected feedback before anything is saved.
+ *
+ * Shares aiSwitchGen with handleProviderChange/handleModelsRetry: the
+ * probe mutates the same aiModels/aiModelsError state, so a stale fetch
+ * against an old host must not overwrite a newer one's result.
  * @param {string} rawValue - the host input's current value
+ * @returns {Promise<void>}
  */
-function persistOllamaHost(rawValue) {
+async function stageOllamaHost(rawValue) {
   const trimmed = rawValue.trim()
   if (!isValidOllamaHost(trimmed)) {
     aiHostError = t('ai.settings.ollama.host-invalid')
@@ -719,28 +839,34 @@ function persistOllamaHost(rawValue) {
   }
   aiHostError = null
   paintAiHostErrorText()
+  if (trimmed === aiPrefs.ollamaHost) return
   aiPrefs = { ...aiPrefs, ollamaHost: trimmed }
-  persistAiPrefs()
+  markAiDirty()
+  const gen = ++aiSwitchGen
+  aiModels = []
+  aiModelsError = null
+  paint()
+  await loadAiModels({ provider: aiPrefs.provider, ollamaHost: aiPrefs.ollamaHost })
+  if (!overlay || gen !== aiSwitchGen) return
+  aiModelOtherMode = !aiModelsError && !aiModels.some(model => model.id === aiPrefs.model)
+  paint()
 }
 
 /**
- * Handle switching the Provider select. The current model id almost
- * certainly belongs to the OTHER provider, so this never just flips
- * `provider` in place:
+ * Handle switching the Provider select. STAGED ONLY — nothing touches
+ * prefs.ai until Save. The current model id almost certainly belongs to
+ * the OTHER provider, so this never just flips `provider` in place:
  *  1. Records the OUTGOING provider's model in lastModelByProvider first,
  *     so switching back later can restore it instead of always landing on
  *     the list's first entry (session-scoped memory only — no new prefs
  *     key).
- *  2. Persists provider + `model: ''` immediately — never the OLD
- *     provider's model silently relabeled under the new provider, even
- *     for the brief window before the list resolves. An empty model is a
- *     clean, provider-level "pick a model" state the pane already renders
- *     correctly; a foreign model id pointed at the wrong provider is not,
- *     and Esc/quit during the fetch would otherwise leave exactly that on
- *     disk until the dialog is reopened.
- *  3. Reloads the model list for the now-current provider (main resolves
- *     listModels() against prefs.ai.provider server-side, so the new list
- *     can't be fetched before step 2 lands).
+ *  2. Stages provider + `model: ''` — never the OLD provider's model
+ *     silently relabeled under the new provider, even for the brief window
+ *     before the list resolves.
+ *  3. Re-probes status for the staged provider (probeAiStatus) so the
+ *     Account section and connection flag reflect the SELECTED provider's
+ *     key state, then reloads the model list with staged overrides — the
+ *     staged choice isn't on disk, so main can't resolve it from prefs.
  *  4. Prefers the remembered model for this provider when the fresh list
  *     still carries it, else the list's first entry, else '' (the
  *     load-failed state explains that case).
@@ -748,7 +874,7 @@ function persistOllamaHost(rawValue) {
  * Guarded against overlapping switches — and against Retry racing a
  * switch — by aiSwitchGen: every await re-checks the generation captured
  * at entry, so a fast second switch (or the dialog closing) can't let a
- * stale chain persist a cross-provider model id after the fact.
+ * stale chain stage a cross-provider model id after the fact.
  *
  * Paints once immediately (Provider/Account-or-Host sections swap right
  * away; aiModels is cleared to [] so the Model & effort section shows its
@@ -761,22 +887,25 @@ async function handleProviderChange(newProvider) {
   const gen = ++aiSwitchGen
   lastModelByProvider[aiPrefs.provider] = aiPrefs.model
   aiPrefs = { ...aiPrefs, provider: newProvider, model: '' }
+  markAiDirty()
   aiModelOtherMode = false
   aiModelOtherError = null
   aiModelsError = null
   aiModels = []
   paint()
-  await persistAiPrefs()
+  await probeAiStatus()
   if (!overlay || gen !== aiSwitchGen) return
-  await loadAiModels()
+  await loadAiModels({ provider: aiPrefs.provider, ollamaHost: aiPrefs.ollamaHost })
   if (!overlay || gen !== aiSwitchGen) return
   const remembered = lastModelByProvider[newProvider]
   const chosen = (remembered && aiModels.some(model => model.id === remembered))
     ? remembered
     : (aiModels[0]?.id ?? '')
   aiPrefs = { ...aiPrefs, model: chosen }
-  await persistAiPrefs()
-  if (!overlay || gen !== aiSwitchGen) return
+  // Re-marked, not assumed: a Save clicked while the list was still loading
+  // already cleared aiDirty — this late model stage must light it back up
+  // or it would sit unsaved with the Save button disabled.
+  markAiDirty()
   paint()
 }
 
@@ -796,28 +925,32 @@ async function handleProviderChange(newProvider) {
  */
 async function handleModelsRetry() {
   const gen = ++aiSwitchGen
-  await loadAiModels()
+  await loadAiModels({ provider: aiPrefs.provider, ollamaHost: aiPrefs.ollamaHost })
   if (!overlay || gen !== aiSwitchGen) return
   aiModelOtherMode = !aiModelsError && !aiModels.some(model => model.id === aiPrefs.model)
   paint()
 }
 
 /**
- * Persist the current aiPrefs working copy to prefs.ai. prefs:set replaces
- * the whole 'ai' object rather than merging it, so aiPrefs always carries
- * all four fields (provider/model/effort/ollamaHost) even though only one
- * usually changed — losing any of the others here would silently reset
- * them on the next write.
- * @returns {Promise<void>}
+ * Persist the current aiPrefs working copy to prefs.ai — only handleAiSave
+ * calls this since the deferred-save rework. prefs:set replaces the whole
+ * 'ai' object rather than merging it, so aiPrefs always carries all four
+ * fields (provider/model/effort/ollamaHost) even though only one usually
+ * changed — losing any of the others here would silently reset them on the
+ * next write.
+ * @returns {Promise<boolean>} true when the write landed — a failure
+ *          toasts and resolves false so the caller keeps the pane dirty.
  */
 async function persistAiPrefs() {
   try {
     await window.grapestrap?.prefs?.set?.('ai', aiPrefs)
+    return true
   } catch (err) {
     eventBus.emit('toast', {
       type: 'error',
       message: t('ai.settings.toast.save-failed', { error: err?.message || err })
     })
+    return false
   }
 }
 
@@ -870,7 +1003,9 @@ async function handleAiLink() {
       return
     }
     aiKeyLinkError = null
-    await loadAiStatus()
+    // probeAiStatus, not loadAiStatus: a full reload would rebuild aiPrefs
+    // from disk and silently discard any staged-but-unsaved edits.
+    await probeAiStatus()
     if (!overlay) return
   } catch (err) {
     if (!overlay) return
@@ -901,7 +1036,8 @@ async function handleAiUnlink() {
       message: t('ai.settings.toast.unlink-failed', { error: err?.message || err })
     })
   }
-  await loadAiStatus()
+  // probeAiStatus for the same staged-edits reason as handleAiLink.
+  await probeAiStatus()
   if (!overlay) return
   paint()
 }
@@ -918,6 +1054,7 @@ function handleAction(action, command) {
     case 'ai-unlink-cancel':   aiUnlinkConfirming = false; paint(); return
     case 'ai-unlink-confirm':  handleAiUnlink(); return
     case 'ai-models-retry':    handleModelsRetry(); return
+    case 'ai-save':            handleAiSave(); return
   }
 }
 

@@ -134,11 +134,11 @@ const grapestrap = {
   // UPDATED: 2026-08-30 (Phase C tool bridge) — send() takes an optional
   // second `context` argument, forwarded to main as part of the same payload.
   ai: {
-    status:      ()                        => ipcRenderer.invoke('ai:status'),
+    status:      (providerId)              => ipcRenderer.invoke('ai:status', { providerId }),
     setKey:      (providerId, key)         => ipcRenderer.invoke('ai:set-key', { providerId, key }),
     clearKey:    (providerId)              => ipcRenderer.invoke('ai:clear-key', { providerId }),
     validateKey: (providerId, key)         => ipcRenderer.invoke('ai:validate-key', { providerId, key }),
-    listModels:  ()                        => ipcRenderer.invoke('ai:list-models'),
+    listModels:  (overrides)               => ipcRenderer.invoke('ai:list-models', { provider: overrides?.provider, ollamaHost: overrides?.ollamaHost }),
     // context is optional (Phase C tool bridge) — the executor passes along
     // whatever the model's turn needs to resolve a tool call (e.g. the
     // current selection/anchor); every existing caller that sends just text

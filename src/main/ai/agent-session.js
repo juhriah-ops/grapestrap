@@ -581,13 +581,23 @@ function watchNavigation(target) {
  * Async because the key store is imported dynamically; ipcMain.handle awaits
  * the returned promise.
  *
+ * Accepts an optional provider override so the settings pane can probe the
+ * key/connection state of a provider the user has SELECTED but not yet saved
+ * (its writes are staged behind a Save button) — the prefs-backed fields
+ * below always report what is actually persisted, never the override.
+ *
+ * @param {string} [providerOverride] - probe this provider's key state
+ *        instead of the persisted one; non-string/empty values are ignored
  * @returns {Promise<{ok: boolean, provider: string, effectiveProvider: string,
  *                    model: string, effort: string, hasKey: boolean,
  *                    keySource: string|null, encryptionAvailable: boolean}>}
  */
-export async function getStatus() {
+export async function getStatus(providerOverride) {
   const settings = readAiSettings()
-  const provider = getProvider(settings.provider)
+  const probeId = (typeof providerOverride === 'string' && providerOverride)
+    ? providerOverride
+    : settings.provider
+  const provider = getProvider(probeId)
   const keyInfo = await readKeyInfo(provider)
 
   // The settings pane round-trips this: it reads these fields and writes
@@ -779,14 +789,27 @@ export function handleToolResult({ callId, result, isError } = {}) {
  * propagate — the ai:list-models handler wraps this call and turns both the
  * array and the throw into the { ok, … } envelope the bridge expects.
  *
+ * Accepts optional provider/ollamaHost overrides for the same reason
+ * getStatus does — the settings pane stages its edits behind a Save button,
+ * so the model list (and the connection probe it doubles as) must be
+ * fetchable for a provider/host that is not persisted yet. Non-string/empty
+ * override values fall back to the persisted settings.
+ *
+ * @param {{provider?: string, ollamaHost?: string}} [overrides]
  * @returns {Promise<Array<{id: string, label: string, supportsEffort?: boolean}>>}
  * @throws {Error} typed error from providers that enumerate remotely
  */
-export async function listModels() {
+export async function listModels(overrides = {}) {
   const settings = readAiSettings()
-  const provider = getProvider(settings.provider)
+  const providerId = (typeof overrides?.provider === 'string' && overrides.provider)
+    ? overrides.provider
+    : settings.provider
+  const provider = getProvider(providerId)
+  const effective = (typeof overrides?.ollamaHost === 'string' && overrides.ollamaHost)
+    ? { ...settings, ollamaHost: overrides.ollamaHost }
+    : settings
   // No key argument: neither current provider needs a credential merely to
   // enumerate, and making the model dropdown wait on a keyring read would be
   // a cost with no payoff.
-  return provider.listModels(null, buildProviderConfig(settings))
+  return provider.listModels(null, buildProviderConfig(effective))
 }
