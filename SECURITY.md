@@ -9,6 +9,11 @@ UPDATED: 2026-08-30 (v0.2 Phase D) — AI panel scope note: the app's first
 UPDATED: 2026-08-30 (review pass) — noted that Linux's basic_text
          safeStorage backend is explicitly rejected, so the no-keyring
          refusal is an actual guarantee there, not just the common case.
+UPDATED: 2026-08-30 (Ollama provider) — one clause: Ollama traffic goes
+         only to the user-configured local host, no key involved.
+UPDATED: 2026-08-30 (review pass) — softened "local host" to "the Ollama
+         address you configure" — the validator accepts any well-formed
+         http(s) URL, not just localhost, so "local" overstated it.
 ============================================================= -->
 
 # Security Policy
@@ -66,7 +71,13 @@ advisory thread.
   itself. On Linux, `encryptionAvailable` explicitly treats Electron's
   `basic_text` `safeStorage` backend (an unencrypted fallback used when no
   keyring is reachable) as unavailable, so "refused a key-input field" is
-  an actual guarantee there, not just the common case.
+  an actual guarantee there, not just the common case. With the Ollama
+  provider, traffic goes only to the Ollama address you configure — no
+  key, and no Anthropic traffic either. That address is validated as a
+  well-formed `http://` or `https://` URL, not restricted to localhost —
+  GrapeStrap does not verify it actually points at your own machine or
+  network, so treat a pasted or shared host value the way you'd treat any
+  other endpoint you're choosing to trust.
 - Plugins run unsandboxed in the renderer process by design; user plugins
   require explicit drop-in installation and a first-load confirmation. A
   malicious plugin that the user chose to install is outside the threat

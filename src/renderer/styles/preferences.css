@@ -5,7 +5,12 @@
    model + effort selects, privacy note), added at the end of this file.
    UPDATED: 2026-08-30 (review pass) — hardcoded #f48771 replaced with the
    --error token (theme-dark.css); disabled-state styling for the AI pane's
-   inputs/selects/buttons (in-flight Link, unsupported-effort select). */
+   inputs/selects/buttons (in-flight Link, unsupported-effort select).
+   UPDATED: 2026-08-30 (Ollama provider) — .gstrap-prefs-ai-host-input added
+   to the existing text-input styling groups (Ollama host address field).
+   UPDATED: 2026-08-30 (review pass) — .gstrap-prefs-ai-model-other had
+   picked up display:block by being joined into .gstrap-prefs-ai-host-input's
+   rule; split back into its own original rule, host-input keeps its own. */
 
 .gstrap-prefs-overlay {
   position: fixed;
@@ -446,7 +451,8 @@
   gap: 6px;
 }
 .gstrap-prefs-ai-key-input,
-.gstrap-prefs-ai-model-other {
+.gstrap-prefs-ai-model-other,
+.gstrap-prefs-ai-host-input {
   flex: 1;
   background: var(--bg-1);
   color: var(--text-1);
@@ -458,6 +464,7 @@
 }
 .gstrap-prefs-ai-key-input:focus,
 .gstrap-prefs-ai-model-other:focus,
+.gstrap-prefs-ai-host-input:focus,
 .gstrap-prefs-ai-select:focus {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
@@ -503,6 +510,7 @@
   max-width: 320px;
 }
 .gstrap-prefs-ai-model-other { max-width: 320px; margin-top: 6px; }
+.gstrap-prefs-ai-host-input { max-width: 320px; margin-top: 6px; display: block; }
 .gstrap-prefs-ai-privacy {
   color: var(--text-3);
   font-size: 11px;

@@ -11,6 +11,15 @@
  * curated options, plus a free-text "Other…" model id), and a privacy note.
  * Everything key-shaped crosses the bridge exactly once per Link click and
  * is never re-rendered back into the DOM — see paintAiAccountSection.
+ * UPDATED: 2026-08-30 (Ollama provider) — a Provider select (Anthropic /
+ * Ollama) now tops the AI pane. Ollama is keyless: its branch swaps the
+ * Account section for a host address field + a note, and skips key
+ * management entirely. ai.listModels() now does a live fetch and can fail
+ * (unreachable host) — the Model & effort section grew a load-failed state
+ * with a Retry button, still keeping the free-text "Other…" id usable.
+ * Every prefs.ai write now always carries all four fields — provider,
+ * model, effort, ollamaHost — since prefs:set replaces the object rather
+ * than merging it; see persistAiPrefs.
  *
  * Shortcuts UI:
  *   - One row per command from DEFAULT_BINDINGS, with the active binding
@@ -71,16 +80,50 @@ let activeTab = 'shortcuts'
 // it (see handleAiLink).
 let aiStatus = null
 let aiModels = []
-let aiPrefs = { provider: 'anthropic', model: '', effort: 'high' }
+// {type, message} when the last ai.listModels() call failed (e.g. an
+// unreachable Ollama host) — null when the list loaded fine. An empty
+// aiModels with this also null means "still loading" (see
+// paintAiModelSection). Drives the Model & effort section's
+// loading/load-failed/Retry states; see loadAiModels.
+let aiModelsError = null
+// KEEP IN SYNC: this initializer and loadAiStatus's replacement literal
+// below (`aiPrefs = { provider: status.provider, ... }`, marked with the
+// same comment) are the two places prefs.ai's shape is spelled out in
+// this file. Adding a 5th key to
+// DEFAULTS.ai (prefs.js) or to getStatus()'s return (agent-session.js,
+// main-process) means updating BOTH literals here — miss either one and
+// persistAiPrefs's replace-not-merge write silently drops the new field
+// the next time anything in this pane persists.
+// ollamaHost starts '' rather than the real default: this initial object
+// is never actually painted (paintAiPane shows the loading/error pane
+// until loadAiStatus resolves and overwrites it below), so duplicating
+// the address literal here would just be a third copy to keep in sync —
+// see prefs.js's DEFAULTS.ai / contract.js's OLLAMA_DEFAULT_HOST instead.
+let aiPrefs = { provider: 'anthropic', model: '', effort: 'high', ollamaHost: '' }
 let aiKeyLinkError = null
 let aiUnlinkConfirming = false
 let aiModelOtherMode = false
 let aiModelOtherError = null
+// Inline validation message for the Ollama host field — same textContent
+// pattern as aiKeyLinkError/aiModelOtherError.
+let aiHostError = null
 // Single-flight guard on the Link button — without it a slow validateKey
 // call plus a second click can race two setKey calls for the same
 // provider; also what lets the button show a loading label instead of
 // looking clickable while a request is outstanding.
 let aiLinkInFlight = false
+// Bumped at the top of handleProviderChange/handleModelsRetry — both are
+// multi-await chains that mutate the same aiModels/aiModelsError/aiPrefs
+// state, so a fast second switch (or a Retry racing a switch) needs a
+// generation check, not just the `!overlay` guard, or the OLDER chain can
+// resolve last and persist a model id that belongs to whichever provider
+// it started against, not the one currently selected.
+let aiSwitchGen = 0
+// Session-scoped "last model picked per provider", so switching back to a
+// provider restores what you had there instead of always re-picking the
+// list's first entry. Never written to prefs — intentionally lost on
+// relaunch, same as any other pane-only convenience state in this file.
+let lastModelByProvider = {}
 
 export function openPreferencesDialog() {
   if (overlay) return
@@ -91,7 +134,15 @@ export function openPreferencesDialog() {
   overlay.className = 'gstrap-prefs-overlay'
   host.appendChild(overlay)
 
-  Promise.all([loadOverrides(), loadAiStatus()]).then(() => paint())
+  Promise.all([loadOverrides(), loadAiStatus(), loadAiModels()]).then(() => {
+    // "Other…" starts open whenever the persisted model isn't one of the
+    // curated ids — e.g. a value hand-edited into preferences.json, or a
+    // model this build's/provider's curated list no longer carries. Left
+    // false (harmlessly) when the list itself failed to load — that state
+    // is rendered by paintAiModelSection's aiModelsError branch instead.
+    aiModelOtherMode = !!aiStatus && !aiModels.some(model => model.id === aiPrefs.model)
+    paint()
+  })
 
   overlay.addEventListener('click', evt => {
     if (evt.target === overlay) close()
@@ -119,6 +170,9 @@ function close() {
   // custom model id would otherwise be silently lost (F8).
   const modelOtherInput = overlay.querySelector('[data-prefs-ai-field="model-other"]')
   if (modelOtherInput) persistModelOther(modelOtherInput.value)
+  // Same reasoning, same flush, for a pending unblurred Ollama host edit.
+  const hostInput = overlay.querySelector('[data-prefs-ai-field="ollama-host"]')
+  if (hostInput) persistOllamaHost(hostInput.value)
 
   document.removeEventListener('keydown', onKeyDown, true)
   overlay.parentNode?.removeChild(overlay)
@@ -131,6 +185,7 @@ function close() {
   aiKeyLinkError = null
   aiUnlinkConfirming = false
   aiModelOtherError = null
+  aiHostError = null
   aiLinkInFlight = false
 }
 
@@ -143,37 +198,65 @@ async function loadOverrides() {
 }
 
 /**
- * Refresh aiStatus/aiModels/aiPrefs from the main process.
+ * Refresh aiStatus/aiPrefs from the main process.
  *
  * Called on every dialog open (not lazily on first AI-tab visit) so
  * switching into the tab never shows a loading flash — the same eager-load
  * choice loadOverrides already makes for the Shortcuts tab.
  *
- * @returns {Promise<void>} never rejects — a failed status/listModels call
- *          degrades the pane to its "couldn't load" state instead of
- *          throwing out of the dialog's open sequence.
+ * Model loading is a SEPARATE function (loadAiModels) — status() is a
+ * cheap local read, while listModels() can be a live network call (Ollama)
+ * with its own failure/Retry UI, and a provider switch needs to reload
+ * only the model list, not re-probe key/host status.
+ *
+ * @returns {Promise<void>} never rejects — a failed status call degrades
+ *          the pane to its "couldn't load" state instead of throwing out
+ *          of the dialog's open sequence.
  */
 async function loadAiStatus() {
   try {
-    const [status, modelsResult] = await Promise.all([
-      window.grapestrap?.ai?.status?.(),
-      window.grapestrap?.ai?.listModels?.()
-    ])
+    const status = await window.grapestrap?.ai?.status?.()
     if (status?.ok) {
       aiStatus = status
-      aiPrefs = { provider: status.provider, model: status.model, effort: status.effort }
+      // KEEP IN SYNC with the aiPrefs initializer above — same four keys,
+      // same reason: prefs:set replaces the whole object, so a 5th key
+      // added to DEFAULTS.ai / getStatus() and missed here gets silently
+      // dropped the next time this pane persists.
+      aiPrefs = { provider: status.provider, model: status.model, effort: status.effort, ollamaHost: status.ollamaHost }
     } else {
       aiStatus = null
     }
-    aiModels = (modelsResult?.ok && Array.isArray(modelsResult.models)) ? modelsResult.models : []
   } catch {
     aiStatus = null
-    aiModels = []
   }
-  // "Other…" starts open whenever the persisted model isn't one of the
-  // curated ids — e.g. a value hand-edited into preferences.json, or a
-  // model this build's curated list no longer carries.
-  aiModelOtherMode = !!aiStatus && !aiModels.some(model => model.id === aiPrefs.model)
+}
+
+/**
+ * Refresh aiModels/aiModelsError from the CURRENTLY persisted provider —
+ * main resolves listModels() against prefs.ai.provider server-side, so
+ * there is no per-call provider override; a provider switch must persist
+ * first (see handleProviderChange) before calling this again.
+ *
+ * ai.listModels() now does a live fetch for some providers (Ollama) and
+ * can resolve {ok:false} (e.g. an unreachable host) — that never throws
+ * out of here, it just populates aiModelsError for paintAiModelSection's
+ * load-failed/Retry branch.
+ * @returns {Promise<void>}
+ */
+async function loadAiModels() {
+  try {
+    const result = await window.grapestrap?.ai?.listModels?.()
+    if (result?.ok && Array.isArray(result.models)) {
+      aiModels = result.models
+      aiModelsError = null
+    } else {
+      aiModels = []
+      aiModelsError = result?.error || { type: 'api', message: '' }
+    }
+  } catch (err) {
+    aiModels = []
+    aiModelsError = { type: 'api', message: err?.message || '' }
+  }
 }
 
 function paint() {
@@ -197,12 +280,15 @@ function paint() {
       </div>
     </div>
   `
-  // The link-flow and model-other error messages are set via real
-  // textContent, not templated into the innerHTML string above — see
-  // paintAiErrorText / paintAiModelErrorText.
+  // The link-flow, model-other, host, and models-load error messages are
+  // all set via real textContent, not templated into the innerHTML string
+  // above — see paintAiErrorText / paintAiModelErrorText / paintAiHostErrorText
+  // / paintAiModelsErrorText.
   if (activeTab === 'ai') {
     paintAiErrorText()
     paintAiModelErrorText()
+    paintAiHostErrorText()
+    paintAiModelsErrorText()
   }
 }
 
@@ -273,11 +359,16 @@ function paintAiPane() {
   if (!aiStatus) {
     return `<div class="gstrap-prefs-ai"><p class="gstrap-prefs-ai-guidance">${escHtml(t('ai.settings.status-error'))}</p></div>`
   }
+  const isOllama = aiPrefs.provider === 'ollama'
   return `
     <div class="gstrap-prefs-ai">
       <section class="gstrap-prefs-ai-section">
-        <h3 class="gstrap-prefs-ai-heading">${escHtml(t('ai.settings.account.heading'))}</h3>
-        ${paintAiAccountSection()}
+        <h3 class="gstrap-prefs-ai-heading">${escHtml(t('ai.settings.provider.label'))}</h3>
+        ${paintAiProviderSelect()}
+      </section>
+      <section class="gstrap-prefs-ai-section">
+        <h3 class="gstrap-prefs-ai-heading">${escHtml(isOllama ? t('ai.settings.ollama.host-label') : t('ai.settings.account.heading'))}</h3>
+        ${isOllama ? paintAiOllamaSection() : paintAiAccountSection()}
       </section>
       <section class="gstrap-prefs-ai-section">
         <h3 class="gstrap-prefs-ai-heading">${escHtml(t('ai.settings.model.heading'))}</h3>
@@ -285,6 +376,40 @@ function paintAiPane() {
       </section>
       <p class="gstrap-prefs-ai-privacy">${escHtml(t('ai.settings.privacy'))}</p>
     </div>
+  `
+}
+
+/**
+ * Paint the Provider select — Anthropic (key-based) or Ollama (local,
+ * keyless). Its own heading doubles as the select's accessible label,
+ * same pattern the Ollama host field below uses.
+ * @returns {string} HTML for the provider select
+ */
+function paintAiProviderSelect() {
+  return `
+    <select id="gstrap-prefs-ai-provider" class="gstrap-prefs-ai-select" data-prefs-ai-field="provider"
+            aria-label="${escAttr(t('ai.settings.provider.label'))}">
+      <option value="anthropic" ${aiPrefs.provider === 'anthropic' ? 'selected' : ''}>${escHtml(t('ai.settings.provider.anthropic'))}</option>
+      <option value="ollama" ${aiPrefs.provider === 'ollama' ? 'selected' : ''}>${escHtml(t('ai.settings.provider.ollama'))}</option>
+    </select>
+  `
+}
+
+/**
+ * Paint the Ollama branch's connection section: a host address field
+ * (persisted on change, validated as a full http(s):// URL) and a static
+ * note that nothing here reaches Anthropic. No key management at all —
+ * Ollama is keyless by design.
+ * @returns {string} HTML for the Ollama host block
+ */
+function paintAiOllamaSection() {
+  return `
+    <input type="text" class="gstrap-prefs-ai-host-input" data-prefs-ai-field="ollama-host"
+           value="${escAttr(aiPrefs.ollamaHost)}"
+           aria-label="${escAttr(t('ai.settings.ollama.host-label'))}"
+           placeholder="http://127.0.0.1:11434" autocomplete="off">
+    <p class="gstrap-prefs-ai-error" data-prefs-ai-host-error hidden></p>
+    <p class="gstrap-prefs-ai-guidance">${escHtml(t('ai.settings.ollama.note'))}</p>
   `
 }
 
@@ -362,6 +487,40 @@ function paintAiLinkRow() {
  * @returns {string} HTML for the model/effort block
  */
 function paintAiModelSection() {
+  if (aiModelsError) {
+    // No empty/useless <select> — the load failed, so there is nothing
+    // curated to offer. The free-text "Other…" id stays reachable (a user
+    // who knows their model id shouldn't be blocked by a list that
+    // couldn't load), and Retry re-runs the same fetch.
+    return `
+      <label class="gstrap-prefs-ai-field-label">${escHtml(t('ai.settings.model.label'))}</label>
+      <p class="gstrap-prefs-ai-error" data-prefs-ai-models-error></p>
+      <button class="gstrap-prefs-btn" data-prefs-action="ai-models-retry">${escHtml(t('ai.settings.models.retry'))}</button>
+      <input type="text" class="gstrap-prefs-ai-model-other" data-prefs-ai-field="model-other"
+             value="${escAttr(aiPrefs.model)}" placeholder="${escAttr(t('ai.settings.model-other-placeholder'))}">
+      <p class="gstrap-prefs-ai-error" data-prefs-ai-model-error hidden></p>
+
+      <label class="gstrap-prefs-ai-field-label" for="gstrap-prefs-ai-effort">${escHtml(t('ai.settings.effort.label'))}</label>
+      <select id="gstrap-prefs-ai-effort" class="gstrap-prefs-ai-select" data-prefs-ai-field="effort" disabled>
+        ${EFFORT_LEVELS.map(level => `<option value="${level}" ${aiPrefs.effort === level ? 'selected' : ''}>${escHtml(t(`ai.settings.effort.${level}`))}</option>`).join('')}
+      </select>
+      <p class="gstrap-prefs-ai-note">${escHtml(t('ai.settings.effort.unsupported'))}</p>
+    `
+  }
+
+  if (aiModels.length === 0) {
+    // Mid-fetch (or, rarer, a provider whose list is genuinely empty) —
+    // either way there is nothing yet to put in a <select>, and painting
+    // the PREVIOUS provider's list under this section while the new one
+    // loads is worse than a plain loading line. loadAiModels always
+    // settles this one way or the other (populated, or aiModelsError
+    // above), so this never lingers.
+    return `
+      <label class="gstrap-prefs-ai-field-label">${escHtml(t('ai.settings.model.label'))}</label>
+      <p class="gstrap-prefs-ai-guidance">${escHtml(t('ai.settings.loading'))}</p>
+    `
+  }
+
   const modelOptions = aiModels.map(model => `
     <option value="${escAttr(model.id)}" ${!aiModelOtherMode && aiPrefs.model === model.id ? 'selected' : ''}>${escHtml(model.label)}</option>
   `).join('')
@@ -435,12 +594,50 @@ function paintAiModelErrorText() {
 }
 
 /**
+ * Push aiHostError into the DOM via real textContent — same pattern and
+ * reasoning as paintAiErrorText, for the Ollama host field.
+ */
+function paintAiHostErrorText() {
+  const el = overlay?.querySelector('[data-prefs-ai-host-error]')
+  if (!el) return
+  if (aiHostError) {
+    el.hidden = false
+    el.textContent = aiHostError
+  } else {
+    el.hidden = true
+    el.textContent = ''
+  }
+}
+
+/**
+ * Push the models-load-failed message into the DOM via real textContent.
+ * Unlike the other three error paragraphs, this element only exists in
+ * the DOM at all when aiModelsError is set (paintAiModelSection's
+ * load-failed branch), so there is no hidden-toggle to manage here — a
+ * missing element (no error) is simply a no-op.
+ */
+function paintAiModelsErrorText() {
+  const el = overlay?.querySelector('[data-prefs-ai-models-error]')
+  if (!el || !aiModelsError) return
+  el.textContent = t('ai.settings.models.load-failed', { error: aiModelsError.message || '' })
+}
+
+/**
  * Handle a 'change' event on one of the AI pane's data-prefs-ai-field
- * elements (model select, the free-text "Other…" model id, effort select).
- * @param {string} field - 'model' | 'model-other' | 'effort'
+ * elements (provider select, the Ollama host field, model select, the
+ * free-text "Other…" model id, effort select).
+ * @param {string} field - 'provider' | 'ollama-host' | 'model' | 'model-other' | 'effort'
  * @param {string} value - the field's new value
  */
 function handleAiFieldChange(field, value) {
+  if (field === 'provider') {
+    handleProviderChange(value)
+    return
+  }
+  if (field === 'ollama-host') {
+    persistOllamaHost(value)
+    return
+  }
   if (field === 'model') {
     if (value === '__other__') {
       aiModelOtherMode = true
@@ -491,10 +688,126 @@ function persistModelOther(rawValue) {
 }
 
 /**
+ * Is this a full http(s):// address, with no embedded whitespace ("no
+ * trailing junk" — a pasted host with stray text after it reads as
+ * whitespace inside what should be one token)?
+ * @param {string} value - candidate Ollama host, already trimmed
+ * @returns {boolean}
+ */
+function isValidOllamaHost(value) {
+  if (!value || /\s/.test(value)) return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Validate and persist the Ollama host field. Shared by the field's own
+ * 'change' handler and close()'s pending-edit flush, same pattern as
+ * persistModelOther.
+ * @param {string} rawValue - the host input's current value
+ */
+function persistOllamaHost(rawValue) {
+  const trimmed = rawValue.trim()
+  if (!isValidOllamaHost(trimmed)) {
+    aiHostError = t('ai.settings.ollama.host-invalid')
+    paintAiHostErrorText()
+    return
+  }
+  aiHostError = null
+  paintAiHostErrorText()
+  aiPrefs = { ...aiPrefs, ollamaHost: trimmed }
+  persistAiPrefs()
+}
+
+/**
+ * Handle switching the Provider select. The current model id almost
+ * certainly belongs to the OTHER provider, so this never just flips
+ * `provider` in place:
+ *  1. Records the OUTGOING provider's model in lastModelByProvider first,
+ *     so switching back later can restore it instead of always landing on
+ *     the list's first entry (session-scoped memory only — no new prefs
+ *     key).
+ *  2. Persists provider + `model: ''` immediately — never the OLD
+ *     provider's model silently relabeled under the new provider, even
+ *     for the brief window before the list resolves. An empty model is a
+ *     clean, provider-level "pick a model" state the pane already renders
+ *     correctly; a foreign model id pointed at the wrong provider is not,
+ *     and Esc/quit during the fetch would otherwise leave exactly that on
+ *     disk until the dialog is reopened.
+ *  3. Reloads the model list for the now-current provider (main resolves
+ *     listModels() against prefs.ai.provider server-side, so the new list
+ *     can't be fetched before step 2 lands).
+ *  4. Prefers the remembered model for this provider when the fresh list
+ *     still carries it, else the list's first entry, else '' (the
+ *     load-failed state explains that case).
+ *
+ * Guarded against overlapping switches — and against Retry racing a
+ * switch — by aiSwitchGen: every await re-checks the generation captured
+ * at entry, so a fast second switch (or the dialog closing) can't let a
+ * stale chain persist a cross-provider model id after the fact.
+ *
+ * Paints once immediately (Provider/Account-or-Host sections swap right
+ * away; aiModels is cleared to [] so the Model & effort section shows its
+ * loading state instead of the OLD provider's list under the NEW
+ * provider's heading) and again once the model list settles.
+ * @param {string} newProvider - 'anthropic' | 'ollama'
+ * @returns {Promise<void>}
+ */
+async function handleProviderChange(newProvider) {
+  const gen = ++aiSwitchGen
+  lastModelByProvider[aiPrefs.provider] = aiPrefs.model
+  aiPrefs = { ...aiPrefs, provider: newProvider, model: '' }
+  aiModelOtherMode = false
+  aiModelOtherError = null
+  aiModelsError = null
+  aiModels = []
+  paint()
+  await persistAiPrefs()
+  if (!overlay || gen !== aiSwitchGen) return
+  await loadAiModels()
+  if (!overlay || gen !== aiSwitchGen) return
+  const remembered = lastModelByProvider[newProvider]
+  const chosen = (remembered && aiModels.some(model => model.id === remembered))
+    ? remembered
+    : (aiModels[0]?.id ?? '')
+  aiPrefs = { ...aiPrefs, model: chosen }
+  await persistAiPrefs()
+  if (!overlay || gen !== aiSwitchGen) return
+  paint()
+}
+
+/**
+ * Handle the Model & effort section's Retry button (load-failed state):
+ * re-run the model fetch for the current provider and repaint.
+ *
+ * Shares aiSwitchGen with handleProviderChange — Retry mutates the same
+ * aiModels/aiModelsError state, so a Retry that resolves after a provider
+ * switch started later (or a switch that resolves after a later Retry)
+ * must not overwrite the newer result with a stale one.
+ *
+ * Recomputes aiModelOtherMode the same way the initial load does — if the
+ * list comes back this time but no longer carries aiPrefs.model, the
+ * select needs its "Other…" branch, not a silently-unselected dropdown.
+ * @returns {Promise<void>}
+ */
+async function handleModelsRetry() {
+  const gen = ++aiSwitchGen
+  await loadAiModels()
+  if (!overlay || gen !== aiSwitchGen) return
+  aiModelOtherMode = !aiModelsError && !aiModels.some(model => model.id === aiPrefs.model)
+  paint()
+}
+
+/**
  * Persist the current aiPrefs working copy to prefs.ai. prefs:set replaces
  * the whole 'ai' object rather than merging it, so aiPrefs always carries
- * all three fields (provider/model/effort) even though only one changed —
- * losing 'provider' here would silently reset it on the next model change.
+ * all four fields (provider/model/effort/ollamaHost) even though only one
+ * usually changed — losing any of the others here would silently reset
+ * them on the next write.
  * @returns {Promise<void>}
  */
 async function persistAiPrefs() {
@@ -604,6 +917,7 @@ function handleAction(action, command) {
     case 'ai-unlink':          aiUnlinkConfirming = true; paint(); return
     case 'ai-unlink-cancel':   aiUnlinkConfirming = false; paint(); return
     case 'ai-unlink-confirm':  handleAiUnlink(); return
+    case 'ai-models-retry':    handleModelsRetry(); return
   }
 }
 

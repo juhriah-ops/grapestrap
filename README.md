@@ -13,6 +13,8 @@ UPDATED: 2026-08-30 (review pass) — stale "127 end-to-end specs" counts
          number stops rotting; the "permanent commitment, restated in
          Help → About" sentence rescoped to the no-telemetry pledge only
          (About says nothing about the AI carve-out).
+UPDATED: 2026-08-30 (Ollama provider) — AI panel bullet notes it also
+         works with a local Ollama server, no Anthropic account required.
 ============================================================= -->
 
 # GrapeStrap
@@ -90,7 +92,9 @@ tested (300+ end-to-end specs run in CI) but young. Report problems on the
   through nine built-in tools. Replies stream in as they generate, Stop
   cancels one in progress, New chat clears the conversation, and everything
   one turn changes undoes as a single Ctrl+Z. Inert until you link your own
-  Anthropic account in Preferences → AI; see [Privacy](#privacy).
+  Anthropic account in Preferences → AI; see [Privacy](#privacy). Also
+  works with a local Ollama server as an alternative to an Anthropic
+  account.
 
 **Extensibility and languages**
 

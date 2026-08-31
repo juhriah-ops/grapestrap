@@ -7,6 +7,11 @@
  * Convention: handlers return plain serializable objects. Errors propagate as
  * thrown values; the renderer's preload converts them into rejected promises.
  *
+ * UPDATED: 2026-08-30 (Ollama provider) — `ai:list-models` now wraps
+ * listModels() in try/catch: it can do a live network fetch (Ollama) and
+ * throw a typed {type,message} error instead of resolving, so a bad/
+ * unreachable host degrades to {ok:false,error} instead of a rejected
+ * invoke. Nothing else in this file changed for the Ollama provider.
  * UPDATED: 2026-08-30 (Phase C tool bridge) — `ai:send` threads an optional
  * `context` object through to sendTurn as a third argument, alongside text
  * and the sender; no behavior change for a caller that omits it.
@@ -379,7 +384,19 @@ export function registerIpcHandlers({ pluginRegistry }) {
   // user commits it via ai:set-key — never persists anything itself.
   ipcMain.handle('ai:validate-key', (_e, { providerId, key } = {}) => validateKey(providerId, key))
 
-  ipcMain.handle('ai:list-models', async () => ({ ok: true, models: await listModels() }))
+  // listModels() now does a live fetch for some providers (Ollama) and can
+  // throw a typed { type, message } error (e.g. host unreachable) instead
+  // of just resolving — wrap it the same way ai:set-key wraps its own
+  // failure modes, so a bad host degrades to an error envelope the
+  // renderer can show inline instead of a rejected invoke.
+  ipcMain.handle('ai:list-models', async () => {
+    try {
+      const models = await listModels()
+      return { ok: true, models }
+    } catch (err) {
+      return { ok: false, error: { type: err?.type || 'api', message: err?.message || 'Could not list models.' } }
+    }
+  })
 
   ipcMain.handle('ai:send', (event, { text, context } = {}) => sendTurn(text, event.sender, context))
 

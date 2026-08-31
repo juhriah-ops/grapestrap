@@ -14,10 +14,21 @@
 //     needsKey      boolean  false ⇒ the session never touches the key store
 //     envKeyVars    string[] env vars that count as "a key is present"
 //     validateKey(key)                 → { ok: true } | { ok: false, error }
-//     listModels()                     → [{ id, label, supportsEffort }, ...]
+//     listModels(key, config)          → [{ id, label, supportsEffort }, ...]
+//                                        may be async, and may THROW typed
+//                                        errors for providers that enumerate
+//                                        over the network
 //     createTurn({ key, model, effort, system, messages, tools,
-//                  signal, onDelta })  → { stopReason, text, usage }
+//                  signal, onDelta, config })
+//                                      → { stopReason, text, usage }
 //   }
+//
+// `config` carries per-provider connection settings from prefs (currently
+// just { host } for Ollama). Providers that do not need it ignore it.
+//
+// `supportsEffort` on a model entry is what the preferences pane gates its
+// effort control on — it is per-MODEL, not per-provider, because Anthropic
+// itself has models on both sides of that line.
 //
 // createTurn resolves on refusal (stopReason 'refusal') and rejects only on
 // failure. validateKey never rejects — its result crosses the IPC bridge,
@@ -58,6 +69,18 @@
 // exactly, and a silent disagreement is nasty: the block would survive into
 // the fake's prompt, every FAKE: command would stop matching, and each one
 // would quietly fall through to the echo branch instead of failing loudly.
+
+/**
+ * Last-resort fallback for the Ollama base URL.
+ *
+ * Loopback on purpose. GrapeStrap ships to the public, so no LAN address may
+ * ever be baked in here — a user pointing at a machine on their own network
+ * types that host into Preferences → AI, and it arrives as config.host.
+ * This constant only covers "prefs not written yet".
+ *
+ * Must match DEFAULTS.ai.ollamaHost in prefs.js.
+ */
+export const OLLAMA_DEFAULT_HOST = 'http://127.0.0.1:11434'
 
 export const CONTEXT_BLOCK_OPEN = '[editor context]'
 export const CONTEXT_BLOCK_CLOSE = '[end editor context]'

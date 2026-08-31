@@ -11,6 +11,7 @@
 import Store from 'electron-store'
 import { dirname } from 'node:path'
 import { xdg } from './platform/xdg.js'
+import { OLLAMA_DEFAULT_HOST } from './ai/contract.js'
 
 const DEFAULTS = {
   general: {
@@ -63,10 +64,18 @@ const DEFAULTS = {
   },
   // v0.2 Phase A: non-secret AI agent config. The API key itself NEVER goes
   // here — it lives encrypted in ai/key-store.js, outside prefs.json.
+  // ollamaHost (added for the Ollama provider) is loopback-only by default —
+  // GrapeStrap is a public app; a LAN/remote default would silently point a
+  // fresh install at a host it never asked to reach. Sourced from
+  // contract.js's OLLAMA_DEFAULT_HOST rather than a literal here — that was
+  // a third hand-copied instance of the same address (this file,
+  // contract.js, and a renderer initializer that's since been changed to
+  // '' for the same reason); one constant now, imported.
   ai: {
     provider: 'anthropic',
     model: 'claude-opus-5',
-    effort: 'high'
+    effort: 'high',
+    ollamaHost: OLLAMA_DEFAULT_HOST
   },
   telemetry: false        // hardcoded; we never collect anything
 }

@@ -38,7 +38,7 @@ import { log } from '../logger.js'
 import { getPref } from '../prefs.js'
 import { getProvider } from './provider.js'
 import {
-  CONTEXT_BLOCK_CLOSE, CONTEXT_BLOCK_OPEN, CONTEXT_HTML_CAP,
+  CONTEXT_BLOCK_CLOSE, CONTEXT_BLOCK_OPEN, CONTEXT_HTML_CAP, OLLAMA_DEFAULT_HOST,
   createProviderError, createResultError, toTurnError
 } from './contract.js'
 import { buildTools } from './tools.js'
@@ -62,16 +62,18 @@ const MAX_HISTORY_ENTRIES = 40
 // initialized yet (early boot, unit tests), and the panel still has to report
 // a coherent status instead of throwing.
 //
-// KEEP IN SYNC WITH DEFAULTS.ai IN prefs.js. Adding a key there means adding
-// it in three places here: this fallback object, readAiSettings() below, and
-// the getStatus() return literal. Miss one and the settings pane silently
+// KEEP IN SYNC WITH DEFAULTS.ai IN prefs.js (provider, model, effort,
+// ollamaHost). Adding a key there means adding it in three places here: this
+// fallback object, readAiSettings() below, and the getStatus() return
+// literal. Miss one and the settings pane silently
 // drops it — that pane writes prefs.ai as a WHOLE OBJECT built from what
 // getStatus reported, so any field getStatus does not surface is not merely
 // absent from the UI, it is erased from prefs on the next save.
 const AI_PREF_FALLBACKS = Object.freeze({
   provider: 'anthropic',
   model: 'claude-opus-5',
-  effort: 'high'
+  effort: 'high',
+  ollamaHost: OLLAMA_DEFAULT_HOST
 })
 
 // Prompt caching is a prefix match, so a single varying byte here costs every
@@ -131,8 +133,23 @@ function readAiSettings() {
   return {
     provider: stored?.provider || AI_PREF_FALLBACKS.provider,
     model: stored?.model || AI_PREF_FALLBACKS.model,
-    effort: stored?.effort || AI_PREF_FALLBACKS.effort
+    effort: stored?.effort || AI_PREF_FALLBACKS.effort,
+    ollamaHost: stored?.ollamaHost || AI_PREF_FALLBACKS.ollamaHost
   }
+}
+
+/**
+ * Per-provider connection settings for one call.
+ *
+ * Providers that do not need a host ignore this; only Ollama reads it. Built
+ * per call rather than cached so an edited host takes effect on the next
+ * turn without a restart.
+ *
+ * @param {{ollamaHost: string}} settings - resolved ai.* preferences
+ * @returns {{host: string}}
+ */
+function buildProviderConfig(settings) {
+  return { host: settings.ollamaHost }
 }
 
 // ─── Key store (dynamic) ─────────────────────────────────────────────────
@@ -508,7 +525,8 @@ async function runTurn(turn) {
       messages: buildTurnMessages(turn),
       tools: RENDERER_TOOLS,
       signal: turn.abortController.signal,
-      onDelta: chunk => handleDelta(turn, chunk)
+      onDelta: chunk => handleDelta(turn, chunk),
+      config: buildProviderConfig(settings)
     })
 
     // A cancel or reset landed while the request was open: that path already
@@ -576,12 +594,14 @@ export async function getStatus() {
   // prefs.ai back as a whole object. So every DEFAULTS.ai key must appear
   // below — add a key to DEFAULTS.ai and forget this literal, and the pane's
   // next full-object prefs:set silently drops it back to the default.
+  // Currently: provider, model, effort, ollamaHost.
   return {
     ok: true,
     provider: settings.provider,
     effectiveProvider: provider.id,
     model: settings.model,
     effort: settings.effort,
+    ollamaHost: settings.ollamaHost,
     hasKey: keyInfo.hasKey,
     keySource: keyInfo.keySource,
     encryptionAvailable: keyInfo.encryptionAvailable
@@ -753,13 +773,20 @@ export function handleToolResult({ callId, result, isError } = {}) {
 /**
  * Models offered by the configured provider.
  *
- * Returns the bare array — the ai:list-models handler is what wraps it in
- * an { ok, models } envelope for the bridge.
+ * Async and able to THROW since the Ollama provider joined: it enumerates
+ * over the network, so an unreachable host is a normal outcome here rather
+ * than an impossibility. The typed error ({type, message}) is left to
+ * propagate — the ai:list-models handler wraps this call and turns both the
+ * array and the throw into the { ok, … } envelope the bridge expects.
  *
- * @returns {Array<{id: string, label: string}>}
+ * @returns {Promise<Array<{id: string, label: string, supportsEffort?: boolean}>>}
+ * @throws {Error} typed error from providers that enumerate remotely
  */
-export function listModels() {
+export async function listModels() {
   const settings = readAiSettings()
   const provider = getProvider(settings.provider)
-  return provider.listModels()
+  // No key argument: neither current provider needs a credential merely to
+  // enumerate, and making the model dropdown wait on a keyring read would be
+  // a cost with no payoff.
+  return provider.listModels(null, buildProviderConfig(settings))
 }

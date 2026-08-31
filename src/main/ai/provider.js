@@ -15,11 +15,13 @@
 import { log } from '../logger.js'
 import { anthropicProvider } from './anthropic-provider.js'
 import { fakeProvider } from './fake-provider.js'
+import { ollamaProvider } from './ollama-provider.js'
 
 export const DEFAULT_PROVIDER_ID = 'anthropic'
 
 const PROVIDERS = Object.freeze({
-  anthropic: anthropicProvider
+  anthropic: anthropicProvider,
+  ollama: ollamaProvider
 })
 
 let unknownProviderWarned = false
