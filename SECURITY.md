@@ -4,6 +4,11 @@ ROLE: Security policy — supported versions, private vulnerability
       reporting path, scope notes
 DEPENDS: docs/INSTALL.md (verifying releases), README.md
 CREATED: 2026-07-13 (Wave 5 user docs)
+UPDATED: 2026-08-30 (v0.2 Phase D) — AI panel scope note: the app's first
+         opt-in network egress, and how the linked API key is stored
+UPDATED: 2026-08-30 (review pass) — noted that Linux's basic_text
+         safeStorage backend is explicitly rejected, so the no-keyring
+         refusal is an actual guarantee there, not just the common case.
 ============================================================= -->
 
 # Security Policy
@@ -46,6 +51,22 @@ advisory thread.
 - GrapeStrap is a local desktop application. It has no accounts, no cloud
   component, and no telemetry. The only network listener it starts is the
   Preview-in-Browser server, which binds to 127.0.0.1 only.
+- **AI panel — the one opt-in exception, and the app's first outbound
+  network egress.** Nothing leaves the machine until you link an Anthropic
+  account in Preferences → AI; from that point on, using the panel sends
+  the messages you type and any page or element content the assistant
+  requests to Anthropic, under your own API key. The key is encrypted at
+  rest via Electron's `safeStorage` (OS keyring-backed) in
+  `$XDG_CONFIG_HOME/GrapeStrap/ai-keys.json`, file mode `0600`; GrapeStrap
+  never logs it and never transmits it anywhere but the linked provider's
+  own API. Unlinking removes the stored key. A system with no usable
+  keyring (`encryptionAvailable: false`) is refused a key-input field
+  entirely — the alternative there is `ANTHROPIC_API_KEY` in the
+  environment, which the app treats as linked but never writes to disk
+  itself. On Linux, `encryptionAvailable` explicitly treats Electron's
+  `basic_text` `safeStorage` backend (an unencrypted fallback used when no
+  keyring is reachable) as unavailable, so "refused a key-input field" is
+  an actual guarantee there, not just the common case.
 - Plugins run unsandboxed in the renderer process by design; user plugins
   require explicit drop-in installation and a first-load confirmation. A
   malicious plugin that the user chose to install is outside the threat

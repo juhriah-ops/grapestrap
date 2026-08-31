@@ -61,6 +61,13 @@ const MAX_HISTORY_ENTRIES = 40
 // Mirrors prefs DEFAULTS.ai. Duplicated deliberately: prefs may not be
 // initialized yet (early boot, unit tests), and the panel still has to report
 // a coherent status instead of throwing.
+//
+// KEEP IN SYNC WITH DEFAULTS.ai IN prefs.js. Adding a key there means adding
+// it in three places here: this fallback object, readAiSettings() below, and
+// the getStatus() return literal. Miss one and the settings pane silently
+// drops it — that pane writes prefs.ai as a WHOLE OBJECT built from what
+// getStatus reported, so any field getStatus does not surface is not merely
+// absent from the UI, it is erased from prefs on the next save.
 const AI_PREF_FALLBACKS = Object.freeze({
   provider: 'anthropic',
   model: 'claude-opus-5',
@@ -119,6 +126,8 @@ function readAiSettings() {
   } catch (error) {
     // prefs not initialized yet — fall through to the defaults below.
   }
+  // One line per DEFAULTS.ai key. A key missing here reads as its fallback
+  // forever, no matter what the user saved.
   return {
     provider: stored?.provider || AI_PREF_FALLBACKS.provider,
     model: stored?.model || AI_PREF_FALLBACKS.model,
@@ -563,6 +572,10 @@ export async function getStatus() {
   const provider = getProvider(settings.provider)
   const keyInfo = await readKeyInfo(provider)
 
+  // The settings pane round-trips this: it reads these fields and writes
+  // prefs.ai back as a whole object. So every DEFAULTS.ai key must appear
+  // below — add a key to DEFAULTS.ai and forget this literal, and the pane's
+  // next full-object prefs:set silently drops it back to the default.
   return {
     ok: true,
     provider: settings.provider,

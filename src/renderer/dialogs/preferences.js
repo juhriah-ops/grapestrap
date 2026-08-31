@@ -5,6 +5,13 @@
  * (General / Editor / Plugins) are scaffolded but only the Shortcuts pane is
  * fully wired here — the rest are deferred to v0.0.3.
  *
+ * UPDATED: 2026-08-30 (v0.2 Phase D) — AI tab: account link/unlink flow
+ * (window.grapestrap.ai.status/validateKey/setKey/clearKey), model + effort
+ * selects backed by prefs.ai (window.grapestrap.ai.listModels for the
+ * curated options, plus a free-text "Other…" model id), and a privacy note.
+ * Everything key-shaped crosses the bridge exactly once per Link click and
+ * is never re-rendered back into the DOM — see paintAiAccountSection.
+ *
  * Shortcuts UI:
  *   - One row per command from DEFAULT_BINDINGS, with the active binding
  *     pretty-printed.
@@ -34,10 +41,46 @@ const TABS = [
   { id: 'shortcuts', labelKey: 'prefs.tab.shortcuts' },
   { id: 'general',   labelKey: 'prefs.tab.general'   },
   { id: 'editor',    labelKey: 'prefs.tab.editor'    },
-  { id: 'plugins',   labelKey: 'prefs.tab.plugins'   }
+  { id: 'plugins',   labelKey: 'prefs.tab.plugins'   },
+  { id: 'ai',        labelKey: 'prefs.tab.ai'        }
 ]
 
+// Effort options the AI pane offers, in order. Kept here (not read from the
+// core agent's contract.js) because the renderer never imports main-process
+// modules directly — everything about the AI panel crosses the
+// window.grapestrap.ai bridge, this list included.
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+
+// A free-text "Other…" model id — letters, digits, dots, and hyphens only
+// (Anthropic model ids look like `claude-opus-5`; this is intentionally a
+// little more permissive than that one shape so a future/renamed id
+// doesn't need this pattern touched). Also blocks the literal sentinel
+// value the model <select> uses for its "Other…" option — see
+// persistModelOther.
+const MODEL_OTHER_PATTERN = /^[a-z0-9.-]+$/i
+
 let activeTab = 'shortcuts'
+
+// ─── AI pane state (v0.2 Phase D) ──────────────────────────────────────────
+// aiStatus mirrors the last ai:status() result. aiPrefs is the pane's own
+// working copy of prefs.ai (provider/model/effort) — kept local so a
+// model/effort change can persist immediately without an async re-fetch
+// round-trip first, the same pattern `overrides` uses for the Shortcuts pane
+// above. None of this ever holds the key itself — that value lives only in
+// the key input's own DOM node between typing and the Link click that reads
+// it (see handleAiLink).
+let aiStatus = null
+let aiModels = []
+let aiPrefs = { provider: 'anthropic', model: '', effort: 'high' }
+let aiKeyLinkError = null
+let aiUnlinkConfirming = false
+let aiModelOtherMode = false
+let aiModelOtherError = null
+// Single-flight guard on the Link button — without it a slow validateKey
+// call plus a second click can race two setKey calls for the same
+// provider; also what lets the button show a loading label instead of
+// looking clickable while a request is outstanding.
+let aiLinkInFlight = false
 
 export function openPreferencesDialog() {
   if (overlay) return
@@ -48,7 +91,7 @@ export function openPreferencesDialog() {
   overlay.className = 'gstrap-prefs-overlay'
   host.appendChild(overlay)
 
-  loadOverrides().then(() => paint())
+  Promise.all([loadOverrides(), loadAiStatus()]).then(() => paint())
 
   overlay.addEventListener('click', evt => {
     if (evt.target === overlay) close()
@@ -57,15 +100,38 @@ export function openPreferencesDialog() {
     const action = evt.target.closest('[data-prefs-action]')
     if (action) handleAction(action.dataset.prefsAction, action.dataset.prefsCommand)
   })
+  // Delegated 'change' for the AI pane's select/text fields (model, the
+  // free-text "Other…" model id, effort) — the click listener above only
+  // ever sees discrete button presses, so this is a second delegated
+  // listener rather than overloading that one.
+  overlay.addEventListener('change', evt => {
+    const field = evt.target.closest('[data-prefs-ai-field]')
+    if (field) handleAiFieldChange(field.dataset.prefsAiField, field.value)
+  })
   document.addEventListener('keydown', onKeyDown, true)
 }
 
 function close() {
   if (!overlay) return
+  // Flush a pending, not-yet-blurred "Other…" model id edit before the
+  // overlay is torn down. Escape — the common way to close this dialog —
+  // never fires the input's own 'change' event, so a typed-but-unblurred
+  // custom model id would otherwise be silently lost (F8).
+  const modelOtherInput = overlay.querySelector('[data-prefs-ai-field="model-other"]')
+  if (modelOtherInput) persistModelOther(modelOtherInput.value)
+
   document.removeEventListener('keydown', onKeyDown, true)
   overlay.parentNode?.removeChild(overlay)
   overlay = null
   editingCommand = null
+  // Transient AI-pane UI state must not survive to the next open — a
+  // leftover "Really unlink?", link error, or in-flight flag would paint
+  // (or leave the Link button permanently stuck) before the user did
+  // anything this time.
+  aiKeyLinkError = null
+  aiUnlinkConfirming = false
+  aiModelOtherError = null
+  aiLinkInFlight = false
 }
 
 async function loadOverrides() {
@@ -74,6 +140,40 @@ async function loadOverrides() {
   } catch {
     overrides = {}
   }
+}
+
+/**
+ * Refresh aiStatus/aiModels/aiPrefs from the main process.
+ *
+ * Called on every dialog open (not lazily on first AI-tab visit) so
+ * switching into the tab never shows a loading flash — the same eager-load
+ * choice loadOverrides already makes for the Shortcuts tab.
+ *
+ * @returns {Promise<void>} never rejects — a failed status/listModels call
+ *          degrades the pane to its "couldn't load" state instead of
+ *          throwing out of the dialog's open sequence.
+ */
+async function loadAiStatus() {
+  try {
+    const [status, modelsResult] = await Promise.all([
+      window.grapestrap?.ai?.status?.(),
+      window.grapestrap?.ai?.listModels?.()
+    ])
+    if (status?.ok) {
+      aiStatus = status
+      aiPrefs = { provider: status.provider, model: status.model, effort: status.effort }
+    } else {
+      aiStatus = null
+    }
+    aiModels = (modelsResult?.ok && Array.isArray(modelsResult.models)) ? modelsResult.models : []
+  } catch {
+    aiStatus = null
+    aiModels = []
+  }
+  // "Other…" starts open whenever the persisted model isn't one of the
+  // curated ids — e.g. a value hand-edited into preferences.json, or a
+  // model this build's curated list no longer carries.
+  aiModelOtherMode = !!aiStatus && !aiModels.some(model => model.id === aiPrefs.model)
 }
 
 function paint() {
@@ -92,11 +192,24 @@ function paint() {
           `).join('')}
         </div>
         <div class="gstrap-prefs-pane">
-          ${activeTab === 'shortcuts' ? paintShortcutsPane() : paintStubPane(activeTab)}
+          ${paintActivePane()}
         </div>
       </div>
     </div>
   `
+  // The link-flow and model-other error messages are set via real
+  // textContent, not templated into the innerHTML string above — see
+  // paintAiErrorText / paintAiModelErrorText.
+  if (activeTab === 'ai') {
+    paintAiErrorText()
+    paintAiModelErrorText()
+  }
+}
+
+function paintActivePane() {
+  if (activeTab === 'shortcuts') return paintShortcutsPane()
+  if (activeTab === 'ai') return paintAiPane()
+  return paintStubPane(activeTab)
 }
 
 function paintShortcutsPane() {
@@ -154,13 +267,343 @@ function paintStubPane(tab) {
   `
 }
 
+// ─── AI pane (v0.2 Phase D) ─────────────────────────────────────────────────
+
+function paintAiPane() {
+  if (!aiStatus) {
+    return `<div class="gstrap-prefs-ai"><p class="gstrap-prefs-ai-guidance">${escHtml(t('ai.settings.status-error'))}</p></div>`
+  }
+  return `
+    <div class="gstrap-prefs-ai">
+      <section class="gstrap-prefs-ai-section">
+        <h3 class="gstrap-prefs-ai-heading">${escHtml(t('ai.settings.account.heading'))}</h3>
+        ${paintAiAccountSection()}
+      </section>
+      <section class="gstrap-prefs-ai-section">
+        <h3 class="gstrap-prefs-ai-heading">${escHtml(t('ai.settings.model.heading'))}</h3>
+        ${paintAiModelSection()}
+      </section>
+      <p class="gstrap-prefs-ai-privacy">${escHtml(t('ai.settings.privacy'))}</p>
+    </div>
+  `
+}
+
+/**
+ * Paint the Account sub-section: linked / not-linked / no-keyring states,
+ * driven entirely by the last ai:status() result (see loadAiStatus).
+ * @returns {string} HTML for the account block
+ */
+function paintAiAccountSection() {
+  if (aiStatus.hasKey) {
+    // A stored keyring entry is the only source this dialog can actually
+    // clear — an environment variable (or fake mode's sourceless "always
+    // linked", keySource null) stays set outside the app, so an Unlink
+    // button there would be a confusing no-op. keySource outside
+    // {'keyring','env'} degrades to a bare "Linked ✓" with no source line
+    // and no Unlink button, rather than guessing at a label — this is the
+    // path fake mode's needsKey:false status must hit without throwing.
+    const sourceKey = aiStatus.keySource === 'keyring' ? 'ai.settings.source.keyring'
+                     : aiStatus.keySource === 'env'     ? 'ai.settings.source.env'
+                     : null
+    const canUnlink = aiStatus.keySource === 'keyring'
+    // An env-sourced key still leaves the keyring path open: readKeyInfo
+    // prefers a keyring entry over the environment, so an env user who
+    // links a keyring key here gets it picked up on the next status()
+    // refresh — without this they could never move off ANTHROPIC_API_KEY.
+    const canOfferKeyring = aiStatus.keySource === 'env' && aiStatus.encryptionAvailable
+    return `
+      <p class="gstrap-prefs-ai-linked">${escHtml(t('ai.settings.linked'))}${sourceKey ? ' · ' + escHtml(t(sourceKey)) : ''}</p>
+      ${canUnlink ? `
+        <button class="gstrap-prefs-btn" data-prefs-action="${aiUnlinkConfirming ? 'ai-unlink-confirm' : 'ai-unlink'}">
+          ${escHtml(aiUnlinkConfirming ? t('ai.settings.unlink-confirm') : t('ai.settings.unlink'))}
+        </button>
+        ${aiUnlinkConfirming ? `<button class="gstrap-prefs-btn" data-prefs-action="ai-unlink-cancel">${escHtml(t('action.cancel'))}</button>` : ''}
+      ` : ''}
+      ${canOfferKeyring ? `
+        <p class="gstrap-prefs-ai-alt-hint">${escHtml(t('ai.settings.use-different-key'))}</p>
+        ${paintAiLinkRow()}
+      ` : ''}
+    `
+  }
+
+  if (!aiStatus.encryptionAvailable) {
+    // No key input at all in this state — there is nowhere safe to put a
+    // typed key on a system without a usable keyring.
+    return `<p class="gstrap-prefs-ai-guidance">${escHtml(t('ai.settings.no-keyring'))}</p>`
+  }
+
+  return paintAiLinkRow()
+}
+
+/**
+ * The password input + Link button + inline-error row. Shared by the
+ * not-linked state and the env-linked "use a different key instead"
+ * affordance — same fields, same validate→store→reload flow either way.
+ * @returns {string} HTML for the link row
+ */
+function paintAiLinkRow() {
+  return `
+    <div class="gstrap-prefs-ai-link-row">
+      <input type="password" class="gstrap-prefs-ai-key-input" data-prefs-ai-key
+             placeholder="${escAttr(t('ai.settings.key-placeholder'))}"
+             aria-label="${escAttr(t('ai.settings.key-placeholder'))}" autocomplete="off">
+      <button class="gstrap-prefs-btn" data-prefs-action="ai-link" ${aiLinkInFlight ? 'disabled' : ''}>
+        ${escHtml(aiLinkInFlight ? t('ai.settings.loading') : t('ai.settings.link'))}
+      </button>
+    </div>
+    <p class="gstrap-prefs-ai-error" data-prefs-ai-error hidden></p>
+  `
+}
+
+/**
+ * Paint the Model & effort sub-section: a curated-model select (plus a
+ * free-text "Other…" model id) and an effort select, both backed by the
+ * local aiPrefs working copy of prefs.ai.
+ * @returns {string} HTML for the model/effort block
+ */
+function paintAiModelSection() {
+  const modelOptions = aiModels.map(model => `
+    <option value="${escAttr(model.id)}" ${!aiModelOtherMode && aiPrefs.model === model.id ? 'selected' : ''}>${escHtml(model.label)}</option>
+  `).join('')
+
+  // supportsEffort is only knowable for a curated entry, and even there
+  // only when the field is present — "fall back to true if absent" instead
+  // of assuming the field's absence means unsupported. A free-text
+  // "Other…" id has no curated entry to check at all, which is the
+  // "unknown" case: treated the same as false rather than guessed at,
+  // since sending effort to a model that silently rejects it is worse than
+  // greying the control out.
+  const selectedModel = aiModels.find(model => model.id === aiPrefs.model)
+  const effortSupported = aiModelOtherMode
+    ? false
+    : (selectedModel ? selectedModel.supportsEffort !== false : true)
+
+  return `
+    <label class="gstrap-prefs-ai-field-label" for="gstrap-prefs-ai-model">${escHtml(t('ai.settings.model.label'))}</label>
+    <select id="gstrap-prefs-ai-model" class="gstrap-prefs-ai-select" data-prefs-ai-field="model">
+      ${modelOptions}
+      <option value="__other__" ${aiModelOtherMode ? 'selected' : ''}>${escHtml(t('ai.settings.model-other'))}</option>
+    </select>
+    ${aiModelOtherMode ? `
+      <input type="text" class="gstrap-prefs-ai-model-other" data-prefs-ai-field="model-other"
+             value="${escAttr(aiPrefs.model)}" placeholder="${escAttr(t('ai.settings.model-other-placeholder'))}">
+      <p class="gstrap-prefs-ai-error" data-prefs-ai-model-error hidden></p>
+    ` : ''}
+
+    <label class="gstrap-prefs-ai-field-label" for="gstrap-prefs-ai-effort">${escHtml(t('ai.settings.effort.label'))}</label>
+    <select id="gstrap-prefs-ai-effort" class="gstrap-prefs-ai-select" data-prefs-ai-field="effort" ${effortSupported ? '' : 'disabled'}>
+      ${EFFORT_LEVELS.map(level => `<option value="${level}" ${aiPrefs.effort === level ? 'selected' : ''}>${escHtml(t(`ai.settings.effort.${level}`))}</option>`).join('')}
+    </select>
+    ${effortSupported ? '' : `<p class="gstrap-prefs-ai-note">${escHtml(t('ai.settings.effort.unsupported'))}</p>`}
+  `
+}
+
+/**
+ * Push aiKeyLinkError into the DOM via real textContent (never templated
+ * into the innerHTML string paint() builds) — the one place in this pane
+ * where the text can originate outside our own i18n catalog (a provider's
+ * own error message, echoed back from validateKey/setKey).
+ */
+function paintAiErrorText() {
+  const el = overlay?.querySelector('[data-prefs-ai-error]')
+  if (!el) return
+  if (aiKeyLinkError) {
+    el.hidden = false
+    el.textContent = aiKeyLinkError
+  } else {
+    el.hidden = true
+    el.textContent = ''
+  }
+}
+
+/**
+ * Push aiModelOtherError into the DOM via real textContent, same reasoning
+ * and pattern as paintAiErrorText — the free-text model id is the other
+ * place a validation message needs to reach the DOM without going through
+ * the innerHTML template.
+ */
+function paintAiModelErrorText() {
+  const el = overlay?.querySelector('[data-prefs-ai-model-error]')
+  if (!el) return
+  if (aiModelOtherError) {
+    el.hidden = false
+    el.textContent = aiModelOtherError
+  } else {
+    el.hidden = true
+    el.textContent = ''
+  }
+}
+
+/**
+ * Handle a 'change' event on one of the AI pane's data-prefs-ai-field
+ * elements (model select, the free-text "Other…" model id, effort select).
+ * @param {string} field - 'model' | 'model-other' | 'effort'
+ * @param {string} value - the field's new value
+ */
+function handleAiFieldChange(field, value) {
+  if (field === 'model') {
+    if (value === '__other__') {
+      aiModelOtherMode = true
+      paint()
+      return
+    }
+    aiModelOtherMode = false
+    aiModelOtherError = null
+    aiPrefs = { ...aiPrefs, model: value }
+    persistAiPrefs()
+    paint()
+    return
+  }
+  if (field === 'model-other') {
+    persistModelOther(value)
+    return
+  }
+  if (field === 'effort') {
+    aiPrefs = { ...aiPrefs, effort: value }
+    persistAiPrefs()
+  }
+}
+
+/**
+ * Validate and persist the free-text "Other…" model id. Shared by the
+ * field's own 'change' handler and close()'s pending-edit flush, so both
+ * paths reject the same way.
+ *
+ * Empty and the literal sentinel value `__other__` (what the <select>'s
+ * own "Other…" option uses — persisting it as a real model id would make
+ * the pane's own curated/other detection ambiguous on the next load) are
+ * both rejected the same as an invalid character, via the same inline
+ * message; there is no meaningfully different guidance to give for each.
+ *
+ * @param {string} rawValue - the model-other input's current value
+ */
+function persistModelOther(rawValue) {
+  const trimmed = rawValue.trim()
+  if (!trimmed || trimmed === '__other__' || !MODEL_OTHER_PATTERN.test(trimmed)) {
+    aiModelOtherError = t('ai.settings.model-other-invalid')
+    paintAiModelErrorText()
+    return
+  }
+  aiModelOtherError = null
+  paintAiModelErrorText()
+  aiPrefs = { ...aiPrefs, model: trimmed }
+  persistAiPrefs()
+}
+
+/**
+ * Persist the current aiPrefs working copy to prefs.ai. prefs:set replaces
+ * the whole 'ai' object rather than merging it, so aiPrefs always carries
+ * all three fields (provider/model/effort) even though only one changed —
+ * losing 'provider' here would silently reset it on the next model change.
+ * @returns {Promise<void>}
+ */
+async function persistAiPrefs() {
+  try {
+    await window.grapestrap?.prefs?.set?.('ai', aiPrefs)
+  } catch (err) {
+    eventBus.emit('toast', {
+      type: 'error',
+      message: t('ai.settings.toast.save-failed', { error: err?.message || err })
+    })
+  }
+}
+
+/**
+ * Handle the Link button: validate the typed key, then store it, then
+ * refresh status. The key itself is read directly off the input's DOM
+ * value at click time, and the input is cleared immediately — it is never
+ * captured into module state, logged, or echoed anywhere except this one
+ * round-trip to validateKey/setKey.
+ *
+ * Guarded two ways against the dialog closing mid-request: aiLinkInFlight
+ * is a single-flight lock (also what lets the button show a loading label
+ * instead of double-firing a second setKey for the same provider), and
+ * every post-await step re-checks `overlay` before touching pane state —
+ * without that, a slow request outliving a closed dialog could paint a
+ * stale error into a dialog the user has since reopened fresh (F4).
+ *
+ * Always uses aiStatus.effectiveProvider — the provider actually resolved
+ * and in effect (fake mode, or main's own unknown-id fallback) — never the
+ * raw aiStatus.provider string from prefs, which a hand-edited
+ * preferences.json could set to an id no provider registry recognizes;
+ * storing a key under that string would orphan it where nothing ever
+ * looks for it again.
+ * @returns {Promise<void>}
+ */
+async function handleAiLink() {
+  if (aiLinkInFlight) return
+  const input = overlay?.querySelector('[data-prefs-ai-key]')
+  const key = (input?.value || '').trim()
+  if (input) input.value = ''
+  if (!key) {
+    aiKeyLinkError = t('ai.settings.key-required')
+    paintAiErrorText()
+    return
+  }
+  aiLinkInFlight = true
+  paint()
+  const providerId = aiStatus?.effectiveProvider || 'anthropic'
+  try {
+    const validation = await window.grapestrap?.ai?.validateKey?.(providerId, key)
+    if (!overlay) return
+    if (!validation?.ok) {
+      aiKeyLinkError = validation?.error?.message || t('ai.settings.link-failed')
+      return
+    }
+    const stored = await window.grapestrap?.ai?.setKey?.(providerId, key)
+    if (!overlay) return
+    if (!stored?.ok) {
+      aiKeyLinkError = stored?.error?.message || t('ai.settings.link-failed')
+      return
+    }
+    aiKeyLinkError = null
+    await loadAiStatus()
+    if (!overlay) return
+  } catch (err) {
+    if (!overlay) return
+    // A rejected invoke (IPC/transport failure), not a validateKey/setKey
+    // error envelope — surface the caught error's own message, never `key`.
+    aiKeyLinkError = err?.message || t('ai.settings.link-failed')
+  } finally {
+    aiLinkInFlight = false
+    if (overlay) paint()
+  }
+}
+
+/**
+ * Handle the confirmed Unlink click: clear the stored key, then refresh
+ * status so the pane falls back to its not-linked (or no-keyring) state.
+ * Uses effectiveProvider for the same reason handleAiLink does — see there.
+ * @returns {Promise<void>}
+ */
+async function handleAiUnlink() {
+  const providerId = aiStatus?.effectiveProvider || 'anthropic'
+  aiUnlinkConfirming = false
+  try {
+    await window.grapestrap?.ai?.clearKey?.(providerId)
+  } catch (err) {
+    if (!overlay) return
+    eventBus.emit('toast', {
+      type: 'error',
+      message: t('ai.settings.toast.unlink-failed', { error: err?.message || err })
+    })
+  }
+  await loadAiStatus()
+  if (!overlay) return
+  paint()
+}
+
 function handleAction(action, command) {
   switch (action) {
-    case 'close':       close(); return
-    case 'edit':        editingCommand = command; paint(); return
-    case 'cancel-edit': editingCommand = null; paint(); return
-    case 'reset':       resetCommand(command); return
-    case 'reset-all':   resetAll(); return
+    case 'close':              close(); return
+    case 'edit':               editingCommand = command; paint(); return
+    case 'cancel-edit':        editingCommand = null; paint(); return
+    case 'reset':              resetCommand(command); return
+    case 'reset-all':          resetAll(); return
+    case 'ai-link':            handleAiLink(); return
+    case 'ai-unlink':          aiUnlinkConfirming = true; paint(); return
+    case 'ai-unlink-cancel':   aiUnlinkConfirming = false; paint(); return
+    case 'ai-unlink-confirm':  handleAiUnlink(); return
   }
 }
 

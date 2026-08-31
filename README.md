@@ -5,6 +5,14 @@ ROLE: Release-facing project front page — what GrapeStrap is,
 DEPENDS: docs/INSTALL.md (install detail), CHANGELOG.md (feature
          facts), LICENSE
 CREATED: 2026-07-13 (Wave 5 rewrite of the pre-alpha stub)
+UPDATED: 2026-08-30 (v0.2 Phase D) — AI panel feature bullet + Privacy
+         section carve-out (the app's first opt-in network egress);
+         right-panel tab enumeration corrected to five tabs.
+UPDATED: 2026-08-30 (review pass) — stale "127 end-to-end specs" counts
+         (Status section + Build from source) reworded to "300+" so the
+         number stops rotting; the "permanent commitment, restated in
+         Help → About" sentence rescoped to the no-telemetry pledge only
+         (About says nothing about the AI carve-out).
 ============================================================= -->
 
 # GrapeStrap
@@ -18,13 +26,13 @@ HTML, CSS, and JavaScript you can deploy anywhere. MIT licensed. No
 telemetry.
 
 [Screenshot: the main editor window — canvas with a page open, File Manager
-on the left, DOM/Properties/Custom CSS tabs on the right, menu and toolbar
-visible]
+on the left, DOM/Properties/Custom CSS/Bootstrap/AI tabs on the right, menu
+and toolbar visible]
 
 ## Status
 
 Version 0.1.0 is the first public release. This is pre-1.0 software: it is
-tested (127 end-to-end specs run in CI) but young. Report problems on the
+tested (300+ end-to-end specs run in CI) but young. Report problems on the
 [issue tracker](https://github.com/juhriah-ops/grapestrap/issues).
 
 ## What it does
@@ -77,6 +85,12 @@ tested (127 end-to-end specs run in CI) but young. Report problems on the
 - **Asset Manager and Import Folder** for bringing images, fonts, videos,
   and existing sites into a project.
 - **Rebindable keyboard shortcuts** via the Preferences dialog.
+- **AI panel** for asking about the open project, with tool access to read
+  and edit it — the canvas, page HTML, global CSS, and project files —
+  through nine built-in tools. Replies stream in as they generate, Stop
+  cancels one in progress, New chat clears the conversation, and everything
+  one turn changes undoes as a single Ctrl+Z. Inert until you link your own
+  Anthropic account in Preferences → AI; see [Privacy](#privacy).
 
 **Extensibility and languages**
 
@@ -117,7 +131,7 @@ npm start                # run the editor from the working tree
 npm run build:linux      # package deb + rpm + AppImage + tar.gz into release/
 ```
 
-The end-to-end suite (127 specs) runs against a built tree:
+The end-to-end suite (300+ specs) runs against a built tree:
 
 ```bash
 npm run build
@@ -139,11 +153,20 @@ request.
 
 ## Privacy
 
-GrapeStrap sends nothing, ever. There is no telemetry, no analytics, no
-phone-home, no auto-updater, and no account or sign-in for any feature. The
-only network activity the app initiates is the local loopback preview
-server, and that never leaves your machine. This is a permanent commitment,
-restated in Help → About in the app.
+GrapeStrap sends no telemetry, ever — no analytics, no phone-home, no
+auto-updater. By default the only network activity the app initiates is the
+local loopback preview server, which never leaves your machine, and no
+feature requires an account or sign-in. This no-telemetry commitment is
+permanent, restated in Help → About in the app.
+
+The one opt-in exception is the **AI panel**: it is inert — no network
+activity, nothing linked — until you link an Anthropic account in
+Preferences → AI. From that point on, using the panel sends what you type
+and any page or element content the assistant requests to Anthropic, under
+your own API key. The key itself is encrypted at rest with your OS keyring
+(`libsecret`/Keychain-equivalent via Electron's `safeStorage`) — GrapeStrap
+never sees or stores it in plain text, and unlinking removes it. No part of
+this reaches GrapeStrap's own servers, because it doesn't have any.
 
 ## License
 

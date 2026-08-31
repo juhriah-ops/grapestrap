@@ -59,10 +59,10 @@ Before Wave 6, the remaining Wave 5B item: user-docs (README rewrite, SECURITY.m
 
 ```
 LEFT STACK (18%)              CENTER (56%)              RIGHT STACK (26%)
-Project | Library | Asset     Canvas / Code / Split     DOM | Properties | Custom CSS
+Project | Library | Asset     Canvas / Code / Split     DOM | Properties | Custom CSS | Bootstrap | AI
 ```
 
-Properties is the default-active right tab. View → Toggle X hides just that tab + content. If ALL THREE right tabs end up hidden, the whole right stack collapses via the size-redistribute trick so the canvas reclaims its 26%; toggling any one back on restores the stack.
+Properties is the default-active right tab. View → Toggle X hides just that tab + content. If all five right tabs end up hidden, the whole right stack collapses via the size-redistribute trick so the canvas reclaims its 26%; toggling any one back on restores the stack.
 
 ### Panel hide/show — `src/renderer/layout/panel-visibility.js`
 
@@ -74,7 +74,7 @@ Monaco runs with `automaticLayout: false` (intentional — per-instance ROs race
 
 ### Panel hosts — DON'T position-absolute the `.lm_content`
 
-Host classes (`gstrap-fm-host`, `gstrap-props-host`, `gstrap-dom-host`, `gstrap-am-host`, `gstrap-lib-host`) are added directly to `.lm_content` (panel render fns receive `container.element`, which IS the `.lm_content`). `position: absolute; inset: 0` escapes GL's containing block — content renders at the header's Y, 2px wider than the column. Use `height: 100%; overflow-y: auto` — GL gives `.lm_content` a definite pixel height, so it resolves correctly and scroll works.
+Host classes (`gstrap-fm-host`, `gstrap-props-host`, `gstrap-dom-host`, `gstrap-am-host`, `gstrap-lib-host`, `gstrap-bscss-host`, `gstrap-ai-host`) are added directly to `.lm_content` (panel render fns receive `container.element`, which IS the `.lm_content`). `position: absolute; inset: 0` escapes GL's containing block — content renders at the header's Y, 2px wider than the column. Use `height: 100%; overflow-y: auto` — GL gives `.lm_content` a definite pixel height, so it resolves correctly and scroll works.
 
 ### Linux menu-bar lock
 

@@ -424,7 +424,7 @@ Layout primitives:
 - **Property Inspector strip** — Dreamweaver-style horizontal strip with the most-used properties for the selected element type. Five element kinds in v0.0.1 (text, image, button, container/row/column, link); more in v0.0.2.
 - **Status bar** — path, cursor position (in Code view), selector breadcrumb (in Design view), device, saved state, and Git status (v0.1.0).
 
-Default Golden Layout arrangement: file manager and DOM tree on the left, canvas/code in the middle (driven by view mode), Properties + Style + Cascade + Custom CSS on the right. User can re-arrange, detach, save layouts (v0.1.0).
+Default Golden Layout arrangement: file manager on the left, canvas/code in the middle (driven by view mode), DOM tree + Properties + Custom CSS + Bootstrap + AI on the right (five tabs). User can re-arrange, detach, save layouts (v0.1.0).
 
 ### Color palette
 

@@ -1,6 +1,11 @@
 /* GrapeStrap — Preferences dialog. v0.0.2 ships the Shortcuts pane in full;
    General/Editor/Plugins are scaffolded stubs. Edit per-row capture state
-   tints the cell yellow to make the "press something" mode obvious. */
+   tints the cell yellow to make the "press something" mode obvious.
+   UPDATED: 2026-08-30 (v0.2 Phase D) — AI pane styles (account link/unlink,
+   model + effort selects, privacy note), added at the end of this file.
+   UPDATED: 2026-08-30 (review pass) — hardcoded #f48771 replaced with the
+   --error token (theme-dark.css); disabled-state styling for the AI pane's
+   inputs/selects/buttons (in-flight Link, unsupported-effort select). */
 
 .gstrap-prefs-overlay {
   position: fixed;
@@ -152,7 +157,7 @@
 }
 .gstrap-prefs-conflict {
   margin-left: 6px;
-  color: #f48771;
+  color: var(--error);
   font-size: 10px;
 }
 .gstrap-prefs-row-actions {
@@ -406,4 +411,103 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ─── AI pane (Preferences → AI) ─────────────────────────────────────────── */
+.gstrap-prefs-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.gstrap-prefs-ai-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gstrap-prefs-ai-heading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-3);
+  font-weight: normal;
+}
+.gstrap-prefs-ai-linked {
+  color: var(--text-1);
+  margin: 0;
+}
+.gstrap-prefs-ai-guidance {
+  color: var(--text-2);
+  line-height: 1.6;
+  margin: 0;
+}
+.gstrap-prefs-ai-link-row {
+  display: flex;
+  gap: 6px;
+}
+.gstrap-prefs-ai-key-input,
+.gstrap-prefs-ai-model-other {
+  flex: 1;
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 12px;
+  padding: 4px 8px;
+  font-family: inherit;
+}
+.gstrap-prefs-ai-key-input:focus,
+.gstrap-prefs-ai-model-other:focus,
+.gstrap-prefs-ai-select:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.gstrap-prefs-ai-error {
+  color: var(--error);
+  font-size: 11px;
+  margin: 0;
+}
+.gstrap-prefs-ai-alt-hint {
+  color: var(--text-3);
+  font-size: 11px;
+  margin: 6px 0 0;
+}
+.gstrap-prefs-ai-note {
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: italic;
+  margin: 4px 0 0;
+}
+.gstrap-prefs-ai-select:disabled,
+.gstrap-prefs-ai-key-input:disabled,
+.gstrap-prefs-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.gstrap-prefs-ai-field-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 8px;
+  margin-bottom: 3px;
+}
+.gstrap-prefs-ai-select {
+  background: var(--bg-1);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 12px;
+  padding: 4px 8px;
+  font-family: inherit;
+  width: 100%;
+  max-width: 320px;
+}
+.gstrap-prefs-ai-model-other { max-width: 320px; margin-top: 6px; }
+.gstrap-prefs-ai-privacy {
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.6;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin: 0;
 }

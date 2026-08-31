@@ -6,8 +6,21 @@
 // CREATED: 2026-08-30
 // =============================================================
 //
-// Fake mode reaches neither the SDK, the key store, nor the network — its
-// only import is the dependency-free contract module.
+// Fake mode reaches neither the SDK nor the network — its only import is the
+// dependency-free contract module.
+//
+// ─── Two modes ────────────────────────────────────────────────────────────
+//
+// Default (GSTRAP_AI_FAKE=1): needsKey false, so agent-session short-circuits
+// the key path entirely and never touches the key store. This is the mode
+// every turn-behavior spec runs in.
+//
+// Needs-key (… plus GSTRAP_AI_FAKE_NEEDS_KEY=1): needsKey true and envKeyVars
+// empty, so getStatus/readKeyInfo run the REAL keyring path — that is the
+// whole point, since it makes the settings link/unlink flow drivable
+// headlessly. validateKey accepts exactly one literal, 'sk-fake-valid';
+// anything else comes back { ok: false, error: { type: 'auth' } }. With no
+// stored key, a turn fails with a typed 'auth' error, same as production.
 //
 // The prompt IS the script. The newest user message selects the branch:
 //
@@ -36,6 +49,16 @@
 import {
   CURATED_MODELS, TURN_ERROR_TYPES, buildContextStripRegex, createProviderError
 } from './contract.js'
+
+// Read once at module load: the e2e harness sets this in the app's launch
+// environment, so it cannot change under a running process, and a per-call
+// read would only invite a spec to toggle it mid-session and get a
+// half-configured provider.
+const NEEDS_KEY_MODE = process.env.GSTRAP_AI_FAKE_NEEDS_KEY === '1'
+
+// The single key needs-key mode accepts. Deliberately not a real-looking
+// credential prefix, so it can never be confused for one in a log or a diff.
+const VALID_FAKE_KEY = 'sk-fake-valid'
 
 const COMMAND_PREFIX = 'FAKE:'
 const ECHO_PREFIX = 'Echo: '
@@ -290,11 +313,17 @@ async function createTurn({ messages, tools, signal, onDelta }) {
 }
 
 /**
- * Always valid — fake mode has no credential to check.
- * @returns {Promise<{ok: boolean}>}
+ * Key check. Trivially true in plain fake mode (there is no credential to
+ * check); in needs-key mode it accepts one literal so a spec can drive both
+ * the accepted and the rejected branch of the settings pane.
+ *
+ * @param {string} key - the key as typed by the user
+ * @returns {Promise<{ok: true} | {ok: false, error: {type: string, message: string}}>}
  */
-async function validateKey() {
-  return { ok: true }
+async function validateKey(key) {
+  if (!NEEDS_KEY_MODE) return { ok: true }
+  if (key === VALID_FAKE_KEY) return { ok: true }
+  return { ok: false, error: { type: 'auth', message: 'Fake provider: invalid key.' } }
 }
 
 /**
@@ -309,7 +338,13 @@ function listModels() {
 export const fakeProvider = Object.freeze({
   id: 'fake',
   label: 'Fake (test seam)',
-  needsKey: false,
+  // needsKey drives the whole key path in agent-session: false short-circuits
+  // readKeyInfo, true sends it down the real keyring lookup. Flipping it is
+  // the entire point of the needs-key mode.
+  needsKey: NEEDS_KEY_MODE,
+  // Empty in both modes: an env var would let a developer's real
+  // ANTHROPIC_API_KEY satisfy the fake provider and mask a keyring bug the
+  // spec is trying to catch.
   envKeyVars: Object.freeze([]),
   validateKey,
   listModels,

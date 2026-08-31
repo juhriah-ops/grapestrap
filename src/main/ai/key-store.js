@@ -8,6 +8,8 @@
 // loss); decrypted-key cache per providerId (safeStorage.decryptString is a
 // sync native keyring call — agent-session.js calls getKey() once per
 // turn); config dir created mode 0700 instead of the fs default 0755.
+// UPDATED: 2026-08-30 (final pass) — encryptionAvailable() now rejects the
+// Linux `basic_text` safeStorage backend; see the rationale below.
 // =============================================================
 //
 // Keys are encrypted with Electron's OS-keychain-backed safeStorage and
@@ -15,6 +17,16 @@
 // (mode 0600), shape { [providerId]: "<base64>" }. NEVER log key material —
 // every catch below logs only the providerId or a generic failure, never
 // the plaintext key or the ciphertext.
+//
+// WHAT "ENCRYPTION AVAILABLE" MEANS HERE. On Linux with no keyring service,
+// Chromium falls back to the `basic_text` safeStorage backend, which encrypts
+// with a HARDCODED key — isEncryptionAvailable() returns true, but the result
+// is reversible by anyone who can read the file, which is no better than the
+// 0600 file mode we already have. SECURITY.md promises this app refuses to
+// store a key rather than pretend, so encryptionAvailable() checks the
+// selected backend as well and reports false for the reversible ones. Those
+// users are routed to the ANTHROPIC_API_KEY environment variable, which is
+// exactly the fallback that document describes.
 //
 // safeStorage.isEncryptionAvailable() / encryptString() / decryptString()
 // throw if called before Electron's 'ready' event. Rather than a top-level
@@ -50,12 +62,51 @@ const DIR_MODE = 0o700
 // invalidation path to wire up.
 const decryptedKeyCache = new Map()
 
+// Linux safeStorage backends that are NOT real encryption. `basic_text` is
+// Chromium's fallback when no keyring is present: it "encrypts" with a
+// hardcoded key, so the ciphertext is trivially reversible by anyone who can
+// read the file — exactly the threat ai-keys.json's 0600 mode already covers.
+// `unknown` means Chromium could not determine a backend (documented as the
+// pre-ready state), so it is no basis for claiming a key is protected either.
+const UNTRUSTED_LINUX_BACKENDS = new Set(['basic_text', 'unknown'])
+
 /**
- * Is OS-backed key encryption available in this session?
- * @returns {boolean} true when Electron's safeStorage can encrypt/decrypt
+ * Is real OS-backed key encryption available in this session?
+ *
+ * isEncryptionAvailable() alone is NOT the answer on Linux: with no keyring
+ * installed it still returns true while silently selecting the `basic_text`
+ * backend, whose "encryption" is a hardcoded key. Storing a key under that
+ * and calling it encrypted would make SECURITY.md's promise false, so the
+ * backend is checked too and those users are routed to the environment
+ * variable instead — which is what that document already tells them happens.
+ *
+ * @returns {boolean} true only when a real keyring backs safeStorage
  */
 export function encryptionAvailable() {
-  return require('electron').safeStorage.isEncryptionAvailable()
+  const { safeStorage } = require('electron')
+
+  // Throws before app 'ready'; deliberately propagated rather than reported
+  // as `false`, because that would be a bug in the caller, not a machine
+  // without a keyring — and the two must not look alike.
+  if (!safeStorage.isEncryptionAvailable()) return false
+
+  // getSelectedStorageBackend is Linux-only (@platform linux in electron.d.ts).
+  // Every other platform has a real OS keychain behind isEncryptionAvailable().
+  if (process.platform !== 'linux') return true
+
+  if (typeof safeStorage.getSelectedStorageBackend !== 'function') {
+    // Older Electron than this app ships. We cannot tell a real keyring from
+    // the reversible fallback, and the promise we make is refuse-when-unsure.
+    log.warn('ai/key-store: safeStorage backend cannot be determined; treating encryption as unavailable')
+    return false
+  }
+
+  try {
+    return !UNTRUSTED_LINUX_BACKENDS.has(safeStorage.getSelectedStorageBackend())
+  } catch (err) {
+    log.warn('ai/key-store: safeStorage backend probe failed; treating encryption as unavailable')
+    return false
+  }
 }
 
 /**
