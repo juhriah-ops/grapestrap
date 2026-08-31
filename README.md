@@ -89,12 +89,14 @@ tested (300+ end-to-end specs run in CI) but young. Report problems on the
 - **Rebindable keyboard shortcuts** via the Preferences dialog.
 - **AI panel** for asking about the open project, with tool access to read
   and edit it — the canvas, page HTML, global CSS, and project files —
-  through nine built-in tools. Replies stream in as they generate, Stop
+  through ten built-in tools. Replies stream in as they generate, Stop
   cancels one in progress, New chat clears the conversation, and everything
-  one turn changes undoes as a single Ctrl+Z. Inert until you link your own
-  Anthropic account in Preferences → AI; see [Privacy](#privacy). Also
-  works with a local Ollama server as an alternative to an Anthropic
-  account.
+  one turn changes undoes as a single Ctrl+Z. Destructive steps ask first:
+  file overwrites and whole-stylesheet replaces park behind an Allow/Deny
+  prompt, and a stylesheet replace is refused outright until the assistant
+  has read the current stylesheet. Inert until you connect a provider in
+  Preferences → AI; see [Privacy](#privacy) — link your own Anthropic
+  account, or point it at a local Ollama server instead.
 
 **Extensibility and languages**
 

@@ -1,10 +1,14 @@
 // =============================================================
 // PATH: src/main/ai/tools.js
-// ROLE: The nine renderer-bridged tool descriptors — pinned names, JSON
+// ROLE: The ten renderer-bridged tool descriptors — pinned names, JSON
 //       Schemas, and model-facing descriptions — plus the factory that
 //       wraps them into runnable provider tools
 // DEPENDS: none (leaf module; the run() implementation is injected)
 // CREATED: 2026-08-30
+// UPDATED: 2026-08-31 — get_global_css added (tenth tool) and
+//          edit_global_css's replace mode now documents its read-first +
+//          user-confirm guards; the executor enforces both. Prompted by a
+//          live 8b Ollama run replacing the user's whole stylesheet unseen.
 // =============================================================
 //
 // Every tool here is EXECUTED IN THE RENDERER, not in main. main owns the
@@ -110,9 +114,20 @@ const DEFINITIONS = [
     rendererBridged: true
   },
   {
+    name: 'get_global_css',
+    description:
+      'Read the project global stylesheet — the custom CSS the user has written, applied to every page. Call this before edit_global_css whenever existing rules matter, and ALWAYS before mode "replace": a replace is refused until this has been called in the same turn, so the current stylesheet is never discarded unseen.',
+    inputSchema: Object.freeze({
+      type: 'object',
+      properties: Object.freeze({}),
+      additionalProperties: false
+    }),
+    rendererBridged: true
+  },
+  {
     name: 'edit_global_css',
     description:
-      'Edit the project global stylesheet, which applies to every page. Use mode "append" to add rules to the end of the existing stylesheet, which is almost always what you want; use mode "replace" only when the user has explicitly asked you to rewrite the whole stylesheet, because it discards everything currently in it. Put styling here rather than in inline style attributes, and write selectors against semantic class names rather than generated ids.',
+      'Edit the project global stylesheet, which applies to every page. Use mode "append" to add rules to the end of the existing stylesheet, which is almost always what you want; use mode "replace" only when the user has explicitly asked you to rewrite the whole stylesheet, because it discards everything currently in it. A replace is refused unless get_global_css was called earlier in the same turn, and then still asks the user to confirm before it lands; the confirmed result echoes the stylesheet it discarded so it can be restored if that was a mistake. Put styling here rather than in inline style attributes, and write selectors against semantic class names rather than generated ids.',
     inputSchema: Object.freeze({
       type: 'object',
       properties: Object.freeze({

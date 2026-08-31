@@ -338,3 +338,161 @@ test('cancelling while a write confirm is open returns the panel to idle', async
   await app.close()
   await fsp.rm(projectDir, { recursive: true, force: true })
 })
+
+// ─── Specs 6–9 — the global-stylesheet guards (2026-08-31) ─────────────────
+//
+// Added after a live 8b Ollama run called edit_global_css mode "replace" and
+// discarded the user's hand-written CSS unseen. The guards under test:
+// get_global_css exists and reads the stylesheet; replace is refused until
+// that read happened in the SAME turn; a read-then-replace parks behind the
+// same Allow/Deny confirm row an overwrite gets; and a confirmed replace
+// echoes the discarded stylesheet back in its result.
+
+const ORIGINAL_CSS = '.hero-band { background: navy; }\n.hero-band h1 { color: white; }'
+
+/**
+ * Overwrite the open project's global stylesheet directly, the way a user's
+ * hand-written Custom CSS ends up there.
+ *
+ * @param {import('@playwright/test').Page} appWindow
+ * @param {string} css - stylesheet content to set
+ * @returns {Promise<void>}
+ */
+function seedGlobalCss(appWindow, css) {
+  return appWindow.evaluate(value => {
+    window.__gstrap.projectState.current.globalCSS = value
+  }, css)
+}
+
+/**
+ * @param {import('@playwright/test').Page} appWindow
+ * @returns {Promise<string>} the project's current global stylesheet
+ */
+function readGlobalCss(appWindow) {
+  return appWindow.evaluate(() => window.__gstrap.projectState.current.globalCSS || '')
+}
+
+test('get_global_css returns the stylesheet, and append needs no read', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-aitools-cssread-'))
+  const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
+  await openSeedProject(appWindow, join(projectDir, 'cssread.gstrap'))
+  await openAiPanel(appWindow)
+  await seedGlobalCss(appWindow, ORIGINAL_CSS)
+
+  await startTurn(appWindow, 'FAKE:tool get_global_css {}')
+  await waitForIdle(appWindow)
+
+  const transcript = await getTranscript(appWindow)
+  const reply = transcript.find(
+    entry => entry.role === 'assistant' && entry.text.includes('Tool get_global_css returned:'))
+  expect(reply).toBeTruthy()
+  expect(reply.text).toContain('.hero-band { background: navy; }')
+
+  // Append is the non-destructive mode — no read requirement, no confirm.
+  await startTurn(appWindow, 'FAKE:tool edit_global_css {"css":".added-later { margin: 0; }","mode":"append"}')
+  await waitForIdle(appWindow)
+  const css = await readGlobalCss(appWindow)
+  expect(css).toContain('.hero-band { background: navy; }')
+  expect(css).toContain('.added-later { margin: 0; }')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('edit_global_css replace is refused when the stylesheet was not read this turn', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-aitools-cssguard-'))
+  const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
+  await openSeedProject(appWindow, join(projectDir, 'cssguard.gstrap'))
+  await openAiPanel(appWindow)
+  await seedGlobalCss(appWindow, ORIGINAL_CSS)
+
+  await startTurn(appWindow, 'FAKE:tool edit_global_css {"css":".blind-replace {}","mode":"replace"}')
+  await waitForIdle(appWindow)
+
+  // The refusal names the way forward, and nothing was touched — no confirm
+  // row ever appeared, the stylesheet is intact.
+  const transcript = await getTranscript(appWindow)
+  const errorEntry = transcript.find(entry => entry.role === 'error')
+  expect(errorEntry).toBeTruthy()
+  expect(errorEntry.text).toContain('get_global_css')
+  expect(await readGlobalCss(appWindow)).toBe(ORIGINAL_CSS)
+
+  // The read is per TURN, not per conversation: a read in an earlier turn
+  // must not unlock a replace in a later one (the user can edit the Custom
+  // CSS panel between turns).
+  await startTurn(appWindow, 'FAKE:tool get_global_css {}')
+  await waitForIdle(appWindow)
+  await startTurn(appWindow, 'FAKE:tool edit_global_css {"css":".stale-read {}","mode":"replace"}')
+  await waitForIdle(appWindow)
+  expect(await readGlobalCss(appWindow)).toBe(ORIGINAL_CSS)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('read-then-replace parks on a confirm, and Deny leaves the stylesheet alone', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-aitools-cssdeny-'))
+  const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
+  await openSeedProject(appWindow, join(projectDir, 'cssdeny.gstrap'))
+  await openAiPanel(appWindow)
+  await seedGlobalCss(appWindow, ORIGINAL_CSS)
+
+  const calls = [
+    { name: 'get_global_css', input: {} },
+    { name: 'edit_global_css', input: { css: '.replacement {}', mode: 'replace' } }
+  ]
+  await startTurn(appWindow, `FAKE:tools ${JSON.stringify(calls)}`)
+
+  // The replace parks behind the same inline Allow/Deny row an overwrite gets.
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('.gstrap-ai-host .gstrap-ai-confirm'), null, { timeout: 10_000 })
+  expect(await readGlobalCss(appWindow)).toBe(ORIGINAL_CSS) // untouched while parked
+
+  await appWindow.evaluate(
+    () => document.querySelector('.gstrap-ai-host .gstrap-ai-confirm-deny').click())
+  await waitForIdle(appWindow)
+
+  const transcript = await getTranscript(appWindow)
+  const errorEntry = transcript.find(entry => entry.role === 'error')
+  expect(errorEntry).toBeTruthy()
+  expect(errorEntry.text).toContain('denied the stylesheet replacement')
+  expect(await readGlobalCss(appWindow)).toBe(ORIGINAL_CSS)
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})
+
+test('a confirmed replace lands and echoes the discarded stylesheet in its result', async () => {
+  const projectDir = await fsp.mkdtemp(join(tmpdir(), 'gstrap-aitools-cssallow-'))
+  const { app, appWindow } = await launch({ GSTRAP_AI_FAKE: '1' })
+  await openSeedProject(appWindow, join(projectDir, 'cssallow.gstrap'))
+  await openAiPanel(appWindow)
+  await seedGlobalCss(appWindow, ORIGINAL_CSS)
+
+  const calls = [
+    { name: 'get_global_css', input: {} },
+    { name: 'edit_global_css', input: { css: '.replacement { padding: 1rem; }', mode: 'replace' } }
+  ]
+  await startTurn(appWindow, `FAKE:tools ${JSON.stringify(calls)}`)
+  await appWindow.waitForFunction(
+    () => !!document.querySelector('.gstrap-ai-host .gstrap-ai-confirm'), null, { timeout: 10_000 })
+
+  await appWindow.evaluate(
+    () => document.querySelector('.gstrap-ai-host .gstrap-ai-confirm-allow').click())
+  await waitForIdle(appWindow)
+
+  expect(await readGlobalCss(appWindow)).toBe('.replacement { padding: 1rem; }')
+
+  // The result the model saw carries the stylesheet it discarded — the
+  // transcript-level safety net that makes even an approved mistake
+  // restorable. (FAKE:tools streams each step as '<name>: <result>'.)
+  const transcript = await getTranscript(appWindow)
+  const reply = transcript.find(
+    entry => entry.role === 'assistant' && entry.text.includes('edit_global_css: Replaced'))
+  expect(reply).toBeTruthy()
+  expect(reply.text).toContain('previous stylesheet')
+  expect(reply.text).toContain('.hero-band { background: navy; }')
+
+  await app.close()
+  await fsp.rm(projectDir, { recursive: true, force: true })
+})

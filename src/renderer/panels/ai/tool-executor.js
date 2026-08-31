@@ -2,15 +2,23 @@
  * GrapeStrap — AI tool executor (renderer half of the tool bridge)
  *
  * PATH: src/renderer/panels/ai/tool-executor.js
- * ROLE: Runs the nine renderer-bridged tools against the live editor, project
+ * ROLE: Runs the ten renderer-bridged tools against the live editor, project
  *       state, and project files, then answers each ai:tool-call with
- *       grapestrap.ai.toolResult(). Owns the write-confirm flow and the
+ *       grapestrap.ai.toolResult(). Owns the confirm flow and the
  *       one-undo-step-per-turn grouping.
  * DEPENDS: ai/chat-state.js, editor/grapesjs-init.js, editor/placement.js,
  *          dialogs/quick-tag.js, panels/templates/manage.js,
  *          state/project-state.js, state/page-state.js, state/event-bus.js,
  *          i18n.js, log.js, preload bridge (window.grapestrap.ai / .file)
  * CREATED: 2026-08-30
+ * UPDATED: 2026-08-31 — get_global_css tool added, and edit_global_css's
+ *          replace mode hardened after a live 8b Ollama run discarded the
+ *          user's whole stylesheet unseen: replace now requires a
+ *          get_global_css read in the SAME turn, parks behind the same
+ *          Allow/Deny confirm row as overwrites (pendingConfirms entries
+ *          generalized to carry their own run()/labels), and echoes the
+ *          discarded stylesheet in its result so a confirmed mistake is
+ *          still recoverable from the transcript.
  *
  * Protocol: main emits ai:tool-call { turnId, callId, name, input } and parks
  * the provider's promise until ai:tool-result answers that callId, with a
@@ -85,8 +93,18 @@ const TOOL_OUTPUT_CAP = 16000
 // string can ever collide with it.
 const DEFERRED = Symbol('tool-result-deferred')
 
-// callId → { messageId, path, content } for every write awaiting an answer.
+// callId → { messageId, toolRowId, toolLabel, denyText, run } for every
+// destructive call awaiting an Allow/Deny answer (file overwrites, stylesheet
+// replaces). run() performs the confirmed action and returns the model-facing
+// result string; denyText is the is_error result a Deny sends back.
 const pendingConfirms = new Map()
+
+// The project object whose global stylesheet get_global_css has read THIS
+// TURN. edit_global_css mode "replace" is refused unless it matches the
+// current project — per turn, not per conversation, because the user can
+// edit the Custom CSS panel between turns and a stale read is exactly the
+// blind-replace this guard exists to stop. Cleared in finishToolTurn.
+let globalCssReadFor = null
 
 // callIds already executed this turn. main parks one promise per call, so a
 // redelivered ai:tool-call must be dropped rather than run a second time — a
@@ -533,40 +551,94 @@ function insertHtml({ html, position = 'append' } = {}) {
 }
 
 /**
- * Append to or replace the project global stylesheet.
+ * Read the project global stylesheet, and record that THIS turn has seen it —
+ * the read that unlocks edit_global_css's replace mode (see globalCssReadFor).
  *
- * Mirrors the Custom CSS panel's write route exactly — mutate
+ * @returns {string} the stylesheet source, capped like every tool result
+ * @throws {Error} on a missing project
+ */
+function getGlobalCss() {
+  const project = requireProject()
+  globalCssReadFor = project
+  const css = project.globalCSS || ''
+  if (!css.trim()) return 'The project stylesheet is currently empty.'
+  return capText(css, TOOL_OUTPUT_CAP)
+}
+
+/**
+ * Write the stylesheet string the way the Custom CSS panel does — mutate
  * projectState.current.globalCSS, flag it dirty, then emit project:css-changed
  * so the canvas <style> tag and the panel's Monaco buffer both re-sync. That
  * event is what keeps the several writers of this one string consistent;
  * skipping it leaves the panel's buffer stale and the next keystroke there
  * silently clobbers this edit.
  *
- * @param {{css: string, mode: string}} input - stylesheet source and write mode
- * @returns {string} confirmation
- * @throws {Error} on a missing project or a bad argument
+ * Wrapped in recordUndoRange for symmetry with the other mutating tools, and
+ * so this write joins the undo group for free if globalCSS ever moves into
+ * the CssComposer. Today it records an empty range: the write touches no
+ * tracked model. See the header — global CSS is not Ctrl+Z-undoable anywhere
+ * in this app.
+ *
+ * @param {object} project - the open project (requireProject result)
+ * @param {string} nextCss - the stylesheet's new full content
+ * @returns {void}
  */
-function editGlobalCss({ css, mode } = {}) {
+function writeGlobalCss(project, nextCss) {
+  recordUndoRange(() => {
+    project.globalCSS = nextCss
+    projectState.markCssDirty()
+    eventBus.emit('project:css-changed')
+  })
+}
+
+/**
+ * Append to or replace the project global stylesheet.
+ *
+ * Append is immediate. Replace is double-guarded, because it discards the
+ * user's own hand-written CSS and nothing about it is Ctrl+Z-undoable:
+ *   1. Refused unless get_global_css ran earlier in the SAME turn — the
+ *      model must have actually seen what it is about to discard.
+ *   2. Parked behind the same Allow/Deny confirm row a file overwrite gets;
+ *      the confirmed result echoes the discarded stylesheet so even an
+ *      approved mistake is recoverable from the transcript.
+ *
+ * @param {{css: string, mode: string}} input - stylesheet source and write mode
+ * @param {{callId: string, rowId: string}} meta - call identity for the confirm flow
+ * @returns {string|symbol} confirmation, or DEFERRED once parked on a confirm
+ * @throws {Error} on a missing project, a bad argument, or an unread replace
+ */
+function editGlobalCss({ css, mode } = {}, { callId, rowId } = {}) {
   const project = requireProject()
   if (typeof css !== 'string') throw new Error('The css argument is required.')
   if (mode !== 'replace' && mode !== 'append') {
     throw new Error('The mode argument must be "replace" or "append".')
   }
 
-  // Wrapped for symmetry with the other mutating tools, and so this tool
-  // joins the group for free if globalCSS ever moves into the CssComposer.
-  // Today it records an empty range: the write below touches no tracked
-  // model, so recordUndoRange sees no new stack entry. See the header —
-  // global CSS is not Ctrl+Z-undoable anywhere in this app.
-  recordUndoRange(() => {
+  if (mode === 'append') {
     const existing = project.globalCSS || ''
-    project.globalCSS = mode === 'replace' ? css : `${existing}${existing.endsWith('\n') ? '' : '\n'}${css}`
-    projectState.markCssDirty()
-    eventBus.emit('project:css-changed')
-  })
+    writeGlobalCss(project, `${existing}${existing.endsWith('\n') ? '' : '\n'}${css}`)
+    return 'Appended to the project stylesheet. Note: this edit is not covered by Ctrl+Z — say so if the user asks to undo it.'
+  }
 
-  const verb = mode === 'replace' ? 'Replaced' : 'Appended to'
-  return `${verb} the project stylesheet. Note: this edit is not covered by Ctrl+Z — say so if the user asks to undo it.`
+  if (globalCssReadFor !== project) {
+    throw new Error(
+      'Refused: replace discards the whole project stylesheet. Call get_global_css first (in this same turn) to read what is currently there, then retry — or use mode "append".'
+    )
+  }
+
+  const confirmRow = chatState.addNotice(t('ai.confirm.replace-css'), 'confirm', callId)
+  pendingConfirms.set(callId, {
+    messageId: confirmRow?.id || '',
+    toolRowId: rowId || '',
+    toolLabel: 'edit_global_css',
+    denyText: 'User denied the stylesheet replacement.',
+    run: () => {
+      const previous = project.globalCSS || ''
+      writeGlobalCss(project, css)
+      return `Replaced the project stylesheet. Not covered by Ctrl+Z — say so if the user asks to undo it. The previous stylesheet, in case it must be restored:\n\n${capText(previous, TOOL_OUTPUT_CAP)}`
+    }
+  })
+  return DEFERRED
 }
 
 /**
@@ -627,7 +699,13 @@ async function writeProjectFileTool({ path, content } = {}, { callId, rowId } = 
   // provider promise open until we answer or its deadline fires, so no reply
   // is sent from here — resolveToolConfirm owns the reply AND the tool row.
   const row = chatState.addNotice(t('ai.confirm.overwrite', { path }), 'confirm', callId)
-  pendingConfirms.set(callId, { messageId: row?.id || '', toolRowId: rowId || '', path, content })
+  pendingConfirms.set(callId, {
+    messageId: row?.id || '',
+    toolRowId: rowId || '',
+    toolLabel: 'write_file',
+    denyText: 'User denied the write.',
+    run: () => writeProjectFile(path, content)
+  })
   return DEFERRED
 }
 
@@ -637,6 +715,7 @@ const TOOL_HANDLERS = {
   get_page_html: getPageHtml,
   replace_element_html: replaceElementHtml,
   insert_html: insertHtml,
+  get_global_css: getGlobalCss,
   edit_global_css: editGlobalCss,
   create_page: createProjectPage,
   read_file: readProjectFile,
@@ -708,10 +787,10 @@ export async function executeToolCall(payload) {
 }
 
 /**
- * Answer a parked write confirmation.
+ * Answer a parked confirmation (file overwrite, stylesheet replace).
  *
  * @param {string} callId - the call the user answered
- * @param {boolean} allowed - true for Overwrite, false for Deny
+ * @param {boolean} allowed - true for Allow, false for Deny
  * @returns {Promise<void>} always resolves
  */
 export async function resolveToolConfirm(callId, allowed) {
@@ -731,18 +810,18 @@ export async function resolveToolConfirm(callId, allowed) {
     if (pending.toolRowId) {
       chatState.setText(
         pending.toolRowId,
-        t(isError ? 'ai.toolrow.failed' : 'ai.toolrow.done', { tool: 'write_file' })
+        t(isError ? 'ai.toolrow.failed' : 'ai.toolrow.done', { tool: pending.toolLabel })
       )
     }
     replyToCall(callId, text, isError)
   }
 
   if (!allowed) {
-    finishCall('User denied the write.', true)
+    finishCall(pending.denyText, true)
     return
   }
   try {
-    finishCall(await writeProjectFile(pending.path, pending.content), false)
+    finishCall(await pending.run(), false)
   } catch (error) {
     finishCall(toolErrorText(error), true)
   }
@@ -761,14 +840,18 @@ export async function resolveToolConfirm(callId, allowed) {
 export function finishToolTurn() {
   for (const pending of pendingConfirms.values()) {
     if (pending.messageId) chatState.removeMessage(pending.messageId)
-    // The write never happened, and its tool row would otherwise sit at
+    // The action never happened, and its tool row would otherwise sit at
     // "Running…" for the rest of the session.
     if (pending.toolRowId) {
-      chatState.setText(pending.toolRowId, t('ai.toolrow.failed', { tool: 'write_file' }))
+      chatState.setText(pending.toolRowId, t('ai.toolrow.failed', { tool: pending.toolLabel }))
     }
   }
   pendingConfirms.clear()
   executedCallIds.clear()
+  // The replace-unlock read is strictly per turn — the user may edit the
+  // Custom CSS panel between turns, and a stale read is exactly the blind
+  // replace the guard exists to stop.
+  globalCssReadFor = null
   isTurnLive = false
   closeTurnUndoGroup()
 }

@@ -96,6 +96,7 @@
   "ai.error.encryption-unavailable": "Key storage needs a system keyring — set ANTHROPIC_API_KEY in your environment instead.",
   "ai.refusal": "The model declined this request.",
   "ai.confirm.overwrite": "Overwrite {path}?",
+  "ai.confirm.replace-css": "Replace the whole project stylesheet? Everything currently in it will be discarded.",
   "ai.confirm.allow": "Overwrite",
   "ai.confirm.deny": "Deny",
   "ai.toolrow.running": "Running {tool}…",
