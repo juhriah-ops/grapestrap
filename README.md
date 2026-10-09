@@ -1,7 +1,7 @@
 <!-- =============================================================
 PATH: README.md
 ROLE: Release-facing project front page — what GrapeStrap is,
-      v0.1.0 feature list, install pointers, build-from-source
+      published features, preview status, install pointers, source builds
 DEPENDS: docs/INSTALL.md (install detail), CHANGELOG.md (feature
          facts), LICENSE
 CREATED: 2026-07-13 (Wave 5 rewrite of the pre-alpha stub)
@@ -28,16 +28,27 @@ HTML, CSS, and JavaScript you can deploy anywhere. MIT licensed. No
 telemetry.
 
 [Screenshot: the main editor window — canvas with a page open, File Manager
-on the left, DOM/Properties/Custom CSS/Bootstrap/AI tabs on the right, menu
-and toolbar visible]
+on the left, DOM/Properties/Custom CSS/Bootstrap tabs on the right, menu
+and toolbar visible; preview builds also include an AI tab]
 
 ## Status
 
-Version 0.1.0 is the first public release. This is pre-1.0 software: it is
-tested (300+ end-to-end specs run in CI) but young. Report problems on the
+As of October 9, 2026, the latest published release is
+[v0.1.2](https://github.com/juhriah-ops/grapestrap/releases/tag/v0.1.2),
+published August 27, 2026. Its installation packages do not include the AI
+panel or Anthropic/Ollama integrations.
+
+v0.1.3 (August 31, 2026) remains a **draft release** with four Linux
+installation packages attached for preliminary AI installation testing.
+Draft assets are not public downloads. The AI functionality on `main` is a
+preview; the polished feature set is planned for v0.2.0. See
+[CHANGELOG.md](./CHANGELOG.md) for the testing scope and plans.
+
+This is pre-1.0 software. The development tree is tested (300+ end-to-end
+specs run in CI) but young. Report problems on the
 [issue tracker](https://github.com/juhriah-ops/grapestrap/issues).
 
-## What it does
+## Published features (v0.1.2)
 
 **Editing**
 
@@ -87,16 +98,6 @@ tested (300+ end-to-end specs run in CI) but young. Report problems on the
 - **Asset Manager and Import Folder** for bringing images, fonts, videos,
   and existing sites into a project.
 - **Rebindable keyboard shortcuts** via the Preferences dialog.
-- **AI panel** for asking about the open project, with tool access to read
-  and edit it — the canvas, page HTML, global CSS, and project files —
-  through ten built-in tools. Replies stream in as they generate, Stop
-  cancels one in progress, New chat clears the conversation, and everything
-  one turn changes undoes as a single Ctrl+Z. Destructive steps ask first:
-  file overwrites and whole-stylesheet replaces park behind an Allow/Deny
-  prompt, and a stylesheet replace is refused outright until the assistant
-  has read the current stylesheet. Inert until you connect a provider in
-  Preferences → AI; see [Privacy](#privacy) — link your own Anthropic
-  account, or point it at a local Ollama server instead.
 
 **Extensibility and languages**
 
@@ -108,10 +109,27 @@ tested (300+ end-to-end specs run in CI) but young. Report problems on the
   plugins. See [docs/translations/README.md](./docs/translations/README.md)
   to contribute one.
 
+## AI preview (main / draft v0.1.3)
+
+The following functionality is for preliminary installation testing and is
+**not included in published v0.1.2 packages**. The polished release remains
+planned for v0.2.0.
+
+- **AI panel** for asking about the open project, with tool access to read
+  and edit it — the canvas, page HTML, global CSS, and project files —
+  through ten built-in tools. Replies stream in as they generate, Stop
+  cancels one in progress, New chat clears the conversation, and everything
+  one turn changes undoes as a single Ctrl+Z. Destructive steps ask first:
+  file overwrites and whole-stylesheet replaces park behind an Allow/Deny
+  prompt, and a stylesheet replace is refused outright until the assistant
+  has read the current stylesheet. Inert until you connect a provider in
+  Preferences → AI; see [Privacy](#privacy) — link your own Anthropic
+  account, or point it at a local Ollama server instead.
+
 ## Install
 
-Each release ships four Linux x86_64 artifacts on the
-[GitHub Releases page](https://github.com/juhriah-ops/grapestrap/releases):
+Download the four Linux x86_64 artifacts from the
+[published v0.1.2 release](https://github.com/juhriah-ops/grapestrap/releases/tag/v0.1.2):
 
 | Artifact | For |
 |----------|-----|
@@ -127,7 +145,9 @@ planned after v0.1.0.
 
 ## Build from source
 
-Requires Node.js 20+, npm 10+, and git.
+Requires Node.js 20+, npm 10+, and git. Cloning without checking out a tag
+builds `main`, including the AI preview. To build the published version,
+run `git checkout v0.1.2` after `cd grapestrap` and before `npm install`.
 
 ```bash
 git clone https://github.com/juhriah-ops/grapestrap.git
@@ -165,14 +185,19 @@ local loopback preview server, which never leaves your machine, and no
 feature requires an account or sign-in. This no-telemetry commitment is
 permanent, restated in Help → About in the app.
 
-The one opt-in exception is the **AI panel**: it is inert — no network
-activity, nothing linked — until you link an Anthropic account in
-Preferences → AI. From that point on, using the panel sends what you type
-and any page or element content the assistant requests to Anthropic, under
-your own API key. The key itself is encrypted at rest with your OS keyring
-(`libsecret`/Keychain-equivalent via Electron's `safeStorage`) — GrapeStrap
-never sees or stores it in plain text, and unlinking removes it. No part of
-this reaches GrapeStrap's own servers, because it doesn't have any.
+In **AI preview builds (main / draft v0.1.3)**, the opt-in exception is the
+AI panel and provider configuration in Preferences → AI. These are absent
+from published v0.1.2 packages. Connecting Anthropic and using the panel
+sends your prompts and any project content requested by the assistant to
+Anthropic under your own API key. Stored keys are encrypted at rest with
+your OS keyring (`libsecret`/Keychain-equivalent via Electron's
+`safeStorage`); unlinking removes the stored key.
+
+Ollama is a keyless alternative. Provider checks, model discovery, and chat
+requests go to the Ollama address you configure (default
+`http://127.0.0.1:11434`). It stays on your machine when that address is
+local; a remote address sends traffic to that server. No part of this
+reaches GrapeStrap's own servers, because it doesn't have any.
 
 ## License
 
