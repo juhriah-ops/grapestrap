@@ -12,8 +12,9 @@ CREATED: 2026-07-12 (Wave 5 rewrite of the pre-alpha draft)
 # Installing GrapeStrap
 
 GrapeStrap is a Linux-first desktop visual editor for static Bootstrap 5
-sites. Every release ships four artifacts, built by CI from the tagged
-commit:
+sites. As of October 9, 2026, the latest published release is **v0.1.2**
+(August 27, 2026), with four Linux x86_64 artifacts built by CI from the
+tagged commit:
 
 | Artifact | File | For |
 |----------|------|-----|
@@ -22,7 +23,14 @@ commit:
 | AppImage | `GrapeStrap-<version>.AppImage` | any distro, no install |
 | Tarball | `grapestrap-<version>.tar.gz` | manual/portable installs |
 
-Download from the [GitHub Releases page](https://github.com/juhriah-ops/grapestrap/releases).
+Download from the [published v0.1.2 release](https://github.com/juhriah-ops/grapestrap/releases/tag/v0.1.2).
+These packages do not include the AI panel or Anthropic/Ollama integrations.
+
+**Preview testing:** v0.1.3 (August 31, 2026) remains a draft release with
+four Linux packages attached for preliminary AI installation testing.
+Draft assets are not public downloads. The AI functionality on `main` is a
+preview, with the polished feature set planned for v0.2.0; see
+[CHANGELOG.md](../CHANGELOG.md).
 
 Flatpak (Flathub), AUR, and Snap are planned after v0.1.0 — they do not
 exist yet.
@@ -101,7 +109,9 @@ ln -s ~/opt/grapestrap-<version>/grapestrap ~/.local/bin/grapestrap
 
 ## Building from source
 
-Requires Node.js 20+, npm 10+, git.
+Requires Node.js 20+, npm 10+, git. The commands below build `main`, which
+includes the AI preview. To build the published version instead, run
+`git checkout v0.1.2` after `cd grapestrap` and before `npm install`.
 
 ```bash
 git clone https://github.com/juhriah-ops/grapestrap.git

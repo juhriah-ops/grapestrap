@@ -6,7 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Documentation
+- Clarified published v0.1.2 features versus the main / draft v0.1.3 AI preview in the README and installation guide, including provider privacy and source-build guidance. v0.1.3 remains for preliminary installation testing; the polished feature set remains planned for v0.2.0.
+
 ## [v0.1.3] — 2026-08-31 (preliminary AI release, for testing)
+
+> **Release status (October 9, 2026):** v0.1.3 is a draft with four Linux installation packages attached, not a published release. The latest published release is [v0.1.2](https://github.com/juhriah-ops/grapestrap/releases/tag/v0.1.2) (August 27, 2026); its packages do not include the AI panel or Anthropic/Ollama integrations.
 
 > Preliminary build of the AI round for install testing — the polished cut of this feature set ships later as v0.2.0. (The five bundled plugin manifests' `grapestrapVersion` ranges were widened to `<0.3.0` in this release, ahead of that.)
 
